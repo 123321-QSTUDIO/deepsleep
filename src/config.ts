@@ -13,6 +13,8 @@ export interface PluginConfig {
   mcpUrlForDocker: string
   dockerImage: string
   dockerHost: string
+  remoteWorkRoot: string
+  archiveRetentionDays: number
   dockerEnv: Record<string, string>
   taskTimeoutSec: number
   taskConcurrency: number
@@ -33,6 +35,8 @@ export const defaultConfig: PluginConfig = {
   mcpUrlForDocker: 'http://host.docker.internal:5100/mcp',
   dockerImage: 'qqbot-opencode-task:latest',
   dockerHost: '',
+  remoteWorkRoot: '/opt/qqbot-users',
+  archiveRetentionDays: 5,
   dockerEnv: {},
   taskTimeoutSec: 900,
   taskConcurrency: 2,

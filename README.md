@@ -15,7 +15,9 @@ QQ群/私聊 ⇄ NapCat (自编译, 白名单放行本插件)
                 ├─ MCP Server（HTTP+Bearer）：send_message / query_chat_log /
                 │   submit_task / list_tasks / get_task_detail
                 ├─ 任务注册表：task_id ↔ 属主QQ/群号/消息ID（持久化，重启恢复）
-                └─ 任务执行器：docker run --rm，全局并发上限 + FIFO 队列，完成即销毁
+                └─ 任务执行器：本地 docker 一次性容器；或远程 docker 主机（ssh://）——
+                    每 QQ 一个可休眠容器（qqbot-user-<QQ>），任务完成 stop + 产物压缩归档
+                    （默认留存 5 天），下次任务唤醒并 --continue 延续 session
                       ↕ 容器内 opencode 挂同一 MCP（沙箱模式：禁发消息/禁嵌套任务）
 
 本机 opencode（上层）：每群/每人持久 session = 对话记忆；只聊天+调度
@@ -89,7 +91,8 @@ node smoke3.mjs      # 冒烟测试 3：MCP 五工具
 | `mcpPort` / `mcpToken` / `mcpUrl` | `5100` | 插件 MCP Server 监听与鉴权 |
 | `mcpUrlForDocker` | `http://host.docker.internal:5100/mcp` | 容器访问 MCP 的地址 |
 | `dockerImage` / `dockerEnv` | `qqbot-opencode-task:latest` | 任务镜像与注入容器的环境变量（API key） |
-| `dockerHost` | 空（本机） | 远程 docker 主机地址（如 `tcp://x.x.x.x:2375`），本机无法虚拟化时用 |
+| `dockerHost` | 空（本机） | 远程 docker 主机（如 `ssh://user@x.x.x.x`），本机无法虚拟化时用 |
+| `remoteWorkRoot` / `archiveRetentionDays` | `/opt/qqbot-users` / `5` | 远程模式每 QQ 持久目录根路径与产物归档留存天数 |
 | `taskConcurrency` / `taskTimeoutSec` | `2` / `900` | 任务并发上限与超时 |
 | `contextMessageCount` | `15` | 触发时携带的最近上下文条数 |
 | `replyDelayMinMs` / `replyDelayMaxMs` | `300` / `800` | 兜底分句发送的随机间隔 |

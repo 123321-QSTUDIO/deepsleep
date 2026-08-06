@@ -99,7 +99,13 @@ ssh -N -L 5100:127.0.0.1:5100 user@<Windows服务器IP> \
 
 插件配置相应字段（见第 8 节）：
 - `dockerHost`: `ssh://user@<远程主机IP>`（留空则读本机）
-- 远程模式下任务容器**不挂载 workspace**（远端挂不到本机目录），任务产出文件随容器销毁，仅文本结果回流
+- 远程模式下的任务生命周期（每 QQ 一个可休眠会话）：
+  1. 首个复杂任务：在远程主机为该 QQ 创建容器 `qqbot-user-<QQ>`（挂载 `/opt/qqbot-users/<QQ>/home` 和 `workspace`），`opencode run` 建立 session
+  2. 任务完成：`docker stop` 容器（不再占用 CPU/内存）→ workspace 产物压缩到 `archive/workspace-<时间>.tar.gz` → 清空 workspace
+  3. 同 QQ 再次提交任务：唤醒同一容器、解压最近归档、`opencode run --continue` 延续之前的 session（上下文不断）
+  4. 归档保留 `archiveRetentionDays`（默认 5）天，超期自动清理
+  - `home/` 持久保存该 QQ 的 opencode 数据（含 session 数据库）和个人 token/key（.env 等可手放这里）
+  - 同一 QQ 的任务串行执行（一个容器不能同时跑两个任务），不同 QQ 之间受 `taskConcurrency` 限制
 
 【验证】
 ```powershell

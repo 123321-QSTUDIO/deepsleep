@@ -18,16 +18,54 @@ interface ExecutorDeps {
   log: (msg: string, ...args: unknown[]) => void
 }
 
+interface UserState {
+  initialized: boolean
+}
+
+const CONTAINER_OPENCODE_JSON = `{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode/deepseek-v4-flash-free",
+  "mcp": {
+    "qqbot": {
+      "type": "remote",
+      "url": "{env:QQBOT_MCP_URL}",
+      "enabled": true,
+      "headers": {
+        "authorization": "Bearer {env:MCP_TOKEN}",
+        "x-qqbot-scope": "{env:QQBOT_SCOPE}",
+        "x-qqbot-task": "1"
+      }
+    }
+  }
+}
+`
+
 export class TaskExecutor {
   private queue: TaskRec[] = []
   private running = 0
   private workRoot: string
   private dockerChecked = false
   private dockerOk = false
+  private userState = new Map<string, UserState>()
+  private userStateFile: string
+  private perUser = new Map<string, Promise<void>>()
 
   constructor(private deps: ExecutorDeps) {
     this.workRoot = path.join(deps.dataPath, 'task-workspaces')
     fs.mkdirSync(this.workRoot, { recursive: true })
+    this.userStateFile = path.join(deps.dataPath, 'users.json')
+    try {
+      if (fs.existsSync(this.userStateFile)) {
+        const raw = JSON.parse(fs.readFileSync(this.userStateFile, 'utf-8')) as Record<string, UserState>
+        for (const [k, v] of Object.entries(raw)) this.userState.set(k, v)
+      }
+    } catch {
+      // start fresh
+    }
+  }
+
+  private saveUserState() {
+    fs.writeFileSync(this.userStateFile, JSON.stringify(Object.fromEntries(this.userState), null, 2))
   }
 
   enqueue(rec: TaskRec) {
@@ -40,15 +78,44 @@ export class TaskExecutor {
     void this.pump()
   }
 
-  private dockerEnvVars(): Record<string, string> {
-    return this.deps.config.dockerHost ? { ...process.env, DOCKER_HOST: this.deps.config.dockerHost } as Record<string, string> : process.env as Record<string, string>
+  private get remote(): boolean {
+    return Boolean(this.deps.config.dockerHost)
+  }
+
+  private sshTarget(): string | null {
+    const m = /^ssh:\/\/(.+)$/.exec(this.deps.config.dockerHost)
+    return m ? m[1] : null
+  }
+
+  private dockerEnvVars(): NodeJS.ProcessEnv {
+    return this.deps.config.dockerHost
+      ? { ...process.env, DOCKER_HOST: this.deps.config.dockerHost }
+      : process.env
+  }
+
+  private ssh(script: string): Promise<string> {
+    const target = this.sshTarget()
+    if (!target) return Promise.reject(new Error('dockerHost 不是 ssh:// 形式，无法执行远程命令'))
+    return new Promise((resolve, reject) => {
+      const p = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', target, 'bash -s'], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+      let out = ''
+      let err = ''
+      p.stdout.on('data', (d) => (out += d.toString()))
+      p.stderr.on('data', (d) => (err += d.toString()))
+      p.on('error', reject)
+      p.on('exit', (code) => (code === 0 ? resolve(out) : reject(new Error(`ssh exit ${code}: ${err.slice(-300)}`))))
+      p.stdin.write(script)
+      p.stdin.end()
+    })
   }
 
   private async ensureDocker(): Promise<boolean> {
     if (this.dockerChecked) return this.dockerOk
     this.dockerChecked = true
     this.dockerOk = await new Promise((resolve) => {
-      const p = spawn('docker', ['--version'], { stdio: 'ignore', env: this.dockerEnvVars() })
+      const p = spawn('docker', ['version', '--format', '{{.Server.Version}}'], { stdio: 'ignore', env: this.dockerEnvVars() })
       p.on('error', () => resolve(false))
       p.on('exit', (code) => resolve(code === 0))
     })
@@ -62,7 +129,10 @@ export class TaskExecutor {
       const rec = this.queue.shift()!
       if (rec.status !== 'queued') continue
       this.running++
-      void this.run(rec).finally(() => {
+      const prev = this.perUser.get(rec.owner_qq) ?? Promise.resolve()
+      const chained = prev.then(() => this.run(rec))
+      this.perUser.set(rec.owner_qq, chained.catch(() => undefined))
+      void chained.finally(() => {
         this.running--
         void this.pump()
       })
@@ -90,8 +160,8 @@ export class TaskExecutor {
     return lines.slice(-20).join('\n')
   }
 
-  private buildPrompt(rec: TaskRec): string {
-    return `你是后台任务执行助手，一个QQ群友请求了以下任务：
+  private buildPrompt(rec: TaskRec, continued: boolean): string {
+    const base = `你是后台任务执行助手，一个QQ群友请求了以下任务：
 
 ${rec.task}
 
@@ -99,43 +169,22 @@ ${rec.task}
 ${this.contextFor(rec)}
 
 要求：
-- 你在一个一次性的隔离沙箱里，可以随意使用命令行、网络、读写文件（当前目录 /workspace）。
+- 你在一个隔离沙箱里，可以随意使用命令行、网络、读写文件（当前目录 /workspace）。
 - 你可以用 MCP 工具 query_chat_log 查询更多群聊记录来理解上下文。
 - 不要尝试调用 send_message 发消息（已禁用）。
 - 完成后，你的最终回复第一行用一句话总结结论（不超过50个字，不要加"结论："以外的前缀），从第二行开始写详细结果（中文，可以包含必要的细节、代码、链接）。`
+    return continued ? base : base + '\n- 工作目录 /workspace 里的文件是你自己的持久工作区，产物都放这里。'
   }
 
-  private async dockerRun(rec: TaskRec, workdir: string): Promise<{ code: number | null; out: string }> {
-    const { config } = this.deps
-    const name = `qqbot-task-${rec.task_id}`
-    const remote = Boolean(config.dockerHost)
-    const args = ['run', '--rm', '--name', name]
-    if (remote) {
-      // 远程 docker 主机挂不到本机目录，不挂 workspace；
-      // host-gateway 保留：配合远程主机上的 SSH 隧道，容器可经 host.docker.internal 访问回本机 MCP
-      args.push('--add-host=host.docker.internal:host-gateway')
-    } else {
-      args.push('--add-host=host.docker.internal:host-gateway', '-v', `${workdir}:/workspace`)
-    }
-    args.push(
-      '-w', '/workspace',
-      '-e', `QQBOT_MCP_URL=${config.mcpUrlForDocker}`,
-      '-e', `MCP_TOKEN=${config.mcpToken}`,
-      '-e', `QQBOT_SCOPE=${rec.scope}`
-    )
-    for (const [k, v] of Object.entries(config.dockerEnv)) {
-      if (v) args.push('-e', `${k}=${v}`)
-    }
-    args.push(config.dockerImage, 'run', this.buildPrompt(rec))
-
+  private spawnDocker(args: string[], timeoutSec: number, killCmd: string[]): Promise<{ code: number | null; out: string }> {
     return new Promise((resolve, reject) => {
       const p = spawn('docker', args, { stdio: ['ignore', 'pipe', 'pipe'], env: this.dockerEnvVars() })
       let out = ''
       let err = ''
       const timer = setTimeout(() => {
-        spawn('docker', ['kill', name], { stdio: 'ignore', env: this.dockerEnvVars() })
-        reject(new Error(`任务超时 (${config.taskTimeoutSec}s)`))
-      }, config.taskTimeoutSec * 1000)
+        spawn('docker', killCmd, { stdio: 'ignore', env: this.dockerEnvVars() })
+        reject(new Error(`任务超时 (${timeoutSec}s)`))
+      }, timeoutSec * 1000)
       p.stdout.on('data', (d) => (out += d.toString()))
       p.stderr.on('data', (d) => (err += d.toString()))
       p.on('error', (e) => {
@@ -150,9 +199,150 @@ ${this.contextFor(rec)}
     })
   }
 
+  private containerEnv(rec: TaskRec): string[] {
+    const { config } = this.deps
+    const env = [
+      '-e', `QQBOT_MCP_URL=${config.mcpUrlForDocker}`,
+      '-e', `MCP_TOKEN=${config.mcpToken}`,
+      '-e', `QQBOT_SCOPE=${rec.scope}`,
+    ]
+    for (const [k, v] of Object.entries(config.dockerEnv)) {
+      if (v) env.push('-e', `${k}=${v}`)
+    }
+    return env
+  }
+
+  private runOneShot(rec: TaskRec, workdir: string): Promise<{ code: number | null; out: string }> {
+    const name = `qqbot-task-${rec.task_id}`
+    const args = [
+      'run', '--rm',
+      '--name', name,
+      '--add-host=host.docker.internal:host-gateway',
+      '-v', `${workdir}:/workspace`,
+      '-w', '/workspace',
+      ...this.containerEnv(rec),
+      this.deps.config.dockerImage,
+      'run', this.buildPrompt(rec, false),
+    ]
+    return this.spawnDocker(args, this.deps.config.taskTimeoutSec, ['kill', name])
+  }
+
+  // ---- 远程模式：每 QQ 一个可休眠容器 + 持久 home/workspace + 产物归档 ----
+
+  private userRoot(qq: string): string {
+    return `${this.deps.config.remoteWorkRoot}/${qq}`
+  }
+
+  private containerName(qq: string): string {
+    return `qqbot-user-${qq}`
+  }
+
+  private async ensureUserEnv(qq: string) {
+    const root = this.userRoot(qq)
+    const ocJson = Buffer.from(CONTAINER_OPENCODE_JSON).toString('base64')
+    await this.ssh(`
+set -e
+mkdir -p "${root}/home/.config/opencode" "${root}/workspace" "${root}/archive"
+if [ ! -f "${root}/home/.config/opencode/opencode.json" ]; then
+  echo "${ocJson}" | base64 -d > "${root}/home/.config/opencode/opencode.json"
+fi
+`)
+  }
+
+  private async restoreWorkspace(qq: string) {
+    const root = this.userRoot(qq)
+    await this.ssh(`
+set -e
+latest=$(ls -1t "${root}/archive"/*.tar.gz 2>/dev/null | head -1 || true)
+if [ -n "$latest" ] && [ -z "$(ls -A "${root}/workspace")" ]; then
+  tar xzf "$latest" -C "${root}/workspace"
+fi
+`)
+  }
+
+  private async archiveWorkspace(qq: string) {
+    const root = this.userRoot(qq)
+    const days = this.deps.config.archiveRetentionDays
+    await this.ssh(`
+set -e
+if [ -n "$(ls -A "${root}/workspace")" ]; then
+  tar czf "${root}/archive/workspace-$(date +%Y%m%d-%H%M%S).tar.gz" -C "${root}/workspace" .
+  rm -rf "${root}/workspace"/* "${root}/workspace"/.[!.]* 2>/dev/null || true
+fi
+find "${root}/archive" -name '*.tar.gz' -mtime +${days} -delete
+`)
+  }
+
+  private async ensureContainer(qq: string) {
+    const name = this.containerName(qq)
+    const root = this.userRoot(qq)
+    const inspect = await this.spawnDockerQuiet(['inspect', '-f', '{{.State.Status}}', name])
+    if (inspect === null) {
+      await this.spawnDockerQuiet([
+        'create', '--name', name,
+        '--add-host=host.docker.internal:host-gateway',
+        '-v', `${root}/home:/root`,
+        '-v', `${root}/workspace:/workspace`,
+        '-w', '/workspace',
+        '--entrypoint', 'tail',
+        this.deps.config.dockerImage, '-f', '/dev/null',
+      ], true)
+    }
+    if (inspect !== 'running') {
+      await this.spawnDockerQuiet(['start', name], true)
+    }
+  }
+
+  private spawnDockerQuiet(args: string[], throwOnError = false): Promise<string | null> {
+    return new Promise((resolve, reject) => {
+      const p = spawn('docker', args, { stdio: ['ignore', 'pipe', 'pipe'], env: this.dockerEnvVars() })
+      let out = ''
+      let err = ''
+      p.stdout.on('data', (d) => (out += d.toString()))
+      p.stderr.on('data', (d) => (err += d.toString()))
+      p.on('error', (e) => (throwOnError ? reject(e) : resolve(null)))
+      p.on('exit', (code) => {
+        if (code === 0) resolve(out.trim())
+        else if (throwOnError) reject(new Error(`docker ${args[0]} exit ${code}: ${err.slice(-300)}`))
+        else resolve(null)
+      })
+    })
+  }
+
+  private async stopContainer(qq: string) {
+    await this.spawnDockerQuiet(['stop', this.containerName(qq)])
+  }
+
+  private async runRemote(rec: TaskRec): Promise<{ code: number | null; out: string }> {
+    const qq = rec.owner_qq
+    const name = this.containerName(qq)
+    await this.ensureUserEnv(qq)
+    await this.restoreWorkspace(qq)
+    await this.ensureContainer(qq)
+    const state = this.userState.get(qq) ?? { initialized: false }
+    const continueArgs = state.initialized ? ['--continue'] : []
+    const args = [
+      'exec',
+      ...this.containerEnv(rec),
+      name,
+      'opencode', 'run', ...continueArgs, this.buildPrompt(rec, state.initialized),
+    ]
+    try {
+      return await this.spawnDocker(args, this.deps.config.taskTimeoutSec, ['stop', name])
+    } finally {
+      await this.stopContainer(qq)
+      state.initialized = true
+      this.userState.set(qq, state)
+      this.saveUserState()
+      await this.archiveWorkspace(qq).catch((e) => this.deps.log(`归档失败 ${qq}:`, e))
+    }
+  }
+
+  // ---- 主流程 ----
+
   private async run(rec: TaskRec) {
     const { tasks, log } = this.deps
-    log(`任务 ${rec.task_id} 开始执行`)
+    log(`任务 ${rec.task_id} 开始执行 (属主 ${rec.owner_qq})`)
     tasks.update(rec.task_id, { status: 'running' })
     const workdir = path.join(this.workRoot, rec.task_id)
     fs.mkdirSync(workdir, { recursive: true })
@@ -164,7 +354,7 @@ ${this.contextFor(rec)}
     }
 
     try {
-      const { out } = await this.dockerRun(rec, workdir)
+      const { out } = this.remote ? await this.runRemote(rec) : await this.runOneShot(rec, workdir)
       const text = out.trim()
       const firstBreak = text.indexOf('\n')
       const summary = (firstBreak > 0 ? text.slice(0, firstBreak) : text).trim().slice(0, 80)
