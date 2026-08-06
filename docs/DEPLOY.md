@@ -43,27 +43,62 @@ wsl --install -d Ubuntu-22.04   # 需重启
 
 **方式 C：远程 Docker 主机（本机无嵌套虚拟化时，实测场景）**
 > 云服务器若是 KVM 且没开嵌套虚拟化（coreinfo 看 SVM/NP 为 `-`），方式 A/B 都跑不了，
-> 就用另一台能跑 Linux docker 的机器（任意云主机/家里机器）：
+> 就用另一台能跑 Linux docker 的机器。**注意：远程主机与本机通常不在同一内网（跨公网），按下面的安全要点做。**
 
-```powershell
-# 在远程 Linux 主机上：
-#   1) 装 docker（curl -fsSL https://get.docker.com | bash）
-#   2) 构建镜像：git clone 本仓库 && cd napcat-plugin-qqbot/docker && docker build -t qqbot-opencode-task:latest .
-#   3) 开放 docker TCP：/etc/docker/daemon.json 加 {"hosts":["unix:///var/run/docker.sock","tcp://0.0.0.0:2375"]}
-#      重启 docker，并用安全组/防火墙只对 Windows 服务器 IP 放行 2375（2375 无鉴权，务必限制来源！）
+远程 Linux 主机上：
+```bash
+# 1) 装 docker
+curl -fsSL https://get.docker.com | bash
+# 2) 构建镜像
+git clone https://github.com/123321-QSTUDIO/napcat-plugin-qqbot.git
+cd napcat-plugin-qqbot/docker && docker build -t qqbot-opencode-task:latest .
 ```
-插件配置相应改为（见第 8 节）：
-- `dockerHost`: `tcp://<远程主机IP>:2375`（留空则读本机）
-- `mcpHost`: `0.0.0.0`（容器要能跨网访问 MCP；有 mcpToken 鉴权，但仍建议防火墙只放行远程主机 IP）
-- `mcpUrlForDocker`: `http://<本机内网/公网IP>:5100/mcp`
+
+**C-1. 本机 → 远程 docker 的连接（不要用裸 TCP 2375 出公网！）**
+
+推荐 SSH 传输（docker CLI 原生支持，免开端口）：
+```powershell
+# Windows 服务器上：配好到远程主机的 SSH 密钥登录（免密）
+ssh-keygen -t ed25519
+type $env:USERPROFILE\.ssh\id_ed25519.pub   # 追加到远程主机 ~/.ssh/authorized_keys
+ssh user@<远程主机IP> "docker version"       # 验证免密可用
+```
+插件配置 `dockerHost`: `ssh://user@<远程主机IP>`。
+
+（仅在两机有内网/专线时才可考虑 `tcp://...:2375`，且必须安全组只放行本机 IP。）
+
+**C-2. 远程容器 → 本机 MCP 的连接（二选一）**
+
+方案 C-2a（推荐，MCP 不出公网）：SSH 隧道
+```powershell
+# Windows 服务器：启用 OpenSSH Server（设置 > 可选功能，或）
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+Set-Service sshd -StartupType Automatic; Start-Service sshd
+```
+```bash
+# 远程 docker 主机：跑持久正向隧道（建议 systemd/supervisor 托管，断线重连）
+ssh -N -L 5100:127.0.0.1:5100 user@<Windows服务器IP> \
+  -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes
+```
+插件配置保持：`mcpHost: 127.0.0.1`、`mcpUrlForDocker: http://host.docker.internal:5100/mcp`
+（容器经 host-gateway 到达远程主机的 5100 = 隧道入口，转发回本机回环 MCP）
+
+方案 C-2b（简单，MCP 暴露公网但限源 IP）：
+- `mcpHost: 0.0.0.0`
+- `mcpUrlForDocker: http://<Windows服务器公网IP>:5100/mcp`
+- Windows 防火墙：5100 入站只允许远程 docker 主机的 IP
+- 注意：HTTP 明文，mcpToken 会在公网传输（被中间人看到即可调 MCP），介意就用 C-2a
+
+插件配置相应字段（见第 8 节）：
+- `dockerHost`: `ssh://user@<远程主机IP>`（留空则读本机）
 - 远程模式下任务容器**不挂载 workspace**（远端挂不到本机目录），任务产出文件随容器销毁，仅文本结果回流
 
 【验证】
 ```powershell
 node --version      # v22.x+
 pnpm --version
-docker run --rm hello-world                                        # 方式 A/B
-docker -H tcp://<远程主机IP>:2375 run --rm hello-world             # 方式 C
+docker run --rm hello-world                          # 方式 A/B
+$env:DOCKER_HOST='ssh://user@<远程主机IP>'; docker run --rm hello-world   # 方式 C
 ```
 
 ## 2. host opencode（上层，常驻）
@@ -262,7 +297,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 - `hostModel`：host 层每个工作区的默认模型，默认 zen 免费模型（`opencode/deepseek-v4-flash-free`）
 - `mcpHost`：MCP 服务绑定地址，默认 `127.0.0.1`（回环）。**服务器有公网 IP 直绑网卡时切勿改成 0.0.0.0**；方式 B（WSL2 docker）确需容器访问时才改为 `0.0.0.0` 并配合防火墙只放行容器网段
 - `opencodePassword` 必须等于第 2 步的 `OPENCODE_SERVER_PASSWORD`
-- `dockerHost`：留空 = 本机 docker；方式 C 填 `tcp://<远程主机IP>:2375`（远程模式下容器不挂 workspace 目录）
+- `dockerHost`：留空 = 本机 docker；方式 C 填 `ssh://user@<远程主机IP>`（远程模式下容器不挂 workspace 目录）
 - `dockerEnv`：**用免费模型时留空 `{}` 即可**；要给容器换付费模型时才填 key（如 `ANTHROPIC_API_KEY`），同时改 `docker/opencode.json` 里的 `model` 并重新 build 镜像
 - 方式 B（WSL2 docker）时 `mcpUrlForDocker` 改为 `http://<Windows主机IP>:5100/mcp`；方式 C 改为 `http://<本机IP>:5100/mcp`
 - 改完重启 NapCat 生效

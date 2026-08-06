@@ -111,8 +111,9 @@ ${this.contextFor(rec)}
     const remote = Boolean(config.dockerHost)
     const args = ['run', '--rm', '--name', name]
     if (remote) {
-      // 远程 docker 主机挂不到本机目录，且 host.docker.internal 指向的是远端而非本机，
-      // 因此不挂 workspace、不加 host-gateway；MCP 地址必须用本机可达 IP（mcpUrlForDocker）
+      // 远程 docker 主机挂不到本机目录，不挂 workspace；
+      // host-gateway 保留：配合远程主机上的 SSH 隧道，容器可经 host.docker.internal 访问回本机 MCP
+      args.push('--add-host=host.docker.internal:host-gateway')
     } else {
       args.push('--add-host=host.docker.internal:host-gateway', '-v', `${workdir}:/workspace`)
     }
