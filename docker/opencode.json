@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "qqbot": {
+      "type": "remote",
+      "url": "{env:QQBOT_MCP_URL}",
+      "enabled": true,
+      "headers": {
+        "authorization": "Bearer {env:MCP_TOKEN}",
+        "x-qqbot-scope": "{env:QQBOT_SCOPE}",
+        "x-qqbot-task": "1"
+      }
+    }
+  }
+}
