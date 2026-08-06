@@ -60,17 +60,24 @@ node smoke2.mjs      # 冒烟测试 2：session 创建（需要本地 opencode s
 node smoke3.mjs      # 冒烟测试 3：MCP 五工具
 ```
 
-## 部署
+## 部署与测试
+
+**详细步骤见 [`docs/DEPLOY.md`](docs/DEPLOY.md)（Windows Server 版，Agent 可直接照做）。**
+
+概要：
 
 1. **自编译 NapCat**：本插件 ID `napcat-plugin-qqbot` 不在 NapCat 官方插件白名单内，需把
    `packages/napcat-onebot/network/plugin/loader.ts` 的 `OFFICIAL_PLUGIN_IDS` 加上该 ID 后构建
    （`pnpm install && pnpm build:shell`）。
-2. **安装插件**：把 `dist/` 整个目录拷到 NapCat 工作目录 `plugins/napcat-plugin-qqbot/`。
+2. **安装插件**：把 `dist/` 整个目录拷到 NapCat 数据目录 `plugins/napcat-plugin-qqbot/`。
 3. **host opencode**：`opencode serve --hostname 127.0.0.1 --port 4096`
    （设 `OPENCODE_SERVER_PASSWORD` 则同步填到插件配置 `opencodePassword`）。
 4. **任务沙箱镜像**：`cd docker && docker build -t qqbot-opencode-task:latest .`
 5. **模型凭证**：host 层 `opencode auth login`；容器层把 key 写进插件配置 `dockerEnv`。
 6. NapCat WebUI 启用插件，群里 @机器人 即可。
+
+**测试**：验收用例见 [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md)；测完按
+[`docs/TEST_REPORT.template.md`](docs/TEST_REPORT.template.md) 填写为根目录 `TEST_REPORT.md` 并 push。
 
 ## 配置（config.json）
 
