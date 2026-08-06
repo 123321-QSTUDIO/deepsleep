@@ -54,7 +54,17 @@ docker run --rm hello-world
 ```powershell
 npm i -g opencode-ai
 opencode --version
-opencode auth login   # 交互式配模型凭证
+```
+
+**模型**：默认用 OpenCode Zen 的免费模型 `opencode/deepseek-v4-flash-free`，**无需任何登录/密钥**
+（opencode 对 zen 免费模型内置 `apiKey: "public"`，开箱即用）。插件会给每个工作区自动写入该默认模型。
+想换更强的付费模型才需要 `opencode auth login`（选 OpenCode Zen 或其他 provider）。
+
+先验证免费模型可用：
+
+```powershell
+opencode run --model opencode/deepseek-v4-flash-free "只回复两个字：你好"
+# 期望输出"你好"。失败说明网络到不了 opencode.ai，先解决网络。
 ```
 
 用计划任务常驻（密码换成强密码）：
@@ -201,6 +211,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 ```json
 {
   "botName": "DeepSleep",
+  "hostModel": "opencode/deepseek-v4-flash-free",
   "opencodeUrl": "http://127.0.0.1:4096",
   "opencodePassword": "CHANGE_ME_STRONG_PASSWORD",
   "mcpPort": 5100,
@@ -208,9 +219,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
   "mcpUrl": "http://127.0.0.1:5100/mcp",
   "mcpUrlForDocker": "http://host.docker.internal:5100/mcp",
   "dockerImage": "qqbot-opencode-task:latest",
-  "dockerEnv": {
-    "ANTHROPIC_API_KEY": "sk-换成你的key"
-  },
+  "dockerEnv": {},
   "taskTimeoutSec": 900,
   "taskConcurrency": 2,
   "contextMessageCount": 15,
@@ -219,8 +228,9 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 }
 ```
 
+- `hostModel`：host 层每个工作区的默认模型，默认 zen 免费模型（`opencode/deepseek-v4-flash-free`）
 - `opencodePassword` 必须等于第 2 步的 `OPENCODE_SERVER_PASSWORD`
-- `dockerEnv` 的 key 名看 provider（`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `OPENROUTER_API_KEY` 等）
+- `dockerEnv`：**用免费模型时留空 `{}` 即可**；要给容器换付费模型时才填 key（如 `ANTHROPIC_API_KEY`），同时改 `docker/opencode.json` 里的 `model` 并重新 build 镜像
 - 方式 B（WSL2 docker）时 `mcpUrlForDocker` 改为 `http://<Windows主机IP>:5100/mcp`
 - 改完重启 NapCat 生效
 
@@ -238,9 +248,8 @@ docker run --rm `
   -e QQBOT_MCP_URL=http://host.docker.internal:5100/mcp `
   -e MCP_TOKEN=CHANGE_ME_MCP_TOKEN `
   -e QQBOT_SCOPE=group-0 `
-  -e ANTHROPIC_API_KEY=<真实key> `
   qqbot-opencode-task:latest run "回复两个字：你好"
-# 期望输出包含"你好"（确认容器里模型可用）
+# 期望输出包含"你好"（容器里同样走 zen 免费模型，无需 key）
 ```
 
 ## 10. 部署完成检查单
@@ -260,7 +269,8 @@ docker run --rm `
 | 插件列表没有本插件 / 提示 not in whitelist | 白名单补丁没打上或没重新 build:shell；确认 start.bat 加载的是自编译的 `C:\napcat\napcat.mjs`（对比构建产物 MD5） |
 | launcher 报 "provided QQ path is invalid" | QQ 未安装或装在非默认路径，改 start.bat 里 QQ.exe 路径 |
 | 插件初始化报 MCP 端口占用 | 5100 被占：三处配置（mcpPort/mcpUrl/mcpUrlForDocker）一起改 |
-| @机器人没反应 | 看日志 opencode 请求报错：401=密码不对；ECONNREFUSED=serve 没起；没报错但没回复=模型凭证没配（`opencode auth login`） |
+| @机器人没反应 | 看日志 opencode 请求报错：401=密码不对；ECONNREFUSED=serve 没起；没报错但没回复=模型问题，手动跑 `opencode run --model opencode/deepseek-v4-flash-free "hi"` 排查 |
+| zen 免费模型报 "usage limit reached" | 免费模型有额度限制（几小时重置），密集测试时悠着点；或 `opencode auth login` 登录 zen 账号提额/换付费模型 |
 | 任务 error "沙箱环境不可用" | NapCat 进程里调不到 docker：确认 Docker Desktop 在跑；QQ 进程环境与当前用户一致（docker CLI 在 PATH 里） |
 | 容器连不上 MCP | Docker Desktop 自带 host.docker.internal；方式 B 见第 8 节说明；Windows 防火墙放行 5100 |
 | 服务器重启后全挂了 | 两个计划任务（opencode-serve / napcat）是否建成 onlogon；服务器需自动登录或改任务为不管登录与否都运行 |

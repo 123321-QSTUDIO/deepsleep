@@ -102,6 +102,7 @@ export class SessionController {
       path.join(directory, 'opencode.json'),
       JSON.stringify(
         {
+          model: this.config.hostModel,
           mcp: {
             qqbot: {
               type: 'remote',

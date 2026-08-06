@@ -73,7 +73,7 @@ node smoke3.mjs      # 冒烟测试 3：MCP 五工具
 3. **host opencode**：`opencode serve --hostname 127.0.0.1 --port 4096`
    （设 `OPENCODE_SERVER_PASSWORD` 则同步填到插件配置 `opencodePassword`）。
 4. **任务沙箱镜像**：`cd docker && docker build -t qqbot-opencode-task:latest .`
-5. **模型凭证**：host 层 `opencode auth login`；容器层把 key 写进插件配置 `dockerEnv`。
+5. **模型**：默认全部走 OpenCode Zen 免费模型 `opencode/deepseek-v4-flash-free`（免登录，host 层和容器层都已内置默认）；换付费模型才需要 `opencode auth login` 或配置 `dockerEnv`。
 6. NapCat WebUI 启用插件，群里 @机器人 即可。
 
 **测试**：验收用例见 [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md)；测完按
@@ -84,6 +84,7 @@ node smoke3.mjs      # 冒烟测试 3：MCP 五工具
 | 字段 | 默认 | 说明 |
 |---|---|---|
 | `botName` | `DeepSleep` | 机器人自称（写入 AGENTS.md 人设） |
+| `hostModel` | `opencode/deepseek-v4-flash-free` | host 层默认模型（OpenCode Zen 免费模型，免登录） |
 | `opencodeUrl` / `opencodePassword` | `http://127.0.0.1:4096` | host opencode 地址与密码 |
 | `mcpPort` / `mcpToken` / `mcpUrl` | `5100` | 插件 MCP Server 监听与鉴权 |
 | `mcpUrlForDocker` | `http://host.docker.internal:5100/mcp` | 容器访问 MCP 的地址 |
