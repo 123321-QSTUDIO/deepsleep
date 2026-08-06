@@ -89,6 +89,7 @@ node smoke3.mjs      # 冒烟测试 3：MCP 五工具
 |---|---|---|
 | `botName` | `DeepSleep` | 机器人自称（写入 AGENTS.md 人设） |
 | `hostModel` | `opencode/deepseek-v4-flash-free` | host 层默认模型（OpenCode Zen 免费模型，免登录） |
+| `visionModel` | `opencode/mimo-v2.5-free` | vision-bridge 桥接子代理的识图模型（免费 MiMo V2.5；图片下载到 inbox/ 由子代理读图） |
 | `opencodeUrl` / `opencodePassword` | `http://127.0.0.1:4096` | host opencode 地址与密码 |
 | `mcpPort` / `mcpToken` / `mcpUrl` | `5100` | 插件 MCP Server 监听与鉴权 |
 | `mcpUrlForDocker` | `http://host.docker.internal:5100/mcp` | 容器访问 MCP 的地址 |

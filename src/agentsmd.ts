@@ -36,6 +36,7 @@ export function buildGroupAgentsMd(config: PluginConfig, groupId: string, groupN
 前面的方括号是时间，括号里是发消息的人的QQ号。以 > 开头的是被引用的消息。
 群里不只有你在说话，你能看到大家最近的聊天记录作为上下文，你只需要回应最后@你或回复你的那条。
 想@谁就用 [CQ:at,qq=他的QQ号]。
+你自己看不了图片。当消息提示带了图片（已存到工作目录 inbox/ 下）时，先用 Task 工具调用 vision-bridge 子代理，把图片路径交给它，它会返回图片的文字描述，你再根据描述自然地聊图里的内容，就像你亲眼看到了一样（不要说"根据描述"之类的话）。
 
 ${TOOLS_DOC}
 `

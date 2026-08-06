@@ -324,6 +324,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 ```
 
 - `hostModel`：host 层每个工作区的默认模型，默认 zen 免费模型（`opencode/deepseek-v4-flash-free`）
+- `visionModel`：视觉桥接子代理（vision-bridge）用的识图模型，默认 `opencode/mimo-v2.5-free`（zen 免费，支持图/音/视频）。图片消息会下载到工作目录 `inbox/`，由纯文本主模型通过 Task 工具调桥接子代理读图，**不是**直接切换主模型（deepseek 免费版是纯文本模型）
 - `mcpHost`：MCP 服务绑定地址，默认 `127.0.0.1`（回环）。**服务器有公网 IP 直绑网卡时切勿改成 0.0.0.0**；方式 B（WSL2 docker）确需容器访问时才改为 `0.0.0.0` 并配合防火墙只放行容器网段
 - `opencodePassword` 必须等于第 2 步的 `OPENCODE_SERVER_PASSWORD`
 - `dockerHost`：留空 = 本机 docker；方式 C 填 `tcp://127.0.0.1:2375`（走持久 SSH 隧道，见方式 C-1）

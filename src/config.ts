@@ -4,6 +4,7 @@ import path from 'node:path'
 export interface PluginConfig {
   botName: string
   hostModel: string
+  visionModel: string
   opencodeUrl: string
   opencodePassword: string
   mcpPort: number
@@ -30,6 +31,7 @@ export interface PluginConfig {
 export const defaultConfig: PluginConfig = {
   botName: 'DeepSleep',
   hostModel: 'opencode/deepseek-v4-flash-free',
+  visionModel: 'opencode/mimo-v2.5-free',
   opencodeUrl: 'http://127.0.0.1:4096',
   opencodePassword: '',
   mcpPort: 5100,

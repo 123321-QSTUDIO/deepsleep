@@ -47,3 +47,9 @@ export function extractReplyTo(segments: MsgSegment[]): number | null {
 export function extractAtTargets(segments: MsgSegment[]): string[] {
   return segments.filter((s) => s.type === 'at').map((s) => String(s.data?.qq ?? ''))
 }
+
+export function extractImages(segments: MsgSegment[]): { url: string; mime: string }[] {
+  return segments
+    .filter((s) => (s.type === 'image' || s.type === 'mface') && typeof s.data?.url === 'string')
+    .map((s) => ({ url: String(s.data!.url), mime: 'image/jpeg' }))
+}

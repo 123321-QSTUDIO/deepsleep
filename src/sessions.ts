@@ -4,7 +4,7 @@ import { PluginConfig } from './config'
 import { MsgDB, dayKey } from './msgdb'
 import { OpencodeClient } from './opencode'
 import { buildGroupAgentsMd, buildPrivateAgentsMd } from './agentsmd'
-import { extractAtTargets, extractReplyTo, MsgSegment } from './format'
+import { extractAtTargets, extractImages, extractReplyTo, MsgSegment } from './format'
 import { OB11MessageEvent, PluginContext } from './types'
 
 interface SessionEntry {
@@ -103,6 +103,15 @@ export class SessionController {
       JSON.stringify(
         {
           model: this.config.hostModel,
+          agent: {
+            'vision-bridge': {
+              description: '视觉跳板：读取图片/视频文件并输出详细文字描述，供纯文本模型调用',
+              model: this.config.visionModel,
+              mode: 'subagent',
+              prompt:
+                '你是视觉跳板。用户会给你一个图片或视频的文件路径（在工作目录下，如 inbox/xxx.jpg）。用 read 工具读取该文件，然后用中文输出详细、客观的内容描述（画面主体、文字、细节、氛围）。只输出描述本身，不要评价、不要回答用户其他问题。',
+            },
+          },
           mcp: {
             qqbot: {
               type: 'remote',
@@ -231,7 +240,28 @@ export class SessionController {
     }
     const prompt = this.buildPrompt(event)
     if (!prompt) return
-    await this.oc.promptAsync(entry.sessionId, prompt)
+    const imageNote = await this.downloadImages(entry.directory, extractImages(segments))
+    await this.oc.promptAsync(entry.sessionId, imageNote ? prompt + imageNote : prompt)
+  }
+
+  private async downloadImages(directory: string, images: { url: string; mime: string }[]): Promise<string> {
+    if (images.length === 0) return ''
+    const inbox = path.join(directory, 'inbox')
+    fs.mkdirSync(inbox, { recursive: true })
+    const notes: string[] = []
+    for (const [i, img] of images.entries()) {
+      const name = `${Date.now()}-${i}.jpg`
+      try {
+        const res = await fetch(img.url, { headers: { 'user-agent': 'Mozilla/5.0' } })
+        if (!res.ok) throw new Error(`http ${res.status}`)
+        fs.writeFileSync(path.join(inbox, name), Buffer.from(await res.arrayBuffer()))
+        notes.push(`inbox/${name}`)
+      } catch (e) {
+        this.log('图片下载失败:', e)
+        notes.push('(图片下载失败)')
+      }
+    }
+    return `\n[系统] 这条消息带了图片，已存到工作目录：${notes.join('、')}。用 Task 工具调 vision-bridge 子代理读取图片内容后再回答。`
   }
 
   private async reset(scope: string) {
