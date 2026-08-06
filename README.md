@@ -89,6 +89,7 @@ node smoke3.mjs      # 冒烟测试 3：MCP 五工具
 | `mcpPort` / `mcpToken` / `mcpUrl` | `5100` | 插件 MCP Server 监听与鉴权 |
 | `mcpUrlForDocker` | `http://host.docker.internal:5100/mcp` | 容器访问 MCP 的地址 |
 | `dockerImage` / `dockerEnv` | `qqbot-opencode-task:latest` | 任务镜像与注入容器的环境变量（API key） |
+| `dockerHost` | 空（本机） | 远程 docker 主机地址（如 `tcp://x.x.x.x:2375`），本机无法虚拟化时用 |
 | `taskConcurrency` / `taskTimeoutSec` | `2` / `900` | 任务并发上限与超时 |
 | `contextMessageCount` | `15` | 触发时携带的最近上下文条数 |
 | `replyDelayMinMs` / `replyDelayMaxMs` | `300` / `800` | 兜底分句发送的随机间隔 |

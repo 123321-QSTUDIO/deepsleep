@@ -40,11 +40,15 @@ export class TaskExecutor {
     void this.pump()
   }
 
+  private dockerEnvVars(): Record<string, string> {
+    return this.deps.config.dockerHost ? { ...process.env, DOCKER_HOST: this.deps.config.dockerHost } as Record<string, string> : process.env as Record<string, string>
+  }
+
   private async ensureDocker(): Promise<boolean> {
     if (this.dockerChecked) return this.dockerOk
     this.dockerChecked = true
     this.dockerOk = await new Promise((resolve) => {
-      const p = spawn('docker', ['--version'], { stdio: 'ignore' })
+      const p = spawn('docker', ['--version'], { stdio: 'ignore', env: this.dockerEnvVars() })
       p.on('error', () => resolve(false))
       p.on('exit', (code) => resolve(code === 0))
     })
@@ -104,27 +108,31 @@ ${this.contextFor(rec)}
   private async dockerRun(rec: TaskRec, workdir: string): Promise<{ code: number | null; out: string }> {
     const { config } = this.deps
     const name = `qqbot-task-${rec.task_id}`
-    const args = [
-      'run', '--rm',
-      '--name', name,
-      '--add-host=host.docker.internal:host-gateway',
-      '-v', `${workdir}:/workspace`,
+    const remote = Boolean(config.dockerHost)
+    const args = ['run', '--rm', '--name', name]
+    if (remote) {
+      // 远程 docker 主机挂不到本机目录，且 host.docker.internal 指向的是远端而非本机，
+      // 因此不挂 workspace、不加 host-gateway；MCP 地址必须用本机可达 IP（mcpUrlForDocker）
+    } else {
+      args.push('--add-host=host.docker.internal:host-gateway', '-v', `${workdir}:/workspace`)
+    }
+    args.push(
       '-w', '/workspace',
       '-e', `QQBOT_MCP_URL=${config.mcpUrlForDocker}`,
       '-e', `MCP_TOKEN=${config.mcpToken}`,
-      '-e', `QQBOT_SCOPE=${rec.scope}`,
-    ]
+      '-e', `QQBOT_SCOPE=${rec.scope}`
+    )
     for (const [k, v] of Object.entries(config.dockerEnv)) {
       if (v) args.push('-e', `${k}=${v}`)
     }
     args.push(config.dockerImage, 'run', this.buildPrompt(rec))
 
     return new Promise((resolve, reject) => {
-      const p = spawn('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] })
+      const p = spawn('docker', args, { stdio: ['ignore', 'pipe', 'pipe'], env: this.dockerEnvVars() })
       let out = ''
       let err = ''
       const timer = setTimeout(() => {
-        spawn('docker', ['kill', name], { stdio: 'ignore' })
+        spawn('docker', ['kill', name], { stdio: 'ignore', env: this.dockerEnvVars() })
         reject(new Error(`任务超时 (${config.taskTimeoutSec}s)`))
       }, config.taskTimeoutSec * 1000)
       p.stdout.on('data', (d) => (out += d.toString()))

@@ -27,26 +27,43 @@ npm i -g pnpm
 winget install Git.Git -e --accept-source-agreements --accept-package-agreements
 ```
 
-### Docker（二选一）
+### Docker（三选一）
 
-**方式 A：Docker Desktop（推荐，简单）**
+**方式 A：Docker Desktop（本机，推荐于支持虚拟化的机器）**
 - 下载 https://www.docker.com/products/docker-desktop/ 安装，设置里选 WSL2 后端，启动。
 - 注意：Windows Server 不在 Docker Desktop 官方支持列表，实测 2022 可装可跑；商业用途注意授权。
 
-**方式 B：WSL2 + Docker Engine**
+**方式 B：WSL2 + Docker Engine（本机）**
 ```powershell
 wsl --install -d Ubuntu-22.04   # 需重启
 # 进 WSL 后：curl -fsSL https://get.docker.com | bash; sudo service docker start
-# 然后把 Windows 的 docker CLI（Docker Desktop 的 docker.exe 或单独下载）配 DOCKER_HOST 指向 WSL
 ```
 > 方式 B 时容器里 `host.docker.internal` 指向的是 WSL 虚拟机而非 Windows 宿主机，
-> 插件配置 `mcpUrlForDocker` 要改成 `http://<Windows主机IP>:5100/mcp`。
+> 插件配置 `mcpUrlForDocker` 要改成 `http://<Windows主机IP>:5100/mcp`，且 `mcpHost` 要设 `0.0.0.0`。
+
+**方式 C：远程 Docker 主机（本机无嵌套虚拟化时，实测场景）**
+> 云服务器若是 KVM 且没开嵌套虚拟化（coreinfo 看 SVM/NP 为 `-`），方式 A/B 都跑不了，
+> 就用另一台能跑 Linux docker 的机器（任意云主机/家里机器）：
+
+```powershell
+# 在远程 Linux 主机上：
+#   1) 装 docker（curl -fsSL https://get.docker.com | bash）
+#   2) 构建镜像：git clone 本仓库 && cd napcat-plugin-qqbot/docker && docker build -t qqbot-opencode-task:latest .
+#   3) 开放 docker TCP：/etc/docker/daemon.json 加 {"hosts":["unix:///var/run/docker.sock","tcp://0.0.0.0:2375"]}
+#      重启 docker，并用安全组/防火墙只对 Windows 服务器 IP 放行 2375（2375 无鉴权，务必限制来源！）
+```
+插件配置相应改为（见第 8 节）：
+- `dockerHost`: `tcp://<远程主机IP>:2375`（留空则读本机）
+- `mcpHost`: `0.0.0.0`（容器要能跨网访问 MCP；有 mcpToken 鉴权，但仍建议防火墙只放行远程主机 IP）
+- `mcpUrlForDocker`: `http://<本机内网/公网IP>:5100/mcp`
+- 远程模式下任务容器**不挂载 workspace**（远端挂不到本机目录），任务产出文件随容器销毁，仅文本结果回流
 
 【验证】
 ```powershell
-node --version      # v22.x
+node --version      # v22.x+
 pnpm --version
-docker run --rm hello-world
+docker run --rm hello-world                                        # 方式 A/B
+docker -H tcp://<远程主机IP>:2375 run --rm hello-world             # 方式 C
 ```
 
 ## 2. host opencode（上层，常驻）
@@ -232,6 +249,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
   "mcpUrl": "http://127.0.0.1:5100/mcp",
   "mcpUrlForDocker": "http://host.docker.internal:5100/mcp",
   "dockerImage": "qqbot-opencode-task:latest",
+  "dockerHost": "",
   "dockerEnv": {},
   "taskTimeoutSec": 900,
   "taskConcurrency": 2,
@@ -244,15 +262,16 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 - `hostModel`：host 层每个工作区的默认模型，默认 zen 免费模型（`opencode/deepseek-v4-flash-free`）
 - `mcpHost`：MCP 服务绑定地址，默认 `127.0.0.1`（回环）。**服务器有公网 IP 直绑网卡时切勿改成 0.0.0.0**；方式 B（WSL2 docker）确需容器访问时才改为 `0.0.0.0` 并配合防火墙只放行容器网段
 - `opencodePassword` 必须等于第 2 步的 `OPENCODE_SERVER_PASSWORD`
+- `dockerHost`：留空 = 本机 docker；方式 C 填 `tcp://<远程主机IP>:2375`（远程模式下容器不挂 workspace 目录）
 - `dockerEnv`：**用免费模型时留空 `{}` 即可**；要给容器换付费模型时才填 key（如 `ANTHROPIC_API_KEY`），同时改 `docker/opencode.json` 里的 `model` 并重新 build 镜像
-- 方式 B（WSL2 docker）时 `mcpUrlForDocker` 改为 `http://<Windows主机IP>:5100/mcp`
+- 方式 B（WSL2 docker）时 `mcpUrlForDocker` 改为 `http://<Windows主机IP>:5100/mcp`；方式 C 改为 `http://<本机IP>:5100/mcp`
 - 改完重启 NapCat 生效
 
 ## 9. 构建任务沙箱镜像
 
 ```powershell
 cd C:\qqbot\napcat-plugin-qqbot\docker
-docker build -t qqbot-opencode-task:latest .
+docker build -t qqbot-opencode-task:latest .      # 方式 C：在远程主机上执行此步，或 docker -H tcp://<远程IP>:2375 build ...
 ```
 
 【验证】
