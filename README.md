@@ -47,9 +47,11 @@ src/
 ├── tasks.ts      任务注册表（tasks.json 持久化）
 ├── executor.ts   Docker 任务执行器（并发上限、超时、结果分流投递）
 └── mcp.ts        MCP Server（5 工具，scope 头路由，沙箱模式，属主权限校验）
-docker/           一次性任务沙箱镜像（Dockerfile + opencode.json）
 smoke*.mjs        冒烟测试（消息库 / session+MCP配置 / MCP 五工具全链路）
 ```
+
+> 任务沙箱镜像、HK 部署脚本、产物下载服务在独立的执行层仓库
+> [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner)（HK 服务器由单独的 Agent 部署）。
 
 ## 构建
 
@@ -74,7 +76,7 @@ node smoke3.mjs      # 冒烟测试 3：MCP 五工具
 2. **安装插件**：把 `dist/` 整个目录拷到 NapCat 数据目录 `plugins/napcat-plugin-qqbot/`。
 3. **host opencode**：`opencode serve --hostname 127.0.0.1 --port 4096`
    （设 `OPENCODE_SERVER_PASSWORD` 则同步填到插件配置 `opencodePassword`）。
-4. **任务沙箱镜像**：`cd docker && docker build -t qqbot-opencode-task:latest .`
+4. **任务沙箱镜像**：在远程执行层仓库 [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner) 构建（HK 主机跑其 `script/setup-hk.sh` 一键完成）。
 5. **模型**：默认全部走 OpenCode Zen 免费模型 `opencode/deepseek-v4-flash-free`（免登录，host 层和容器层都已内置默认）；换付费模型才需要 `opencode auth login` 或配置 `dockerEnv`。
 6. NapCat WebUI 启用插件，群里 @机器人 即可。
 
@@ -94,7 +96,7 @@ node smoke3.mjs      # 冒烟测试 3：MCP 五工具
 | `dockerHost` | 空（本机） | 远程 docker 主机（如 `ssh://user@x.x.x.x`），本机无法虚拟化时用 |
 | `remoteWorkRoot` / `archiveRetentionDays` | `/opt/qqbot-users` / `5` | 远程模式每 QQ 持久目录根路径与产物归档留存天数（激活 session 自动续期） |
 | `storageQuotaMB` | `500` | 每 QQ 持久目录总配额，超出从最旧归档开始清理 |
-| `artifactBaseUrl` / `artifactToken` | 空 | 产物下载服务地址与令牌（HK 主机绑域名后启用，`script/setup-artifacts.sh` 一键部署） |
+| `artifactBaseUrl` / `artifactToken` | 空 | 产物下载服务地址与令牌（HK 主机绑域名后启用，见 qqbot-hk-runner 仓库 `script/setup-artifacts.sh`） |
 | `taskConcurrency` / `taskTimeoutSec` | `2` / `900` | 任务并发上限与超时 |
 | `contextMessageCount` | `15` | 触发时携带的最近上下文条数 |
 | `replyDelayMinMs` / `replyDelayMaxMs` | `300` / `800` | 兜底分句发送的随机间隔 |

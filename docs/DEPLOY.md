@@ -49,17 +49,10 @@ wsl --install -d Ubuntu-22.04   # 需重启
 > 境外直连外网更快更稳；回本机的只有 MCP 轻量调用（走隧道）和最终文本结果，延迟无感。
 > 注意远程主机回程 SSH 隧道要稳（选到本机线路好的机房），隧道断了只是容器查不了聊天记录，不影响主链路。
 
-远程 Linux 主机上：
+远程 Linux 主机上（HK 侧组件已拆到独立仓库 [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner)，按其 README 执行）：
 ```bash
 # 一键脚本（含 clone、build、HK->Windows 隧道 systemd 服务）：
-curl -fsSL https://raw.githubusercontent.com/123321-QSTUDIO/napcat-plugin-qqbot/master/script/setup-hk.sh | sudo bash -s <Windows服务器IP> <Windows_SSH用户名> <MCP_TOKEN>
-
-# 或者手动：
-# 1) 装 docker
-curl -fsSL https://get.docker.com | bash
-# 2) 构建镜像
-git clone https://github.com/123321-QSTUDIO/napcat-plugin-qqbot.git
-cd napcat-plugin-qqbot/docker && docker build -t qqbot-opencode-task:latest .
+curl -fsSL https://raw.githubusercontent.com/123321-QSTUDIO/qqbot-hk-runner/master/script/setup-hk.sh | sudo bash -s <Windows服务器IP> <Windows_SSH用户名> <MCP_TOKEN>
 ```
 
 **C-1. 本机 → 远程 docker 的连接（不要用裸 TCP 2375 出公网！）**
@@ -326,10 +319,10 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 
 ## 9. 构建任务沙箱镜像
 
-```powershell
-cd C:\qqbot\napcat-plugin-qqbot\docker
-docker build -t qqbot-opencode-task:latest .      # 方式 C：在远程主机上执行此步，或 docker -H tcp://<远程IP>:2375 build ...
-```
+镜像构建文件（Dockerfile + 容器内 opencode.json）在远程执行层仓库 [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner) 的 `docker/` 目录。
+
+- 方式 A/B（本机 docker）：clone qqbot-hk-runner 后 `docker build -t qqbot-opencode-task:latest docker/`
+- 方式 C（远程主机）：HK 主机跑 `setup-hk.sh` 时已自动完成此步，无需手动
 
 【验证】
 ```powershell
@@ -347,7 +340,7 @@ docker run --rm `
 给 HK 主机绑一个域名后，任务产物（workspace 打包的 tar.gz）可以直接发下载链接给群友。
 
 ```bash
-# HK 主机上（在 clone 的仓库目录里）：
+# HK 主机上（qqbot-hk-runner 仓库目录里）：
 sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
 # 脚本会做：装 node+caddy → artifact-server 常驻(127.0.0.1:8080) → Caddy 反代自动 TLS
 ```
