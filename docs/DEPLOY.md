@@ -51,6 +51,10 @@ wsl --install -d Ubuntu-22.04   # 需重启
 
 远程 Linux 主机上：
 ```bash
+# 一键脚本（含 clone、build、HK->Windows 隧道 systemd 服务）：
+curl -fsSL https://raw.githubusercontent.com/123321-QSTUDIO/napcat-plugin-qqbot/master/script/setup-hk.sh | sudo bash -s <Windows服务器IP> <Windows_SSH用户名> <MCP_TOKEN>
+
+# 或者手动：
 # 1) 装 docker
 curl -fsSL https://get.docker.com | bash
 # 2) 构建镜像
