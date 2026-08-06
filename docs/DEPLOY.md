@@ -299,9 +299,14 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
   "mcpUrlForDocker": "http://host.docker.internal:5100/mcp",
   "dockerImage": "qqbot-opencode-task:latest",
   "dockerHost": "",
+  "remoteWorkRoot": "/opt/qqbot-users",
+  "archiveRetentionDays": 5,
+  "storageQuotaMB": 500,
+  "artifactBaseUrl": "",
+  "artifactToken": "",
   "dockerEnv": {},
   "taskTimeoutSec": 900,
-  "taskConcurrency": 2,
+  "taskConcurrency": 3,
   "contextMessageCount": 15,
   "replyDelayMinMs": 300,
   "replyDelayMaxMs": 800
@@ -312,6 +317,9 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 - `mcpHost`：MCP 服务绑定地址，默认 `127.0.0.1`（回环）。**服务器有公网 IP 直绑网卡时切勿改成 0.0.0.0**；方式 B（WSL2 docker）确需容器访问时才改为 `0.0.0.0` 并配合防火墙只放行容器网段
 - `opencodePassword` 必须等于第 2 步的 `OPENCODE_SERVER_PASSWORD`
 - `dockerHost`：留空 = 本机 docker；方式 C 填 `ssh://user@<远程主机IP>`（远程模式下容器不挂 workspace 目录）
+- `storageQuotaMB`：每个 QQ 的持久目录（home+workspace+archive）总配额，默认 500MB，超了从最旧归档开始删
+- `artifactBaseUrl` / `artifactToken`：产物下载服务（见 9.1 节）；配置后任务完成会私聊发下载链接
+- `archiveRetentionDays`：产物归档留存天数（默认 5），**每次该 QQ 的 session 被激活会自动刷新最近归档的过期时间**
 - `dockerEnv`：**用免费模型时留空 `{}` 即可**；要给容器换付费模型时才填 key（如 `ANTHROPIC_API_KEY`），同时改 `docker/opencode.json` 里的 `model` 并重新 build 镜像
 - 方式 B（WSL2 docker）时 `mcpUrlForDocker` 改为 `http://<Windows主机IP>:5100/mcp`；方式 C 改为 `http://<本机IP>:5100/mcp`
 - 改完重启 NapCat 生效
@@ -333,6 +341,20 @@ docker run --rm `
   qqbot-opencode-task:latest run "回复两个字：你好"
 # 期望输出包含"你好"（容器里同样走 zen 免费模型，无需 key）
 ```
+
+## 9.1 产物下载服务（远程模式 + 域名，可选但推荐）
+
+给 HK 主机绑一个域名后，任务产物（workspace 打包的 tar.gz）可以直接发下载链接给群友。
+
+```bash
+# HK 主机上（在 clone 的仓库目录里）：
+sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
+# 脚本会做：装 node+caddy → artifact-server 常驻(127.0.0.1:8080) → Caddy 反代自动 TLS
+```
+
+- 域名 A 记录指向 HK 主机 IP；Caddy 首次访问自动签证书
+- 下载 URL 形如 `https://<域名>/<QQ>/archive/workspace-<时间>.tar.gz?token=<ARTIFACT_TOKEN>`，只放行该路径模式
+- 插件配置填 `artifactBaseUrl: "https://<域名>"` 和 `artifactToken`（与脚本参数一致），重启 NapCat 生效
 
 ## 10. 部署完成检查单
 

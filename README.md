@@ -92,7 +92,9 @@ node smoke3.mjs      # 冒烟测试 3：MCP 五工具
 | `mcpUrlForDocker` | `http://host.docker.internal:5100/mcp` | 容器访问 MCP 的地址 |
 | `dockerImage` / `dockerEnv` | `qqbot-opencode-task:latest` | 任务镜像与注入容器的环境变量（API key） |
 | `dockerHost` | 空（本机） | 远程 docker 主机（如 `ssh://user@x.x.x.x`），本机无法虚拟化时用 |
-| `remoteWorkRoot` / `archiveRetentionDays` | `/opt/qqbot-users` / `5` | 远程模式每 QQ 持久目录根路径与产物归档留存天数 |
+| `remoteWorkRoot` / `archiveRetentionDays` | `/opt/qqbot-users` / `5` | 远程模式每 QQ 持久目录根路径与产物归档留存天数（激活 session 自动续期） |
+| `storageQuotaMB` | `500` | 每 QQ 持久目录总配额，超出从最旧归档开始清理 |
+| `artifactBaseUrl` / `artifactToken` | 空 | 产物下载服务地址与令牌（HK 主机绑域名后启用，`script/setup-artifacts.sh` 一键部署） |
 | `taskConcurrency` / `taskTimeoutSec` | `2` / `900` | 任务并发上限与超时 |
 | `contextMessageCount` | `15` | 触发时携带的最近上下文条数 |
 | `replyDelayMinMs` / `replyDelayMaxMs` | `300` / `800` | 兜底分句发送的随机间隔 |

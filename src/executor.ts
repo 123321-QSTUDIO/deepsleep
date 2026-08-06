@@ -254,23 +254,34 @@ fi
     await this.ssh(`
 set -e
 latest=$(ls -1t "${root}/archive"/*.tar.gz 2>/dev/null | head -1 || true)
-if [ -n "$latest" ] && [ -z "$(ls -A "${root}/workspace")" ]; then
-  tar xzf "$latest" -C "${root}/workspace"
+if [ -n "$latest" ]; then
+  touch "$latest"
+  if [ -z "$(ls -A "${root}/workspace")" ]; then
+    tar xzf "$latest" -C "${root}/workspace"
+  fi
 fi
 `)
   }
 
-  private async archiveWorkspace(qq: string) {
+  private async archiveWorkspace(qq: string): Promise<string | null> {
     const root = this.userRoot(qq)
     const days = this.deps.config.archiveRetentionDays
-    await this.ssh(`
+    const quota = this.deps.config.storageQuotaMB
+    const out = await this.ssh(`
 set -e
 if [ -n "$(ls -A "${root}/workspace")" ]; then
   tar czf "${root}/archive/workspace-$(date +%Y%m%d-%H%M%S).tar.gz" -C "${root}/workspace" .
   rm -rf "${root}/workspace"/* "${root}/workspace"/.[!.]* 2>/dev/null || true
 fi
 find "${root}/archive" -name '*.tar.gz' -mtime +${days} -delete
+while [ "$(du -sm "${root}" 2>/dev/null | cut -f1)" -gt "${quota}" ]; do
+  oldest=$(ls -1t "${root}/archive"/*.tar.gz 2>/dev/null | tail -1 || true)
+  [ -z "$oldest" ] && break
+  rm -f "$oldest"
+done
+basename "$(ls -1t "${root}/archive"/*.tar.gz 2>/dev/null | head -1)" 2>/dev/null || true
 `)
+    return out.trim() || null
   }
 
   private async ensureContainer(qq: string) {
@@ -334,7 +345,17 @@ find "${root}/archive" -name '*.tar.gz' -mtime +${days} -delete
       state.initialized = true
       this.userState.set(qq, state)
       this.saveUserState()
-      await this.archiveWorkspace(qq).catch((e) => this.deps.log(`归档失败 ${qq}:`, e))
+      try {
+        const artifact = await this.archiveWorkspace(qq)
+        if (artifact && this.deps.config.artifactBaseUrl) {
+          const token = this.deps.config.artifactToken ? `?token=${this.deps.config.artifactToken}` : ''
+          this.deps.tasks.update(rec.task_id, {
+            artifact_url: `${this.deps.config.artifactBaseUrl.replace(/\/$/, '')}/${qq}/archive/${artifact}${token}`,
+          })
+        }
+      } catch (e) {
+        this.deps.log(`归档失败 ${qq}:`, e)
+      }
     }
   }
 
@@ -384,6 +405,9 @@ find "${root}/archive" -name '*.tar.gz' -mtime +${days} -delete
         const chunks = this.chunk(rec.result, 800)
         for (const c of [`你的任务「${rec.task.slice(0, 60)}」搞定了，详细结果：`, ...chunks]) {
           await sendToScope(privateScope, c).catch((e) => log('私聊投递失败:', e))
+        }
+        if (rec.artifact_url) {
+          await sendToScope(privateScope, `产物打包下载（${this.deps.config.archiveRetentionDays}天内有效，每次新任务自动续期）：\n${rec.artifact_url}`).catch(() => undefined)
         }
         await this.injectToScope(privateScope, `[系统] 你的任务 ${rec.task_id} 已完成。结论：${rec.summary}\n详细结果：\n${rec.result.slice(0, 3000)}`)
         if (rec.group_id) {

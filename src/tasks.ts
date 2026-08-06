@@ -14,6 +14,7 @@ export interface TaskRec {
   summary: string
   result: string
   error: string
+  artifact_url: string
 }
 
 export class TaskRegistry {
@@ -50,6 +51,7 @@ export class TaskRegistry {
       summary: '',
       result: '',
       error: '',
+      artifact_url: '',
     }
     this.tasks.set(rec.task_id, rec)
     this.save()

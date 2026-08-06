@@ -15,6 +15,9 @@ export interface PluginConfig {
   dockerHost: string
   remoteWorkRoot: string
   archiveRetentionDays: number
+  storageQuotaMB: number
+  artifactBaseUrl: string
+  artifactToken: string
   dockerEnv: Record<string, string>
   taskTimeoutSec: number
   taskConcurrency: number
@@ -37,9 +40,12 @@ export const defaultConfig: PluginConfig = {
   dockerHost: '',
   remoteWorkRoot: '/opt/qqbot-users',
   archiveRetentionDays: 5,
+  storageQuotaMB: 500,
+  artifactBaseUrl: '',
+  artifactToken: '',
   dockerEnv: {},
   taskTimeoutSec: 900,
-  taskConcurrency: 2,
+  taskConcurrency: 3,
   contextMessageCount: 15,
   replyDelayMinMs: 300,
   replyDelayMaxMs: 800,
