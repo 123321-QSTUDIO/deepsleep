@@ -133,6 +133,13 @@ pnpm build:shell
 Select-String -Path packages\napcat-shell\dist\napcat.mjs -Pattern 'napcat-plugin-qqbot' -SimpleMatch | Select-Object -First 1
 ```
 
+> **pnpm install 失败规避**：`@homebridge/node-pty-prebuilt-multiarch` 的 install 脚本在部分 Windows 机器报 `spawn EINVAL`（仅影响 webui 终端功能，shell 运行不需要）。改用：
+> ```powershell
+> pnpm install --ignore-scripts
+> pnpm rebuild @swc/core esbuild sharp ttf2woff2 unrs-resolver
+> pnpm build:webui; pnpm build:shell
+> ```
+
 ## 5. 安装 QQ + 部署 NapCat 运行目录
 
 ```powershell
@@ -140,6 +147,11 @@ Select-String -Path packages\napcat-shell\dist\napcat.mjs -Pattern 'napcat-plugi
 
 # 部署 NapCat 运行目录（dist 即运行目录，launcher 就在里面）
 xcopy /E /I C:\qqbot\NapCatQQ\packages\napcat-shell\dist C:\napcat
+
+# 【必须】napcat.mjs 将 express/ws 留作外部依赖，运行目录必须有 node_modules：
+cd C:\napcat
+npm install --omit=dev
+# （或在 monorepo 里 pnpm deploy，或从同版本官方 Shell 包复制 node_modules）
 
 # 数据目录
 mkdir C:\napcat-data
@@ -215,6 +227,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
   "opencodeUrl": "http://127.0.0.1:4096",
   "opencodePassword": "CHANGE_ME_STRONG_PASSWORD",
   "mcpPort": 5100,
+  "mcpHost": "127.0.0.1",
   "mcpToken": "CHANGE_ME_MCP_TOKEN",
   "mcpUrl": "http://127.0.0.1:5100/mcp",
   "mcpUrlForDocker": "http://host.docker.internal:5100/mcp",
@@ -229,6 +242,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 ```
 
 - `hostModel`：host 层每个工作区的默认模型，默认 zen 免费模型（`opencode/deepseek-v4-flash-free`）
+- `mcpHost`：MCP 服务绑定地址，默认 `127.0.0.1`（回环）。**服务器有公网 IP 直绑网卡时切勿改成 0.0.0.0**；方式 B（WSL2 docker）确需容器访问时才改为 `0.0.0.0` 并配合防火墙只放行容器网段
 - `opencodePassword` 必须等于第 2 步的 `OPENCODE_SERVER_PASSWORD`
 - `dockerEnv`：**用免费模型时留空 `{}` 即可**；要给容器换付费模型时才填 key（如 `ANTHROPIC_API_KEY`），同时改 `docker/opencode.json` 里的 `model` 并重新 build 镜像
 - 方式 B（WSL2 docker）时 `mcpUrlForDocker` 改为 `http://<Windows主机IP>:5100/mcp`

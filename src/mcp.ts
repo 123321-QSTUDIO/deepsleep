@@ -200,8 +200,8 @@ export class QqMcpServer {
     })
     return new Promise((resolve, reject) => {
       this.server!.once('error', reject)
-      this.server!.listen(config.mcpPort, '0.0.0.0', () => {
-        log(`MCP server 监听 :${config.mcpPort}`)
+      this.server!.listen(config.mcpPort, config.mcpHost, () => {
+        log(`MCP server 监听 ${config.mcpHost}:${config.mcpPort}`)
         resolve()
       })
     })

@@ -7,6 +7,7 @@ export interface PluginConfig {
   opencodeUrl: string
   opencodePassword: string
   mcpPort: number
+  mcpHost: string
   mcpToken: string
   mcpUrl: string
   mcpUrlForDocker: string
@@ -25,6 +26,7 @@ export const defaultConfig: PluginConfig = {
   opencodeUrl: 'http://127.0.0.1:4096',
   opencodePassword: '',
   mcpPort: 5100,
+  mcpHost: '127.0.0.1',
   mcpToken: '',
   mcpUrl: 'http://127.0.0.1:5100/mcp',
   mcpUrlForDocker: 'http://host.docker.internal:5100/mcp',
@@ -37,8 +39,10 @@ export const defaultConfig: PluginConfig = {
   replyDelayMaxMs: 800,
 }
 
-export function loadConfig(configDir: string): PluginConfig {
-  const file = path.join(configDir, 'config.json')
+// NapCat ctx.configPath 语义：插件配置文件路径（<config>/plugins/<id>/config.json）。
+// 兼容旧语义：若以 .json 结尾视为文件路径，否则视为目录并拼接 config.json。
+export function loadConfig(configPath: string): PluginConfig {
+  const file = configPath.endsWith('.json') ? configPath : path.join(configPath, 'config.json')
   try {
     if (fs.existsSync(file)) {
       return { ...defaultConfig, ...JSON.parse(fs.readFileSync(file, 'utf-8')) }
@@ -46,7 +50,7 @@ export function loadConfig(configDir: string): PluginConfig {
   } catch {
     // fall through to defaults
   }
-  fs.mkdirSync(configDir, { recursive: true })
+  fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, JSON.stringify(defaultConfig, null, 2))
   return { ...defaultConfig }
 }
