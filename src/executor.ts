@@ -83,6 +83,7 @@ export class TaskExecutor {
   }
 
   private sshTarget(): string | null {
+    if (this.deps.config.remoteSsh) return this.deps.config.remoteSsh
     const m = /^ssh:\/\/(.+)$/.exec(this.deps.config.dockerHost)
     return m ? m[1] : null
   }
@@ -237,7 +238,7 @@ ${this.contextFor(rec)}
     return `qqbot-user-${qq}`
   }
 
-  private async ensureUserEnv(qq: string) {
+  private async prepareUserEnv(qq: string) {
     const root = this.userRoot(qq)
     const ocJson = Buffer.from(CONTAINER_OPENCODE_JSON).toString('base64')
     await this.ssh(`
@@ -246,13 +247,6 @@ mkdir -p "${root}/home/.config/opencode" "${root}/workspace" "${root}/archive"
 if [ ! -f "${root}/home/.config/opencode/opencode.json" ]; then
   echo "${ocJson}" | base64 -d > "${root}/home/.config/opencode/opencode.json"
 fi
-`)
-  }
-
-  private async restoreWorkspace(qq: string) {
-    const root = this.userRoot(qq)
-    await this.ssh(`
-set -e
 latest=$(ls -1t "${root}/archive"/*.tar.gz 2>/dev/null | head -1 || true)
 if [ -n "$latest" ]; then
   touch "$latest"
@@ -327,8 +321,7 @@ basename "$(ls -1t "${root}/archive"/*.tar.gz 2>/dev/null | head -1)" 2>/dev/nul
   private async runRemote(rec: TaskRec): Promise<{ code: number | null; out: string }> {
     const qq = rec.owner_qq
     const name = this.containerName(qq)
-    await this.ensureUserEnv(qq)
-    await this.restoreWorkspace(qq)
+    await this.prepareUserEnv(qq)
     await this.ensureContainer(qq)
     const state = this.userState.get(qq) ?? { initialized: false }
     const continueArgs = state.initialized ? ['--continue'] : []

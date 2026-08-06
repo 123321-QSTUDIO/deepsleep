@@ -13,6 +13,7 @@ export interface PluginConfig {
   mcpUrlForDocker: string
   dockerImage: string
   dockerHost: string
+  remoteSsh: string
   remoteWorkRoot: string
   archiveRetentionDays: number
   storageQuotaMB: number
@@ -38,6 +39,7 @@ export const defaultConfig: PluginConfig = {
   mcpUrlForDocker: 'http://host.docker.internal:5100/mcp',
   dockerImage: 'qqbot-opencode-task:latest',
   dockerHost: '',
+  remoteSsh: '',
   remoteWorkRoot: '/opt/qqbot-users',
   archiveRetentionDays: 5,
   storageQuotaMB: 500,

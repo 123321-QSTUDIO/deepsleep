@@ -57,16 +57,32 @@ curl -fsSL https://raw.githubusercontent.com/123321-QSTUDIO/qqbot-hk-runner/mast
 
 **C-1. 本机 → 远程 docker 的连接（不要用裸 TCP 2375 出公网！）**
 
-推荐 SSH 传输（docker CLI 原生支持，免开端口）：
-```powershell
-# Windows 服务器上：配好到远程主机的 SSH 密钥登录（免密）
-ssh-keygen -t ed25519
-type $env:USERPROFILE\.ssh\id_ed25519.pub   # 追加到远程主机 ~/.ssh/authorized_keys
-ssh user@<远程主机IP> "docker version"       # 验证免密可用
-```
-插件配置 `dockerHost`: `ssh://user@<远程主机IP>`。
+跨公网链路抖（3 秒级延迟、频繁重置）时，**不要**用 `ssh://` 直接当 DOCKER_HOST——
+那会让每条 docker 命令都新建一次 SSH 连接，每次都付握手延迟，链路一抖命令就失败。
+正确做法：**一条持久 SSH 隧道复用所有 docker 流量**，握手只付一次，断了由托管服务自动重连。
 
-（仅在两机有内网/专线时才可考虑 `tcp://...:2375`，且必须安全组只放行本机 IP。）
+```bash
+# HK 主机：docker 加监听 127.0.0.1:2375（仅回环，不暴露公网；setup-hk.sh 已自动完成）
+# /etc/systemd/system/docker.service.d/listen-local.conf:
+#   [Service]
+#   ExecStart=
+#   ExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375
+```
+
+```powershell
+# Windows 服务器：配好到 HK 的 SSH 密钥免密（ssh-keygen + 公钥加到 HK 的 authorized_keys）
+# 起持久 docker 隧道，并用计划任务托管（开机自启）：
+schtasks /create /tn "qqbot-docker-tunnel" /sc onlogon /rl highest /f `
+  /tr "ssh -N -L 2375:127.0.0.1:2375 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes <HK用户>@<HK_IP>"
+
+# 现在就启动一次（验证）：
+Start-Process -WindowStyle Hidden ssh -ArgumentList '-N','-L','2375:127.0.0.1:2375','-o','ServerAliveInterval=15','<HK用户>@<HK_IP>'
+docker -H tcp://127.0.0.1:2375 version    # 能连上 HK 的 docker 即成功
+```
+
+插件配置（见第 8 节）：
+- `dockerHost`: `tcp://127.0.0.1:2375`（走隧道）
+- `remoteSsh`: `<HK用户>@<HK_IP>`（远程文件操作走独立 SSH：建目录/解压/归档；与 docker 隧道分离，互不影响）
 
 **C-2. 远程容器 → 本机 MCP 的连接（二选一）**
 
@@ -292,6 +308,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
   "mcpUrlForDocker": "http://host.docker.internal:5100/mcp",
   "dockerImage": "qqbot-opencode-task:latest",
   "dockerHost": "",
+  "remoteSsh": "",
   "remoteWorkRoot": "/opt/qqbot-users",
   "archiveRetentionDays": 5,
   "storageQuotaMB": 500,
@@ -309,7 +326,8 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 - `hostModel`：host 层每个工作区的默认模型，默认 zen 免费模型（`opencode/deepseek-v4-flash-free`）
 - `mcpHost`：MCP 服务绑定地址，默认 `127.0.0.1`（回环）。**服务器有公网 IP 直绑网卡时切勿改成 0.0.0.0**；方式 B（WSL2 docker）确需容器访问时才改为 `0.0.0.0` 并配合防火墙只放行容器网段
 - `opencodePassword` 必须等于第 2 步的 `OPENCODE_SERVER_PASSWORD`
-- `dockerHost`：留空 = 本机 docker；方式 C 填 `ssh://user@<远程主机IP>`（远程模式下容器不挂 workspace 目录）
+- `dockerHost`：留空 = 本机 docker；方式 C 填 `tcp://127.0.0.1:2375`（走持久 SSH 隧道，见方式 C-1）
+- `remoteSsh`：方式 C 必填，`<HK用户>@<HK_IP>`，远程文件操作（建目录/解压/归档）走这条 SSH
 - `storageQuotaMB`：每个 QQ 的持久目录（home+workspace+archive）总配额，默认 500MB，超了从最旧归档开始删
 - `artifactBaseUrl` / `artifactToken`：产物下载服务（见 9.1 节）；配置后任务完成会私聊发下载链接
 - `archiveRetentionDays`：产物归档留存天数（默认 5），**每次该 QQ 的 session 被激活会自动刷新最近归档的过期时间**
