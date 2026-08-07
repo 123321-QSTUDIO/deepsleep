@@ -14,7 +14,7 @@ export interface TaskRec {
   summary: string
   result: string
   error: string
-  artifact_url: string
+  artifact_file: string
 }
 
 export class TaskRegistry {
@@ -51,7 +51,7 @@ export class TaskRegistry {
       summary: '',
       result: '',
       error: '',
-      artifact_url: '',
+      artifact_file: '',
     }
     this.tasks.set(rec.task_id, rec)
     this.save()
@@ -78,5 +78,9 @@ export class TaskRegistry {
 
   pending(): TaskRec[] {
     return [...this.tasks.values()].filter((t) => t.status === 'queued')
+  }
+
+  allOwners(): string[] {
+    return [...new Set([...this.tasks.values()].map((t) => t.owner_qq).filter((q) => q && q !== '0'))]
   }
 }

@@ -1,4 +1,5 @@
 import http from 'node:http'
+import crypto from 'node:crypto'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
@@ -155,6 +156,31 @@ export class QqMcpServer {
         if (rec.result) parts.push(`结果:\n${rec.result.slice(0, 4000)}`)
         if (rec.error) parts.push(`错误: ${rec.error}`)
         return text(parts.join('\n'))
+      }
+    )
+
+    mcp.registerTool(
+      'get_download_link',
+      {
+        description: '为当前私聊对象生成其任务产物的临时下载链接（签名有过期时间）。不传 task_id 时取最近一次有产物的任务。',
+        inputSchema: { task_id: z.string().optional().describe('任务编号，不传取最近') },
+      },
+      async ({ task_id }) => {
+        if (!scope.startsWith('private-')) return text('错误: 请在私聊中使用')
+        const { config } = this.deps
+        if (!config.artifactBaseUrl || !config.artifactToken) return text('错误: 产物下载服务未配置')
+        const owner = scope.slice(8)
+        const rec = task_id
+          ? tasks.get(task_id)
+          : tasks.byOwner(owner).find((t) => t.artifact_file)
+        if (!rec) return text('没有找到对应的任务')
+        if (rec.owner_qq !== owner) return text('只能下载自己的任务产物')
+        if (!rec.artifact_file) return text('这个任务没有产物包')
+        const exp = Math.floor(Date.now() / 1000) + config.linkTtlHours * 3600
+        const rel = `${owner}/archive/${rec.artifact_file}`
+        const sig = crypto.createHmac('sha256', config.artifactToken).update(`${rel}:${exp}`).digest('hex')
+        const url = `${config.artifactBaseUrl.replace(/\/$/, '')}/${rel}?exp=${exp}&sig=${sig}`
+        return text(`下载链接（${config.linkTtlHours}小时内有效）：\n${url}`)
       }
     )
 

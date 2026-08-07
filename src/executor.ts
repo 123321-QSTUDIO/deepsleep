@@ -20,6 +20,7 @@ interface ExecutorDeps {
 
 interface UserState {
   initialized: boolean
+  remindedArchive?: string
 }
 
 const CONTAINER_OPENCODE_JSON = `{
@@ -340,14 +341,47 @@ basename "$(ls -1t "${root}/archive"/*.tar.gz 2>/dev/null | head -1)" 2>/dev/nul
       this.saveUserState()
       try {
         const artifact = await this.archiveWorkspace(qq)
-        if (artifact && this.deps.config.artifactBaseUrl) {
-          const token = this.deps.config.artifactToken ? `?token=${this.deps.config.artifactToken}` : ''
-          this.deps.tasks.update(rec.task_id, {
-            artifact_url: `${this.deps.config.artifactBaseUrl.replace(/\/$/, '')}/${qq}/archive/${artifact}${token}`,
-          })
+        if (artifact) {
+          this.deps.tasks.update(rec.task_id, { artifact_file: artifact })
         }
       } catch (e) {
         this.deps.log(`归档失败 ${qq}:`, e)
+      }
+    }
+  }
+
+  // ---- 过期提醒：产物到期前一天私聊属主 ----
+
+  async checkExpiryReminders(): Promise<void> {
+    if (!this.remote) return
+    const { config, tasks, sendToScope, log } = this.deps
+    const now = Math.floor(Date.now() / 1000)
+    const horizon = config.archiveRetentionDays * 86400
+    for (const qq of tasks.allOwners()) {
+      try {
+        const out = await this.ssh(
+          `find "${this.userRoot(qq)}/archive" -name '*.tar.gz' -printf '%T@ %f\\n' 2>/dev/null | sort -rn | head -1`
+        )
+        const line = out.trim()
+        if (!line) continue
+        const [mtimeStr, ...nameParts] = line.split(' ')
+        const mtime = Math.floor(Number(mtimeStr))
+        const file = nameParts.join(' ')
+        if (!file || !Number.isFinite(mtime)) continue
+        const expiresIn = mtime + horizon - now
+        if (expiresIn > 86400 || expiresIn < 0) continue
+        const state = this.userState.get(qq) ?? { initialized: false }
+        if (state.remindedArchive === file) continue
+        await sendToScope(
+          `private-${qq}`,
+          `你的任务产物（${file}）还有不到一天就要过期清理了，要留档的话跟我说一声，我给你生成下载链接`
+        )
+        state.remindedArchive = file
+        this.userState.set(qq, state)
+        this.saveUserState()
+        log(`已发送过期提醒给 ${qq}: ${file}`)
+      } catch (e) {
+        log(`过期提醒检查失败 (${qq}):`, e)
       }
     }
   }
@@ -399,8 +433,8 @@ basename "$(ls -1t "${root}/archive"/*.tar.gz 2>/dev/null | head -1)" 2>/dev/nul
         for (const c of [`你的任务「${rec.task.slice(0, 60)}」搞定了，详细结果：`, ...chunks]) {
           await sendToScope(privateScope, c).catch((e) => log('私聊投递失败:', e))
         }
-        if (rec.artifact_url) {
-          await sendToScope(privateScope, `产物打包下载（${this.deps.config.archiveRetentionDays}天内有效，每次新任务自动续期）：\n${rec.artifact_url}`).catch(() => undefined)
+        if (rec.artifact_file) {
+          await sendToScope(privateScope, '产物已打包留存，想要下载链接的话直接跟我说一声').catch(() => undefined)
         }
         await this.injectToScope(privateScope, `[系统] 你的任务 ${rec.task_id} 已完成。结论：${rec.summary}\n详细结果：\n${rec.result.slice(0, 3000)}`)
         if (rec.group_id) {

@@ -97,7 +97,7 @@ node smoke3.mjs      # 冒烟测试 3：MCP 五工具
 | `dockerHost` | 空（本机） | 远程 docker 主机（如 `ssh://user@x.x.x.x`），本机无法虚拟化时用 |
 | `remoteWorkRoot` / `archiveRetentionDays` | `/opt/qqbot-users` / `5` | 远程模式每 QQ 持久目录根路径与产物归档留存天数（激活 session 自动续期） |
 | `storageQuotaMB` | `500` | 每 QQ 持久目录总配额，超出从最旧归档开始清理 |
-| `artifactBaseUrl` / `artifactToken` | 空 | 产物下载服务地址与令牌（HK 主机绑域名后启用，见 qqbot-hk-runner 仓库 `script/setup-artifacts.sh`） |
+| `artifactBaseUrl` / `artifactToken` / `linkTtlHours` | 空 / 空 / 24 | 产物下载服务地址、签名密钥、链接有效期（HK 绑域名后启用，见 qqbot-hk-runner 仓库）；链接按需生成，到期前一天主动私聊提醒 |
 | `taskConcurrency` / `taskTimeoutSec` | `2` / `900` | 任务并发上限与超时 |
 | `contextMessageCount` | `15` | 触发时携带的最近上下文条数 |
 | `replyDelayMinMs` / `replyDelayMaxMs` | `300` / `800` | 兜底分句发送的随机间隔 |

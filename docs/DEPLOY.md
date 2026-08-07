@@ -314,6 +314,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
   "storageQuotaMB": 500,
   "artifactBaseUrl": "",
   "artifactToken": "",
+  "linkTtlHours": 24,
   "dockerEnv": {},
   "taskTimeoutSec": 900,
   "taskConcurrency": 3,
@@ -330,7 +331,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 - `dockerHost`：留空 = 本机 docker；方式 C 填 `tcp://127.0.0.1:2375`（走持久 SSH 隧道，见方式 C-1）
 - `remoteSsh`：方式 C 必填，`<HK用户>@<HK_IP>`，远程文件操作（建目录/解压/归档）走这条 SSH
 - `storageQuotaMB`：每个 QQ 的持久目录（home+workspace+archive）总配额，默认 500MB，超了从最旧归档开始删
-- `artifactBaseUrl` / `artifactToken`：产物下载服务（见 9.1 节）；配置后任务完成会私聊发下载链接
+- `artifactBaseUrl` / `artifactToken` / `linkTtlHours`：产物下载服务（见 9.1 节）；链接为 HMAC 签名临时链接，默认 24 小时
 - `archiveRetentionDays`：产物归档留存天数（默认 5），**每次该 QQ 的 session 被激活会自动刷新最近归档的过期时间**
 - `dockerEnv`：**用免费模型时留空 `{}` 即可**；要给容器换付费模型时才填 key（如 `ANTHROPIC_API_KEY`），同时改 `docker/opencode.json` 里的 `model` 并重新 build 镜像
 - 方式 B（WSL2 docker）时 `mcpUrlForDocker` 改为 `http://<Windows主机IP>:5100/mcp`；方式 C 改为 `http://<本机IP>:5100/mcp`
@@ -356,16 +357,17 @@ docker run --rm `
 
 ## 9.1 产物下载服务（远程模式 + 域名，可选但推荐）
 
-给 HK 主机绑一个域名后，任务产物（workspace 打包的 tar.gz）可以直接发下载链接给群友。
+给 HK 主机绑一个域名后，群友可以找机器人要任务产物（workspace 打包 tar.gz）的**临时下载链接**。
 
 ```bash
 # HK 主机上（qqbot-hk-runner 仓库目录里）：
 sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
-# 脚本会做：装 node+caddy → artifact-server 常驻(127.0.0.1:8080) → Caddy 反代自动 TLS
+# 脚本会做：装 node+caddy → artifact-server 常驻(127.0.0.1:8080) → Caddy 反代
 ```
 
-- 域名 A 记录指向 HK 主机 IP；Caddy 首次访问自动签证书
-- 下载 URL 形如 `https://<域名>/<QQ>/archive/workspace-<时间>.tar.gz?token=<ARTIFACT_TOKEN>`，只放行该路径模式
+- **域名走 Cloudflare 代理（橙云）**：TLS 在 CF 边缘终结，源站 Caddy 只开 80（脚本已按此配置），CF 面板 SSL/TLS 模式选 Full；注意 CF 免费版单请求 100MB 上限，超大产物包建议关代理（灰云）直连
+- **灰云直连**：把 Caddyfile 的 `http://` 前缀去掉，Caddy 自动签 TLS
+- 链接机制：插件按需 HMAC 签名生成（`?exp=&sig=`），默认 24 小时有效（`linkTtlHours`），**机器人不主动发链接，用户私聊索要时才生成**；产物到期前一天机器人会主动私聊提醒用户留存
 - 插件配置填 `artifactBaseUrl: "https://<域名>"` 和 `artifactToken`（与脚本参数一致），重启 NapCat 生效
 
 ## 10. 部署完成检查单

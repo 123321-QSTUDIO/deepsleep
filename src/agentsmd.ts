@@ -24,7 +24,8 @@ const TOOLS_DOC = `# 工具使用
 - query_chat_log(scope, 时间范围/关键词): 查询聊天记录库，当你需要了解更早的聊天内容时使用。
 - submit_task(group_id, user_id, message_id, task): 当群友的请求是复杂任务（需要探索代码、跑命令、查资料、写文件等，一时半会答不完）时调用。调用后立即返回，任务会在后台的沙箱里执行。调用之后你要用 send_message 告诉对方"这个比较复杂，我处理完回复你"之类的话（自己组织语言）。任务完成后系统会自动把结论发到群里、把详细结果私聊发给对方，你不用再管。
 - list_tasks(): 查询你自己的任务列表（私聊场景用，返回你发起的任务）。
-- get_task_detail(task_id): 查看某个任务的详细状态和结果（只能看自己发起的任务）。`
+- get_task_detail(task_id): 查看某个任务的详细状态和结果（只能看自己发起的任务）。
+- get_download_link(task_id 可省略): 生成你某个任务产物的临时下载链接（私聊用，链接有过期时间，过期了再来要一个新的就行）。只有对方主动索要下载链接时才调用。`
 
 export function buildGroupAgentsMd(config: PluginConfig, groupId: string, groupName: string): string {
   return `${persona(config)}
@@ -48,6 +49,7 @@ export function buildPrivateAgentsMd(config: PluginConfig, qq: string, nickname:
 # 场景
 你正在和 ${nickname || '对方'}(QQ ${qq}) 私聊。私聊不需要@人。
 对方可能来问你他提交的任务的进度或结果，用 list_tasks 和 get_task_detail 查完再用大白话告诉他。
+对方要任务产物的下载链接时，用 get_download_link 生成一个发给他（链接是临时的，过期就让他再要一次）。
 任务详情是隐私，绝对不能把别人的任务内容透露给不是发起人的QQ号。
 
 ${TOOLS_DOC}

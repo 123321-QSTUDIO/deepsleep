@@ -14,6 +14,7 @@ let oc: OpencodeClient | null = null
 let sessions: SessionController | null = null
 let executor: TaskExecutor | null = null
 let mcp: QqMcpServer | null = null
+let reminderTimer: ReturnType<typeof setInterval> | null = null
 let running = false
 
 export async function plugin_init(ctx: PluginContext) {
@@ -48,6 +49,11 @@ export async function plugin_init(ctx: PluginContext) {
 
   running = true
   executor.recoverQueued()
+
+  reminderTimer = setInterval(() => {
+    void executor?.checkExpiryReminders()
+  }, 3600_000)
+  setTimeout(() => void executor?.checkExpiryReminders(), 30_000)
 
   const healthy = await oc.health()
   ctx.logger.info(`[qqbot] 初始化完成, botName=${config.botName}, opencode=${config.opencodeUrl} (${healthy ? '在线' : '离线, 将在收到消息时重试'}), MCP :${config.mcpPort}`)
@@ -114,6 +120,10 @@ export async function plugin_onmessage(ctx: PluginContext, event: OB11MessageEve
 
 export async function plugin_cleanup(ctx: PluginContext) {
   running = false
+  if (reminderTimer) {
+    clearInterval(reminderTimer)
+    reminderTimer = null
+  }
   mcp?.stop()
   mcp = null
   executor = null
