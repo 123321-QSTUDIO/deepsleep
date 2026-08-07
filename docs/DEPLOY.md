@@ -314,7 +314,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
   "storageQuotaMB": 500,
   "artifactBaseUrl": "",
   "artifactToken": "",
-  "linkTtlHours": 24,
+  "linkTtlMinutes": 10,
   "dockerEnv": {},
   "taskTimeoutSec": 900,
   "taskConcurrency": 3,
@@ -331,7 +331,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 - `dockerHost`：留空 = 本机 docker；方式 C 填 `tcp://127.0.0.1:2375`（走持久 SSH 隧道，见方式 C-1）
 - `remoteSsh`：方式 C 必填，`<HK用户>@<HK_IP>`，远程文件操作（建目录/解压/归档）走这条 SSH
 - `storageQuotaMB`：每个 QQ 的持久目录（home+workspace+archive）总配额，默认 500MB，超了从最旧归档开始删
-- `artifactBaseUrl` / `artifactToken` / `linkTtlHours`：产物下载服务（见 9.1 节）；链接为 HMAC 签名临时链接，默认 24 小时
+- `artifactBaseUrl` / `artifactToken` / `linkTtlMinutes`：产物下载服务（见 9.1 节）；链接为 HMAC 签名临时链接，默认 10 分钟有效，有效期内重复索要返回同一链接（不重复生成），失效后才能生成新链接
 - `archiveRetentionDays`：产物归档留存天数（默认 5），**每次该 QQ 的 session 被激活会自动刷新最近归档的过期时间**
 - `dockerEnv`：**用免费模型时留空 `{}` 即可**；要给容器换付费模型时才填 key（如 `ANTHROPIC_API_KEY`），同时改 `docker/opencode.json` 里的 `model` 并重新 build 镜像
 - 方式 B（WSL2 docker）时 `mcpUrlForDocker` 改为 `http://<Windows主机IP>:5100/mcp`；方式 C 改为 `http://<本机IP>:5100/mcp`

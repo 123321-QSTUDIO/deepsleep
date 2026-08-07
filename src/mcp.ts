@@ -29,6 +29,7 @@ function text(text: string) {
 
 export class QqMcpServer {
   private server: http.Server | null = null
+  private issuedLinks = new Map<string, { url: string; exp: number }>()
 
   constructor(private deps: McpDeps) {}
 
@@ -176,11 +177,18 @@ export class QqMcpServer {
         if (!rec) return text('没有找到对应的任务')
         if (rec.owner_qq !== owner) return text('只能下载自己的任务产物')
         if (!rec.artifact_file) return text('这个任务没有产物包')
-        const exp = Math.floor(Date.now() / 1000) + config.linkTtlHours * 3600
+        const now = Math.floor(Date.now() / 1000)
+        const existing = this.issuedLinks.get(rec.task_id)
+        if (existing && existing.exp > now) {
+          const leftMin = Math.ceil((existing.exp - now) / 60)
+          return text(`之前的链接还没失效（还剩约${leftMin}分钟），继续用这个：\n${existing.url}`)
+        }
+        const exp = now + config.linkTtlMinutes * 60
         const rel = `${owner}/archive/${rec.artifact_file}`
         const sig = crypto.createHmac('sha256', config.artifactToken).update(`${rel}:${exp}`).digest('hex')
         const url = `${config.artifactBaseUrl.replace(/\/$/, '')}/${rel}?exp=${exp}&sig=${sig}`
-        return text(`下载链接（${config.linkTtlHours}小时内有效）：\n${url}`)
+        this.issuedLinks.set(rec.task_id, { url, exp })
+        return text(`下载链接（${config.linkTtlMinutes}分钟内有效）：\n${url}`)
       }
     )
 

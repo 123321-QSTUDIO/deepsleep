@@ -20,7 +20,7 @@ export interface PluginConfig {
   storageQuotaMB: number
   artifactBaseUrl: string
   artifactToken: string
-  linkTtlHours: number
+  linkTtlMinutes: number
   dockerEnv: Record<string, string>
   taskTimeoutSec: number
   taskConcurrency: number
@@ -48,7 +48,7 @@ export const defaultConfig: PluginConfig = {
   storageQuotaMB: 500,
   artifactBaseUrl: '',
   artifactToken: '',
-  linkTtlHours: 24,
+  linkTtlMinutes: 10,
   dockerEnv: {},
   taskTimeoutSec: 900,
   taskConcurrency: 3,
