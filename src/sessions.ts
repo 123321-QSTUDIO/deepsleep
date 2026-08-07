@@ -4,7 +4,7 @@ import { PluginConfig } from './config'
 import { MsgDB, dayKey } from './msgdb'
 import { OpencodeClient } from './opencode'
 import { buildGroupAgentsMd, buildPrivateAgentsMd } from './agentsmd'
-import { extractAtTargets, extractImages, extractReplyTo, MsgSegment } from './format'
+import { cleanCqForDisplay, dedupeImages, extractAtTargets, extractImages, extractImagesFromRaw, extractReplyTo, MsgSegment } from './format'
 import { OB11MessageEvent, PluginContext } from './types'
 
 interface SessionEntry {
@@ -88,46 +88,60 @@ export class SessionController {
     return path.join(this.workspacesDir, scope)
   }
 
-  private async ensureSession(scope: string, event: OB11MessageEvent): Promise<SessionEntry | null> {
-    const existing = this.map.get(scope)
-    if (existing) return existing
+  private ensureWorkspaceFiles(scope: string, event: OB11MessageEvent) {
     const directory = this.workspaceFor(scope)
     fs.mkdirSync(directory, { recursive: true })
     const agentsMd =
       event.message_type === 'group'
         ? buildGroupAgentsMd(this.config, String(event.group_id), event.group_name ?? '')
         : buildPrivateAgentsMd(this.config, String(event.user_id), event.sender?.nickname ?? '')
-    fs.writeFileSync(path.join(directory, 'AGENTS.md'), agentsMd)
-    fs.writeFileSync(
-      path.join(directory, 'opencode.json'),
-      JSON.stringify(
-        {
-          model: this.config.hostModel,
-          agent: {
-            'vision-bridge': {
-              description: '视觉跳板：读取图片/视频文件并输出详细文字描述，供纯文本模型调用',
-              model: this.config.visionModel,
-              mode: 'subagent',
-              prompt:
-                '你是视觉跳板。用户会给你一个图片或视频的文件路径（在工作目录下，如 inbox/xxx.jpg）。用 read 工具读取该文件，然后用中文输出详细、客观的内容描述（画面主体、文字、细节、氛围）。只输出描述本身，不要评价、不要回答用户其他问题。',
-            },
+    const ocJson = JSON.stringify(
+      {
+        model: this.config.hostModel,
+        agent: {
+          'vision-bridge': {
+            description: '视觉跳板：读取图片/视频文件并输出详细文字描述，供纯文本模型调用',
+            model: this.config.visionModel,
+            mode: 'subagent',
+            prompt:
+              '你是视觉跳板。用户会给你一个图片或视频的文件路径（在工作目录下，如 inbox/xxx.jpg）。用 read 工具读取该文件，然后用中文输出详细、客观的内容描述（画面主体、文字、细节、氛围）。只输出描述本身，不要评价、不要回答用户其他问题。',
           },
-          mcp: {
-            qqbot: {
-              type: 'remote',
-              url: this.config.mcpUrl,
-              enabled: true,
-              headers: {
-                authorization: `Bearer ${this.config.mcpToken}`,
-                'x-qqbot-scope': scope,
-              },
+        },
+        mcp: {
+          qqbot: {
+            type: 'remote',
+            url: this.config.mcpUrl,
+            enabled: true,
+            headers: {
+              authorization: `Bearer ${this.config.mcpToken}`,
+              'x-qqbot-scope': scope,
             },
           },
         },
-        null,
-        2
-      )
+      },
+      null,
+      2
     )
+    for (const [name, content] of [
+      ['AGENTS.md', agentsMd],
+      ['opencode.json', ocJson],
+    ] as const) {
+      const file = path.join(directory, name)
+      try {
+        if (fs.existsSync(file) && fs.readFileSync(file, 'utf-8') === content) continue
+        fs.writeFileSync(file, content)
+        this.log(`工作区文件已更新: ${scope}/${name}`)
+      } catch (e) {
+        this.log(`写 ${name} 失败:`, e)
+      }
+    }
+  }
+
+  private async ensureSession(scope: string, event: OB11MessageEvent): Promise<SessionEntry | null> {
+    this.ensureWorkspaceFiles(scope, event)
+    const existing = this.map.get(scope)
+    if (existing) return existing
+    const directory = this.workspaceFor(scope)
     const title = event.message_type === 'group' ? `QQ群 ${event.group_name || event.group_id}` : `私聊 ${event.user_id}`
     try {
       const found = await this.oc.findSessionByDirectory(directory)
@@ -183,7 +197,7 @@ export class SessionController {
           if (seen.has(pk)) continue
           seen.add(pk)
           const nick = String(r.nickname || r.user_id)
-          lines.push(`[${hhmm(Number(r.time))}] ${nick}(${r.user_id}): ${String(r.text ?? '')}`)
+          lines.push(`[${hhmm(Number(r.time))}] ${nick}(${r.user_id}): ${cleanCqForDisplay(String(r.text ?? ''))}`)
         }
       } catch {
         // no db for that day
@@ -197,7 +211,7 @@ export class SessionController {
         try {
           const rows = this.db.query(scope, day, 'SELECT nickname, user_id, text FROM message WHERE message_id = ? LIMIT 1', [replyTo])
           if (rows.length > 0) {
-            context.push(`> 引用 ${rows[0].nickname || rows[0].user_id}(${rows[0].user_id}): ${String(rows[0].text ?? '').slice(0, 200)}`)
+            context.push(`> 引用 ${rows[0].nickname || rows[0].user_id}(${rows[0].user_id}): ${cleanCqForDisplay(String(rows[0].text ?? '')).slice(0, 200)}`)
             break
           }
         } catch {
@@ -240,8 +254,35 @@ export class SessionController {
     }
     const prompt = this.buildPrompt(event)
     if (!prompt) return
-    const imageNote = await this.downloadImages(entry.directory, extractImages(segments))
+    const replyTo = extractReplyTo(segments)
+    const images = dedupeImages([
+      ...extractImages(segments),
+      ...extractImagesFromRaw(event.raw_message ?? ''),
+      ...(replyTo !== null ? this.quotedImages(scope, replyTo) : []),
+    ])
+    const imageNote = await this.downloadImages(entry.directory, images)
     await this.oc.promptAsync(entry.sessionId, imageNote ? prompt + imageNote : prompt)
+  }
+
+  private quotedImages(scope: string, replyTo: number): { url: string; mime: string }[] {
+    const now = Math.floor(Date.now() / 1000)
+    for (const day of [dayKey(now), dayKey(now - 86400)]) {
+      try {
+        const rows = this.db.query(scope, day, 'SELECT segments, text FROM message WHERE message_id = ? LIMIT 1', [replyTo])
+        if (rows.length === 0) continue
+        const imgs: { url: string; mime: string }[] = []
+        try {
+          imgs.push(...extractImages(JSON.parse(String(rows[0].segments ?? '[]')) as MsgSegment[]))
+        } catch {
+          // segments not parseable
+        }
+        imgs.push(...extractImagesFromRaw(String(rows[0].text ?? '')))
+        return imgs
+      } catch {
+        // no db for that day
+      }
+    }
+    return []
   }
 
   private async downloadImages(directory: string, images: { url: string; mime: string }[]): Promise<string> {
