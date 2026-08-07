@@ -114,15 +114,25 @@ export class TaskExecutor {
   }
 
   private async ensureDocker(): Promise<boolean> {
-    if (this.dockerChecked) return this.dockerOk
+    if (this.dockerChecked && this.dockerOk) return true
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 2000))
+      const ok = await new Promise<boolean>((resolve) => {
+        const p = spawn('docker', ['version', '--format', '{{.Server.Version}}'], { stdio: 'ignore', env: this.dockerEnvVars() })
+        p.on('error', () => resolve(false))
+        p.on('exit', (code) => resolve(code === 0))
+      })
+      if (ok) {
+        this.dockerChecked = true
+        this.dockerOk = true
+        return true
+      }
+      this.deps.log(`docker 探测失败 (第 ${attempt + 1}/3 次)`)
+    }
     this.dockerChecked = true
-    this.dockerOk = await new Promise((resolve) => {
-      const p = spawn('docker', ['version', '--format', '{{.Server.Version}}'], { stdio: 'ignore', env: this.dockerEnvVars() })
-      p.on('error', () => resolve(false))
-      p.on('exit', (code) => resolve(code === 0))
-    })
-    if (!this.dockerOk) this.deps.log('docker 不可用, 任务将无法执行')
-    return this.dockerOk
+    this.dockerOk = false
+    this.deps.log('docker 当前不可用, 任务将报错; 下个任务会重新探测')
+    return false
   }
 
   private async pump() {
