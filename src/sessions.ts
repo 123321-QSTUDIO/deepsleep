@@ -27,6 +27,7 @@ export class SessionController {
   private lastText = new Map<string, string>()
   private lastTrigger = new Map<string, { userId: number; messageId: number; groupId: number | null }>()
   private selfId = 0
+  private sendQueues = new Map<string, Promise<void>>()
   private ctx!: PluginContext
 
   constructor(
@@ -373,6 +374,16 @@ export class SessionController {
   }
 
   async sendTextToScope(scope: string, text: string, opts?: { replyTo?: number | string; atQq?: number | string }): Promise<void> {
+    // Agent 一轮可能并发调多次 send_message；按 scope 串行化 + 小间隔，保证 QQ 端显示顺序与调用顺序一致
+    const prev = this.sendQueues.get(scope) ?? Promise.resolve()
+    const next = prev.then(() => this.doSendToScope(scope, text, opts)).catch((e) => {
+      this.log('发送失败:', e)
+    })
+    this.sendQueues.set(scope, next)
+    return next
+  }
+
+  private async doSendToScope(scope: string, text: string, opts?: { replyTo?: number | string; atQq?: number | string }): Promise<void> {
     let message: unknown = text
     if (opts?.replyTo || opts?.atQq) {
       const segments: Record<string, unknown>[] = []
@@ -391,5 +402,6 @@ export class SessionController {
     }
     await this.ctx.actions.call('send_msg', params, this.ctx.adapterName, this.ctx.pluginManager.config)
     this.recordSent(scope, text)
+    await this.delay()
   }
 }
