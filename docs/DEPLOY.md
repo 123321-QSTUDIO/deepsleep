@@ -217,9 +217,17 @@ Select-String -Path packages\napcat-shell\dist\napcat.mjs -Pattern 'napcat-plugi
 
 ## 5. 安装 QQ + 部署 NapCat 运行目录
 
-```powershell
-# 安装 QQ NT Windows 版：https://im.qq.com/pcqq 下载安装（默认装到 C:\Program Files\Tencent\QQNT）
+> **QQ 版本要求**：NapCat 当前最高支持到 **QQ NT 9.9.32-50969**（见其 `napcat-core/external/packet.json` 版本表与 CI 固定版本）。
+> 腾讯会强制下线过旧的 QQ 版本（提示"存在安全隐患"并退出登录），请务必装新版本：
+>
+> ```powershell
+> # NapCat CI 同款安装包（Windows x64, 9.9.32.50969）：
+> curl.exe -L -o C:\qqbot\QQ9.9.32.exe "https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/a33ab721/QQ9.9.32.50969_x64.exe"
+> # 运行安装，默认装到 C:\Program Files\Tencent\QQNT
+> ```
+> 不要用 https://im.qq.com/pcqq 首页的最新版（可能超过 NapCat 支持范围）。
 
+```powershell
 # 部署 NapCat 运行目录（dist 即运行目录，launcher 就在里面）
 xcopy /E /I C:\qqbot\NapCatQQ\packages\napcat-shell\dist C:\napcat
 
