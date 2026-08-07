@@ -26,6 +26,7 @@ export class SessionController {
   private sentViaTool = new Map<string, number>()
   private lastText = new Map<string, string>()
   private lastTrigger = new Map<string, { userId: number; messageId: number; groupId: number | null }>()
+  private selfId = 0
   private ctx!: PluginContext
 
   constructor(
@@ -223,6 +224,7 @@ export class SessionController {
   }
 
   async handleMessage(event: OB11MessageEvent): Promise<void> {
+    if (event.self_id) this.selfId = event.self_id
     const segments = (Array.isArray(event.message) ? event.message : []) as MsgSegment[]
     const scope = event.message_type === 'group' ? `group-${event.group_id}` : `private-${event.user_id}`
     const raw = (event.raw_message ?? '').trim().replace(/\[CQ:[^\]]+\]/g, '').trim()
@@ -347,6 +349,27 @@ export class SessionController {
     if (event.message_type === 'group' && event.group_id) params.group_id = String(event.group_id)
     if (event.message_type === 'private' && event.user_id) params.user_id = String(event.user_id)
     await this.ctx.actions.call('send_msg', params, this.ctx.adapterName, this.ctx.pluginManager.config)
+    this.recordSent(
+      event.message_type === 'group' ? `group-${event.group_id}` : `private-${event.user_id}`,
+      text
+    )
+  }
+
+  private recordSent(scope: string, text: string) {
+    try {
+      this.db.insert(scope, {
+        message_id: null,
+        user_id: this.selfId || 0,
+        nickname: this.config.botName,
+        card: '',
+        time: Math.floor(Date.now() / 1000),
+        reply_to: null,
+        text,
+        segments: JSON.stringify([{ type: 'text', data: { text } }]),
+      })
+    } catch (e) {
+      this.log('出站消息入库失败:', e)
+    }
   }
 
   async sendTextToScope(scope: string, text: string, opts?: { replyTo?: number | string; atQq?: number | string }): Promise<void> {
@@ -367,5 +390,6 @@ export class SessionController {
       params.user_id = scope.slice(8)
     }
     await this.ctx.actions.call('send_msg', params, this.ctx.adapterName, this.ctx.pluginManager.config)
+    this.recordSent(scope, text)
   }
 }
