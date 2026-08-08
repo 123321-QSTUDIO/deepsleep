@@ -3,3 +3,6 @@ dist/
 test-data*/
 *.log
 test-vision-ws/
+
+dist-service/
+test-svc-data/
