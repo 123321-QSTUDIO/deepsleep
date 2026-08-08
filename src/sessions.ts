@@ -237,6 +237,7 @@ export class SessionController {
 
   async handleMessage(event: OB11MessageEvent): Promise<void> {
     if (event.self_id) this.selfId = event.self_id
+    if (event.user_id && event.self_id && event.user_id === event.self_id) return
     const segments = (Array.isArray(event.message) ? event.message : []) as MsgSegment[]
     const scope = event.message_type === 'group' ? `group-${event.group_id}` : `private-${event.user_id}`
     const raw = (event.raw_message ?? '').trim().replace(/\[CQ:[^\]]+\]/g, '').trim()
@@ -254,6 +255,7 @@ export class SessionController {
     }
 
     if (!this.isTriggered(event, segments)) return
+    this.log(`触发 scope=${scope} msg_id=${event.message_id} user=${event.user_id}`)
 
     this.lastTrigger.set(scope, {
       userId: event.user_id ?? 0,
@@ -380,11 +382,12 @@ export class SessionController {
     if (!text.trim()) {
       text = await this.oc.getLastAssistantText(sessionId)
     }
-    if (!text.trim()) return
-    let lines = text
+    const trimmed = text.trim()
+    if (!trimmed || trimmed === '[SILENT]') return
+    let lines = trimmed
       .split('\n')
       .map((l) => l.trim())
-      .filter((l) => l.length > 0)
+      .filter((l) => l.length > 0 && l !== '[SILENT]')
     if (lines.length > this.config.maxLinesPerReply) {
       lines = [...lines.slice(0, this.config.maxLinesPerReply - 1), lines.slice(this.config.maxLinesPerReply - 1).join('\n')]
     }

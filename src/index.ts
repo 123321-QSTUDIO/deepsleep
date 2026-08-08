@@ -106,6 +106,7 @@ function storeMessage(event: OB11MessageEvent) {
 
 export async function plugin_onmessage(ctx: PluginContext, event: OB11MessageEvent) {
   if (event.post_type !== 'message') return
+  if (event.user_id && event.self_id && event.user_id === event.self_id) return
   try {
     storeMessage(event)
   } catch (e) {

@@ -70,6 +70,7 @@ setTimeout(() => void executor.checkExpiryReminders(), 30_000)
 function onOneBotEvent(ev: Record<string, unknown>) {
   if (ev.post_type !== 'message') return
   const event = ev as unknown as OB11MessageEvent
+  if (event.user_id && event.self_id && event.user_id === event.self_id) return
   try {
     storeMessage(event)
   } catch (e) {
