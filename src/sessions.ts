@@ -3,7 +3,7 @@ import path from 'node:path'
 import { PluginConfig } from './config'
 import { MsgDB, dayKey } from './msgdb'
 import { OpencodeClient } from './opencode'
-import { buildGroupAgentsMd, buildPrivateAgentsMd } from './agentsmd'
+import { buildGroupAgentsMd, buildPrivateAgentsMd, ALLOWED_FACE_IDS } from './agentsmd'
 import { cleanCqForDisplay, dedupeImages, extractAtTargets, extractImages, extractImagesFromRaw, extractReplyTo, extractText, MsgSegment, textToSegments } from './format'
 import { MuteStore } from './mutes'
 import { OB11MessageEvent, PluginContext } from './types'
@@ -455,7 +455,11 @@ export class SessionController {
       body = ' ' + body
     }
     segments.push(...textToSegments(body))
-    const params: Record<string, unknown> = { message: segments }
+    const filtered = segments.filter(
+      (s) => s.type !== 'face' || ALLOWED_FACE_IDS.has(String((s.data as Record<string, unknown>)?.id ?? ''))
+    )
+    if (filtered.length < segments.length) this.log('过滤了不支持的表情段')
+    const params: Record<string, unknown> = { message: filtered.length > 0 ? filtered : [{ type: 'text', data: { text: ' ' } }] }
     if (scope.startsWith('group-')) {
       params.message_type = 'group'
       params.group_id = scope.slice(6)
