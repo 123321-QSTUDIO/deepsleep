@@ -81,6 +81,9 @@ export class QqMcpServer {
         if (taskMode) return text('错误: 沙箱任务中不能发消息')
         await sessions.sendTextToScope(scope, t, { replyTo: reply_to, atQq: at_qq })
         sessions.markSentByScope(scope)
+        const atTargets = [...t.matchAll(/\[CQ:at,qq=(\w+)\]/g)].map((m) => m[1])
+        if (at_qq) atTargets.push(at_qq)
+        sessions.markAnsweredByAt(scope, atTargets)
         return text('已发送')
       }
     )

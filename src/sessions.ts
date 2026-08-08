@@ -71,6 +71,18 @@ export class SessionController {
     this.sentViaTool.set(sessionId, (this.sentViaTool.get(sessionId) ?? 0) + 1)
   }
 
+  markAnsweredByAt(scope: string, qqs: string[]) {
+    if (qqs.length === 0) return
+    const pend = this.pendingRequests.get(scope)
+    if (!pend || pend.length === 0) return
+    const left = pend.filter((p) => !p.userId || !qqs.includes(String(p.userId)))
+    if (left.length !== pend.length) {
+      this.markSent(scope, pend.filter((p) => !left.includes(p)).map((p) => p.id))
+      if (left.length === 0) this.pendingRequests.delete(scope)
+      else this.pendingRequests.set(scope, left)
+    }
+  }
+
   markSentByScope(scope: string) {
     const entry = this.map.get(scope)
     if (entry) this.markSentViaTool(entry.sessionId)
@@ -187,7 +199,7 @@ export class SessionController {
     return false
   }
 
-  private pendingRequests = new Map<string, { id: number | null; line: string }[]>()
+  private pendingRequests = new Map<string, { id: number | null; userId: number; line: string }[]>()
   private sentMsgIds = new Map<string, Set<number>>()
 
   private markSent(scope: string, ids: (number | null)[]) {
@@ -255,7 +267,7 @@ export class SessionController {
         }
       }
     }
-    pending.push({ id: currentId, line: currentLine })
+    pending.push({ id: currentId, userId: event.user_id ?? 0, line: currentLine })
     this.pendingRequests.set(scope, pending)
 
     const parts: string[] = []
