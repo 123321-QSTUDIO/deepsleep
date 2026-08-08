@@ -79,10 +79,12 @@ export function dedupeImages(list: { url: string; mime: string }[]): { url: stri
 
 export function cleanCqForDisplay(text: string): string {
   return text
+    .replace(/,raw=\{[^\]]*\}/g, '')
     .replace(/\[CQ:(image|mface)[^\]]*\]/g, '[图片]')
     .replace(/\[CQ:record[^\]]*\]/g, '[语音]')
     .replace(/\[CQ:video[^\]]*\]/g, '[视频]')
     .replace(/\[CQ:file[^\]]*\]/g, '[文件]')
     .replace(/\[CQ:json[^\]]*\]/g, '[卡片消息]')
     .replace(/\[CQ:forward[^\]]*\]/g, '[转发消息]')
+    .replace(/\[CQ:poke[^\]]*\]/g, '[戳一戳]')
 }

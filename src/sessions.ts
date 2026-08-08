@@ -207,6 +207,7 @@ export class SessionController {
       }
     }
     const context = lines.slice(-this.config.contextMessageCount)
+    const current = context.pop() ?? ''
     const segments = (Array.isArray(event.message) ? event.message : []) as MsgSegment[]
     const replyTo = extractReplyTo(segments)
     if (replyTo !== null) {
@@ -222,7 +223,10 @@ export class SessionController {
         }
       }
     }
-    return context.join('\n')
+    const parts: string[] = []
+    if (context.length > 0) parts.push('[最近的聊天记录]\n' + context.join('\n'))
+    if (current) parts.push('[你需要回应的是这条]\n' + current)
+    return parts.join('\n')
   }
 
   async handleMessage(event: OB11MessageEvent): Promise<void> {
