@@ -114,6 +114,7 @@ export class SessionController {
             type: 'remote',
             url: this.config.mcpUrl,
             enabled: true,
+            timeout: 8000,
             headers: {
               authorization: `Bearer ${this.config.mcpToken}`,
               'x-qqbot-scope': scope,
@@ -264,7 +265,7 @@ export class SessionController {
       ...(replyTo !== null ? this.quotedImages(scope, replyTo) : []),
     ])
     const imageNote = await this.downloadImages(entry.directory, images)
-    await this.oc.promptAsync(entry.sessionId, imageNote ? prompt + imageNote : prompt)
+    await this.prompt(entry.sessionId, imageNote ? prompt + imageNote : prompt)
   }
 
   private quotedImages(scope: string, replyTo: number): { url: string; mime: string }[] {
@@ -317,6 +318,43 @@ export class SessionController {
     this.save()
   }
 
+  private watch(sessionId: string) {
+    void (async () => {
+      const deadline = Date.now() + 10 * 60 * 1000
+      let sawBusy = false
+      const busyDeadline = Date.now() + 20_000
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 2000))
+        let present = false
+        let type = ''
+        try {
+          const map = await this.oc.getStatus()
+          const st = map[sessionId]
+          present = st !== undefined
+          type = typeof st === 'string' ? st : ((st as { type?: string })?.type ?? '')
+        } catch {
+          continue
+        }
+        if (type === 'busy' || type === 'retry') {
+          sawBusy = true
+          continue
+        }
+        const idle = !present || type === 'idle'
+        if (idle) {
+          if (!sawBusy && Date.now() < busyDeadline) continue
+          await this.onSessionIdle(sessionId)
+          return
+        }
+      }
+      this.log(`watchdog 超时 session=${sessionId}`)
+    })()
+  }
+
+  async prompt(sessionId: string, text: string): Promise<void> {
+    await this.oc.promptAsync(sessionId, text)
+    this.watch(sessionId)
+  }
+
   onAssistantText(sessionId: string, text: string) {
     if (this.reverse.has(sessionId)) this.lastText.set(sessionId, text)
   }
@@ -326,16 +364,19 @@ export class SessionController {
     if (!scope) return
     const usedTool = this.sentViaTool.get(sessionId) ?? 0
     this.sentViaTool.delete(sessionId)
-    const text = this.lastText.get(sessionId) ?? ''
+    let text = this.lastText.get(sessionId) ?? ''
     this.lastText.delete(sessionId)
-    if (usedTool > 0 || !text.trim()) return
+    if (usedTool > 0) return
+    if (!text.trim()) {
+      text = await this.oc.getLastAssistantText(sessionId)
+    }
+    if (!text.trim()) return
     const lines = text
       .split('\n')
       .map((l) => l.trim())
       .filter((l) => l.length > 0)
     for (const line of lines) {
       await this.sendTextToScope(scope, line)
-      await this.delay()
     }
   }
 

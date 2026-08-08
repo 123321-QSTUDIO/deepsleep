@@ -472,7 +472,7 @@ basename "$(ls -1t "${root}/archive"/*.tar.gz 2>/dev/null | head -1)" 2>/dev/nul
     const sessionId = this.deps.sessions.sessionIdOf(scope)
     if (!sessionId) return
     if (text.startsWith('[系统通知]')) {
-      await this.deps.oc.promptAsync(sessionId, text)
+      await this.deps.sessions.prompt(sessionId, text)
     } else {
       await this.deps.oc.inject(sessionId, text)
     }

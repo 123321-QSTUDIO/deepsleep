@@ -60,6 +60,26 @@ export class OpencodeClient {
     return this.request('POST', `/session/${sessionId}/abort`)
   }
 
+  getStatus(): Promise<Record<string, unknown>> {
+    return this.request('GET', '/session/status')
+  }
+
+  async getLastAssistantText(sessionId: string): Promise<string> {
+    try {
+      const msgs = await this.request<
+        Array<{ info?: { role?: string }; role?: string; parts?: Array<{ type?: string; text?: string }> }>
+      >('GET', `/session/${sessionId}/message?limit=10`)
+      const last = [...msgs].reverse().find((m) => (m.info?.role ?? m.role) === 'assistant')
+      if (!last?.parts) return ''
+      return last.parts
+        .filter((p) => p.type === 'text' && typeof p.text === 'string')
+        .map((p) => p.text!)
+        .join('\n')
+    } catch {
+      return ''
+    }
+  }
+
   deleteSession(sessionId: string): Promise<void> {
     return this.request('DELETE', `/session/${sessionId}`)
   }
