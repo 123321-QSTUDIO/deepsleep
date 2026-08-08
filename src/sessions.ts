@@ -187,11 +187,27 @@ export class SessionController {
     return false
   }
 
+  private pendingRequests = new Map<string, { id: number | null; line: string }[]>()
+  private sentMsgIds = new Map<string, Set<number>>()
+
+  private markSent(scope: string, ids: (number | null)[]) {
+    const set = this.sentMsgIds.get(scope) ?? new Set<number>()
+    for (const id of ids) if (id !== null) set.add(id)
+    if (set.size > 300) {
+      this.sentMsgIds.set(scope, new Set([...set].slice(-200)))
+      return
+    }
+    this.sentMsgIds.set(scope, set)
+  }
+
   private buildPrompt(event: OB11MessageEvent): string {
     const scope = event.message_type === 'group' ? `group-${event.group_id}` : `private-${event.user_id}`
     const now = Math.floor(Date.now() / 1000)
     const currentId = typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null
-    const lines: string[] = []
+    const sent = this.sentMsgIds.get(scope) ?? new Set<number>()
+    const pending = this.pendingRequests.get(scope) ?? []
+
+    const candidates: { mid: number; line: string }[] = []
     const seen = new Set<number>()
     for (const day of [dayKey(now - 86400), dayKey(now)]) {
       try {
@@ -199,29 +215,39 @@ export class SessionController {
           scope,
           day,
           'SELECT msg_pk, message_id, time, nickname, user_id, text FROM message ORDER BY msg_pk DESC LIMIT ?',
-          [this.config.contextMessageCount]
+          [this.config.contextMessageCount * 3]
         )
         for (const r of rows.reverse()) {
           const pk = Number(r.msg_pk)
           if (seen.has(pk)) continue
-          if (currentId !== null && Number(r.message_id) === currentId) continue
           seen.add(pk)
+          const mid = Number(r.message_id)
+          if (currentId !== null && mid === currentId) continue
+          if (sent.has(mid)) continue
+          if (pending.some((p) => p.id === mid)) continue
           const nick = String(r.nickname || r.user_id)
-          lines.push(`[${hhmm(Number(r.time))}] ${nick}(${r.user_id}): ${cleanCqForDisplay(String(r.text ?? ''))}`)
+          candidates.push({ mid, line: `[${hhmm(Number(r.time))}] ${nick}(${r.user_id}): ${cleanCqForDisplay(String(r.text ?? ''))}` })
         }
       } catch {
         // no db for that day
       }
     }
-    const context = lines.slice(-this.config.contextMessageCount)
+    const context = candidates.slice(-this.config.contextMessageCount)
+    this.markSent(scope, context.map((c) => c.mid))
+
     const segments = (Array.isArray(event.message) ? event.message : []) as MsgSegment[]
+    const nick = event.sender?.card || event.sender?.nickname || String(event.user_id ?? '')
+    const currentText = cleanCqForDisplay(
+      typeof event.raw_message === 'string' && event.raw_message ? event.raw_message : extractText(segments)
+    )
+    let currentLine = `[${hhmm(event.time ?? now)}] ${nick}(${event.user_id}): ${currentText}`
     const replyTo = extractReplyTo(segments)
     if (replyTo !== null) {
       for (const day of [dayKey(now), dayKey(now - 86400)]) {
         try {
           const rows = this.db.query(scope, day, 'SELECT nickname, user_id, text FROM message WHERE message_id = ? LIMIT 1', [replyTo])
           if (rows.length > 0) {
-            context.push(`> 引用 ${rows[0].nickname || rows[0].user_id}(${rows[0].user_id}): ${cleanCqForDisplay(String(rows[0].text ?? '')).slice(0, 200)}`)
+            currentLine += `\n  > 引用 ${rows[0].nickname || rows[0].user_id}(${rows[0].user_id}): ${cleanCqForDisplay(String(rows[0].text ?? '')).slice(0, 200)}`
             break
           }
         } catch {
@@ -229,14 +255,14 @@ export class SessionController {
         }
       }
     }
-    const nick = event.sender?.card || event.sender?.nickname || String(event.user_id ?? '')
-    const currentText = cleanCqForDisplay(
-      typeof event.raw_message === 'string' && event.raw_message ? event.raw_message : extractText(segments)
-    )
-    const current = `[${hhmm(event.time ?? now)}] ${nick}(${event.user_id}): ${currentText}`
+    pending.push({ id: currentId, line: currentLine })
+    this.pendingRequests.set(scope, pending)
+
     const parts: string[] = []
-    if (context.length > 0) parts.push('[最近的聊天记录]\n' + context.join('\n'))
-    parts.push('[你需要回应的是这条]\n' + current)
+    if (context.length > 0) parts.push('[新的聊天记录]\n' + context.map((c) => c.line).join('\n'))
+    parts.push(
+      `[待回应的请求，共 ${pending.length} 条，请逐条回应]\n` + pending.map((p, i) => `${i + 1}. ${p.line}`).join('\n')
+    )
     return parts.join('\n')
   }
 
@@ -261,6 +287,11 @@ export class SessionController {
     }
 
     if (!this.isTriggered(event, segments)) return
+
+    const mid = typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null
+    const pendingNow = this.pendingRequests.get(scope) ?? []
+    if (mid !== null && pendingNow.some((p) => p.id === mid)) return
+
     this.log(`触发 scope=${scope} msg_id=${event.message_id} user=${event.user_id}`)
 
     this.lastTrigger.set(scope, {
@@ -365,6 +396,14 @@ export class SessionController {
         }
       }
       this.log(`watchdog 超时 session=${sessionId}`)
+      const scope = this.reverse.get(sessionId)
+      if (scope) {
+        const stuck = this.pendingRequests.get(scope) ?? []
+        if (stuck.length > 0) {
+          this.markSent(scope, stuck.map((p) => p.id))
+          this.pendingRequests.delete(scope)
+        }
+      }
     })()
   }
 
@@ -380,6 +419,11 @@ export class SessionController {
   async onSessionIdle(sessionId: string): Promise<void> {
     const scope = this.reverse.get(sessionId)
     if (!scope) return
+    const answered = this.pendingRequests.get(scope) ?? []
+    if (answered.length > 0) {
+      this.markSent(scope, answered.map((p) => p.id))
+      this.pendingRequests.delete(scope)
+    }
     const usedTool = this.sentViaTool.get(sessionId) ?? 0
     this.sentViaTool.delete(sessionId)
     let text = this.lastText.get(sessionId) ?? ''
