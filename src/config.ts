@@ -30,6 +30,7 @@ export interface PluginConfig {
   contextMessageCount: number
   replyDelayMinMs: number
   replyDelayMaxMs: number
+  maxLinesPerReply: number
 }
 
 export const defaultConfig: PluginConfig = {
@@ -59,8 +60,9 @@ export const defaultConfig: PluginConfig = {
   taskTimeoutSec: 900,
   taskConcurrency: 3,
   contextMessageCount: 15,
-  replyDelayMinMs: 300,
-  replyDelayMaxMs: 800,
+  replyDelayMinMs: 1200,
+  replyDelayMaxMs: 3000,
+  maxLinesPerReply: 4,
 }
 
 // NapCat ctx.configPath 语义：插件配置文件路径（<config>/plugins/<id>/config.json）。

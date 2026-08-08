@@ -456,7 +456,7 @@ basename "$(ls -1t "${root}/archive"/*.tar.gz 2>/dev/null | head -1)" 2>/dev/nul
     try {
       const privateScope = `private-${rec.owner_qq}`
       if (rec.status === 'done') {
-        const chunks = this.chunk(rec.result, 800)
+        const chunks = this.chunk(rec.result, 1200).slice(0, 4)
         for (const c of [`你的任务「${rec.task.slice(0, 60)}」搞定了，详细结果：`, ...chunks]) {
           await sendToScope(privateScope, c).catch((e) => log('私聊投递失败:', e))
         }

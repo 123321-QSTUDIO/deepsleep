@@ -381,10 +381,13 @@ export class SessionController {
       text = await this.oc.getLastAssistantText(sessionId)
     }
     if (!text.trim()) return
-    const lines = text
+    let lines = text
       .split('\n')
       .map((l) => l.trim())
       .filter((l) => l.length > 0)
+    if (lines.length > this.config.maxLinesPerReply) {
+      lines = [...lines.slice(0, this.config.maxLinesPerReply - 1), lines.slice(this.config.maxLinesPerReply - 1).join('\n')]
+    }
     for (const line of lines) {
       await this.sendTextToScope(scope, line)
     }
