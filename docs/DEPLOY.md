@@ -430,7 +430,26 @@ sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
 - 兜底回复超过 `maxLinesPerReply`（默认 4）条时自动合并，防止刷屏式分句
 - 私聊任务结果最多 4 段、每段 1200 字，长结果引导走下载链接
 
+**开启 NapCat 内置反检测（默认是关的！）**：NapCat 发行默认配置把所有 bypass 关了。编辑 NapCat 数据目录下的 `config/napcat.json`（如 `C:\napcat-data\config\napcat.json`），把 bypass 全部打开：
+
+```json
+{
+  "bypass": {
+    "hook": true,
+    "window": true,
+    "module": true,
+    "process": true,
+    "container": true,
+    "js": true
+  }
+}
+```
+
+作用：隐藏注入模块（module）、伪装进程路径（process）、伪造 QQ 期望的窗口（window）、内存扫描欺骗（hook）等。重启 NapCat 生效。
+
 运营侧建议：用**小号**跑、QQ 客户端保持新版、群里少发链接（链接是重点审查对象）、高频群适当调大间隔。被踢下线后重新扫码登录即可，会话与任务状态都在服务端持久化，不受影响。
+
+补充：shell 模式是 headless（QQ 无窗口），这本身是个行为异常特征。如果开了 bypass 仍频繁被踢，可考虑 NapCat framework 模式（挂进正常带 UI 的 QQ 客户端，客户端行为与真人一致），需要时找我出迁移步骤。
 
 ### 其他
 
