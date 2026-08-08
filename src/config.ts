@@ -3,6 +3,8 @@ import path from 'node:path'
 
 export interface PluginConfig {
   botName: string
+  onebotUrl: string
+  onebotToken: string
   hostModel: string
   visionModel: string
   opencodeUrl: string
@@ -32,6 +34,8 @@ export interface PluginConfig {
 
 export const defaultConfig: PluginConfig = {
   botName: 'DeepSleep',
+  onebotUrl: 'ws://127.0.0.1:3001',
+  onebotToken: '',
   hostModel: 'opencode/deepseek-v4-flash-free',
   visionModel: 'opencode/mimo-v2.5-free',
   opencodeUrl: 'http://127.0.0.1:4096',

@@ -1,11 +1,8 @@
 # 部署手册（Windows Server 版）
 
-> 目标环境：Windows Server 2019/2022（带桌面体验），x64。
-> 全程用 **管理员 PowerShell** 执行。每一步都有【验证】，验证不过不要继续。
-> 约定路径（可改，但请全文一致）：
-> - `C:\qqbot` — 代码与构建
-> - `C:\napcat` — 自编译 NapCat 运行目录
-> - `C:\napcat-data` — NapCat 数据目录（NAPCAT_WORKDIR）
+> **v2 起推荐独立服务模式**：机器人是独立 Node 进程，通过 OneBot v11 WebSocket 连接 NapCat，
+> 更新只需重启 bot 进程（不动 QQ/NapCat），且 NapCat 用官方发行版即可（无需自编译白名单）。
+> 插件模式仍保留但不再推荐。
 
 ## 0. 前置检查
 
@@ -279,7 +276,41 @@ Get-Content C:\napcat-data\logs\*.log -Tail 30 | Select-String -Pattern 'webui|W
 3. 扫码登录机器人 QQ 号
 4. 【验证】WebUI 显示在线；把机器人拉进测试群
 
-## 7. 安装并启用插件
+## 7. 部署机器人（独立服务模式，推荐）
+
+```powershell
+mkdir C:\qqbot-svc
+xcopy /E /I C:\qqbot\napcat-plugin-qqbot\dist-service C:\qqbot-svc
+```
+
+**NapCat 侧**：WebUI → 网络配置 → 新建 **WebSocket 服务器**：`127.0.0.1:3001`，token 设一个强随机串。
+（stock 官方 NapCat 即可，不再需要自编译白名单）
+
+**启动服务**：
+
+```powershell
+# 前台测试一次（Ctrl+C 退出）
+cd C:\qqbot-svc; node index.mjs
+
+# 常驻（计划任务，开机自启）
+schtasks /create /tn "qqbot-svc" /sc onlogon /rl highest /f `
+  /tr "cmd /c cd /d C:\qqbot-svc && node index.mjs > C:\qqbot-svc\svc.log 2>&1"
+```
+
+【验证】
+```powershell
+Get-Content C:\qqbot-svc\svc.log -Tail 5
+# 期望: 启动完成 botName=DeepSleep onebot=ws://127.0.0.1:3001 opencode=... (在线) MCP ...
+# 且有 "OneBot WS 已连接"
+```
+
+**配置文件**：`C:\qqbot-svc\data\config.json`（首次运行自动生成），在原有插件配置基础上多了：
+- `onebotUrl`：NapCat WS 地址（默认 `ws://127.0.0.1:3001`）
+- `onebotToken`：上一步在 NapCat 设的 WS token
+
+**从插件模式迁移**：把 `C:\napcat-data\config\plugins\napcat-plugin-qqbot\` 下的 `messages`、`sessions.json`、`tasks.json`、`users.json`、`workspaces` 拷到 `C:\qqbot-svc\data\`，配置合并进新 config.json，WebUI 里**停用插件**，启动服务。消息库、会话映射、任务记录全部继承。
+
+## 7b. 插件模式（旧，不推荐）
 
 ```powershell
 mkdir C:\napcat-data\plugins\napcat-plugin-qqbot

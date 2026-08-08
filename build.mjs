@@ -42,4 +42,29 @@ fs.writeFileSync(
   )
 )
 
-console.log('build ok -> dist/')
+// 独立服务模式（OneBot v11 WS，不依赖 NapCat 插件机制）
+fs.rmSync('dist-service', { recursive: true, force: true })
+fs.mkdirSync('dist-service', { recursive: true })
+await build({
+  entryPoints: ['src/main.ts'],
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  target: 'node18',
+  outfile: 'dist-service/index.mjs',
+  sourcemap: false,
+  minify: false,
+  banner: {
+    js: [
+      "import { createRequire as __qqbotCreateRequire } from 'module';",
+      "import { fileURLToPath as __qqbotFileURLToPath } from 'url';",
+      "import { dirname as __qqbotDirname } from 'path';",
+      "const require = __qqbotCreateRequire(import.meta.url);",
+      "const __filename = __qqbotFileURLToPath(import.meta.url);",
+      "const __dirname = __qqbotDirname(__filename);",
+    ].join(' '),
+  },
+})
+fs.copyFileSync('node_modules/sql.js/dist/sql-wasm.wasm', 'dist-service/sql-wasm.wasm')
+
+console.log('build ok -> dist/ (插件) + dist-service/ (独立服务)')

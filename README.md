@@ -1,8 +1,8 @@
 # napcat-plugin-qqbot
 
-QQ 群 AI 机器人（DeepSleep）：NapCat 插件 + opencode 双层架构。
+QQ 群 AI 机器人（DeepSleep）：双形态——**独立服务（推荐，OneBot v11 WS 连 NapCat）** 或 NapCat 插件 + opencode 双层架构。
 
-群友在 QQ 群里 @机器人 聊天，插件把消息交给本机的 opencode（每群一个持久会话，拟人化分句回复）；遇到复杂任务（探索代码、跑命令、查资料），opencode 通过 MCP 把任务提交给插件，插件起一个**一次性 Docker 沙箱**里的 opencode 执行，完成后**群里回复原消息发一句话结论、完整结果私聊发给提问的人**。
+群友在 QQ 群里 @机器人 聊天，机器人把消息交给本机的 opencode（每群一个持久会话，拟人化分句回复）；遇到复杂任务（探索代码、跑命令、查资料），opencode 通过 MCP 把任务提交出来，机器人在**远程 Docker 沙箱**（HK 主机，每 QQ 一个可休眠容器）里执行，完成后**群里回复原消息发一句话结论、完整结果私聊发给提问的人**。
 
 ## 架构
 
@@ -37,17 +37,20 @@ Docker opencode（下层）：一次性容器跑重活；结果 → 私聊全文
 
 ```
 src/
-├── index.ts      插件入口（plugin_init / plugin_onmessage / plugin_cleanup）
+├── index.ts      插件入口（plugin_init / plugin_onmessage / plugin_cleanup，旧模式）
+├── main.ts       独立服务入口（OneBot WS 连接 NapCat，推荐模式）
+├── onebot.ts     OneBot v11 WebSocket 客户端（自动重连、action/echo 往返）
 ├── config.ts     配置（config.json 首次运行自动生成）
 ├── msgdb.ts      消息库：sql.js(WASM SQLite)，按 scope+天 分文件
-├── format.ts     消息段提取（文本/引用/@）
+├── format.ts     消息段提取（文本/引用/@/图片/CQ 码清洗）
 ├── opencode.ts   opencode HTTP 客户端 + SSE 事件订阅（自动重连）
-├── sessions.ts   Session 控制器：映射持久化、工作区、触发判定、prompt 组装、回复路由
+├── sessions.ts   Session 控制器：映射持久化、工作区、触发判定、prompt 组装、回复路由、
+│                 串行发送队列、watchdog 兜底（轮询 status，idle 时拆句补发）
 ├── agentsmd.ts   各群/私聊工作区 AGENTS.md 生成器（人设+分句规则+表情表+工具说明）
 ├── tasks.ts      任务注册表（tasks.json 持久化）
-├── executor.ts   Docker 任务执行器（并发上限、超时、结果分流投递）
-└── mcp.ts        MCP Server（5 工具，scope 头路由，沙箱模式，属主权限校验）
-smoke*.mjs        冒烟测试（消息库 / session+MCP配置 / MCP 五工具全链路）
+├── executor.ts   任务执行器（远程 docker：每 QQ 可休眠容器、归档、配额、过期提醒）
+└── mcp.ts        MCP Server（6 工具，scope 头路由，沙箱模式，属主权限校验）
+smoke*.mjs        冒烟测试（消息库 / session / MCP 六工具 / 视觉桥接 / watchdog / 服务模式）
 ```
 
 > 任务沙箱镜像、HK 部署脚本、产物下载服务在独立的执行层仓库
@@ -58,27 +61,27 @@ smoke*.mjs        冒烟测试（消息库 / session+MCP配置 / MCP 五工具�
 ```bash
 npm install
 npm run typecheck
-npm run build        # 产出 dist/（index.mjs + package.json + sql-wasm.wasm）
-node smoke.mjs       # 冒烟测试 1：消息库
-node smoke2.mjs      # 冒烟测试 2：session 创建（需要本地 opencode serve）
-node smoke3.mjs      # 冒烟测试 3：MCP 五工具
+npm run build        # 产出 dist/（NapCat 插件）+ dist-service/（独立服务，推荐）
+node smoke.mjs           # 冒烟：消息库
+node smoke2.mjs          # 冒烟：session 创建（需本地 opencode serve）
+node smoke3.mjs          # 冒烟：MCP 六工具
+node smoke6.mjs          # 冒烟：watchdog 兜底（需本地 opencode serve）
+node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 ```
 
 ## 部署与测试
 
 **详细步骤见 [`docs/DEPLOY.md`](docs/DEPLOY.md)（Windows Server 版，Agent 可直接照做）。**
 
-概要：
+概要（独立服务模式）：
 
-1. **自编译 NapCat**：本插件 ID `napcat-plugin-qqbot` 不在 NapCat 官方插件白名单内，需把
-   `packages/napcat-onebot/network/plugin/loader.ts` 的 `OFFICIAL_PLUGIN_IDS` 加上该 ID 后构建
-   （`pnpm install && pnpm build:shell`）。
-2. **安装插件**：把 `dist/` 整个目录拷到 NapCat 数据目录 `plugins/napcat-plugin-qqbot/`。
+1. **NapCat**：官方发行版即可（不再需要自编译白名单），WebUI 开 WebSocket 服务器（127.0.0.1:3001 + token）
+2. **机器人服务**：拷贝 `dist-service/` 到 `C:\qqbot-svc`，`node index.mjs` 或计划任务常驻——**更新只重启这个进程，不动 QQ/NapCat**
 3. **host opencode**：`opencode serve --hostname 127.0.0.1 --port 4096`
-   （设 `OPENCODE_SERVER_PASSWORD` 则同步填到插件配置 `opencodePassword`）。
+   （设 `OPENCODE_SERVER_PASSWORD` 则同步填到配置 `opencodePassword`）
 4. **任务沙箱镜像**：在远程执行层仓库 [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner) 构建（HK 主机跑其 `script/setup-hk.sh` 一键完成）。
-5. **模型**：默认全部走 OpenCode Zen 免费模型 `opencode/deepseek-v4-flash-free`（免登录，host 层和容器层都已内置默认）；换付费模型才需要 `opencode auth login` 或配置 `dockerEnv`。
-6. NapCat WebUI 启用插件，群里 @机器人 即可。
+5. **模型**：默认全部走 OpenCode Zen 免费模型 `opencode/deepseek-v4-flash-free`（免登录）；换付费模型才需要 `opencode auth login` 或配置 `dockerEnv`。
+6. 群里 @机器人 即可。
 
 **测试**：验收用例见 [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md)；测完按
 [`docs/TEST_REPORT.template.md`](docs/TEST_REPORT.template.md) 填写为根目录 `TEST_REPORT.md` 并 push。
