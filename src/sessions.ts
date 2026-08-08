@@ -371,6 +371,7 @@ export class SessionController {
     void (async () => {
       const deadline = Date.now() + 10 * 60 * 1000
       let sawBusy = false
+      let busySince = 0
       const busyDeadline = Date.now() + 20_000
       while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 2000))
@@ -386,8 +387,24 @@ export class SessionController {
         }
         if (type === 'busy' || type === 'retry') {
           sawBusy = true
+          if (busySince === 0) busySince = Date.now()
+          if (Date.now() - busySince > this.config.turnTimeoutSec * 1000) {
+            this.log(`轮次超时(${this.config.turnTimeoutSec}s)，中断 session=${sessionId}`)
+            await this.oc.abort(sessionId).catch(() => undefined)
+            const scope = this.reverse.get(sessionId)
+            if (scope) {
+              const stuck = this.pendingRequests.get(scope) ?? []
+              if (stuck.length > 0) {
+                this.markSent(scope, stuck.map((p) => p.id))
+                this.pendingRequests.delete(scope)
+              }
+              await this.sendTextToScope(scope, '我这边卡住了，刚才那条没接上，再说一次呗')
+            }
+            return
+          }
           continue
         }
+        busySince = 0
         const idle = !present || type === 'idle'
         if (idle) {
           if (!sawBusy && Date.now() < busyDeadline) continue

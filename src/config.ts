@@ -27,6 +27,7 @@ export interface PluginConfig {
   dockerEnv: Record<string, string>
   taskTimeoutSec: number
   taskConcurrency: number
+  turnTimeoutSec: number
   contextMessageCount: number
   replyDelayMinMs: number
   replyDelayMaxMs: number
@@ -59,6 +60,7 @@ export const defaultConfig: PluginConfig = {
   dockerEnv: {},
   taskTimeoutSec: 900,
   taskConcurrency: 3,
+  turnTimeoutSec: 240,
   contextMessageCount: 15,
   replyDelayMinMs: 1200,
   replyDelayMaxMs: 3000,
