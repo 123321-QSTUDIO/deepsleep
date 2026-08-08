@@ -55,6 +55,7 @@ const mcp = new QqMcpServer({
   db,
   sessions,
   tasks,
+  mutes: sessions.mutes,
   enqueueTask: (rec) => executor.enqueue(rec),
   log: (m, ...a) => logErr(m, ...a),
 })

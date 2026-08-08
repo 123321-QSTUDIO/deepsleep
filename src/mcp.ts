@@ -7,12 +7,14 @@ import { PluginConfig } from './config'
 import { MsgDB, dayKey } from './msgdb'
 import { SessionController } from './sessions'
 import { TaskRec, TaskRegistry } from './tasks'
+import { MuteStore } from './mutes'
 
 interface McpDeps {
   config: PluginConfig
   db: MsgDB
   sessions: SessionController
   tasks: TaskRegistry
+  mutes: MuteStore
   enqueueTask: (rec: TaskRec) => void
   log: (msg: string, ...args: unknown[]) => void
 }
@@ -189,6 +191,36 @@ export class QqMcpServer {
         const url = `${config.artifactBaseUrl.replace(/\/$/, '')}/${rel}?exp=${exp}&sig=${sig}`
         this.issuedLinks.set(rec.task_id, { url, exp })
         return text(`下载链接（${config.linkTtlMinutes}分钟内有效）：\n${url}`)
+      }
+    )
+
+    mcp.registerTool(
+      'mute_user',
+      {
+        description: '临时屏蔽某个群友：在指定时间内他的消息不会触发你回复。谨慎使用（见 AGENTS.md 的使用原则）。屏蔽时建议你用 send_message 告知对方原因和时长。',
+        inputSchema: {
+          qq: z.string().describe('对方QQ号'),
+          minutes: z.number().describe('屏蔽时长（分钟），最大1440'),
+          reason: z.string().optional().describe('原因（自己记录用）'),
+        },
+      },
+      async ({ qq, minutes, reason }) => {
+        if (!scope.startsWith('group-')) return text('错误: 屏蔽功能仅在群聊中使用')
+        const mins = Math.min(Math.max(1, Math.floor(minutes)), 1440)
+        const until = this.deps.mutes.mute(scope, qq, mins, reason ?? '')
+        return text(`已屏蔽 ${qq} ${mins} 分钟（到 ${new Date(until * 1000).toLocaleTimeString('zh-CN')}）`)
+      }
+    )
+
+    mcp.registerTool(
+      'unmute_user',
+      {
+        description: '解除对某个群友的屏蔽',
+        inputSchema: { qq: z.string() },
+      },
+      async ({ qq }) => {
+        if (!scope.startsWith('group-')) return text('错误: 屏蔽功能仅在群聊中使用')
+        return text(this.deps.mutes.unmute(scope, qq) ? `已解除对 ${qq} 的屏蔽` : `${qq} 本来就没被屏蔽`)
       }
     )
 

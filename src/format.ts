@@ -68,6 +68,21 @@ export function extractImagesFromRaw(raw: string): { url: string; mime: string }
   return out
 }
 
+export function textToSegments(text: string): Record<string, unknown>[] {
+  const segs: Record<string, unknown>[] = []
+  const re = /\[CQ:(at|face),(\w+)=([^\],]+)\]/g
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text))) {
+    if (m.index > last) segs.push({ type: 'text', data: { text: text.slice(last, m.index) } })
+    if (m[1] === 'at') segs.push({ type: 'at', data: { qq: m[3] } })
+    else segs.push({ type: 'face', data: { id: m[3] } })
+    last = m.index + m[0].length
+  }
+  if (last < text.length) segs.push({ type: 'text', data: { text: text.slice(last) } })
+  return segs.length > 0 ? segs : [{ type: 'text', data: { text } }]
+}
+
 export function dedupeImages(list: { url: string; mime: string }[]): { url: string; mime: string }[] {
   const seen = new Set<string>()
   return list.filter((i) => {

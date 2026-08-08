@@ -42,6 +42,7 @@ export async function plugin_init(ctx: PluginContext) {
     db,
     sessions,
     tasks,
+    mutes: sessions.mutes,
     enqueueTask: (rec) => executor!.enqueue(rec),
     log: (m, ...a) => ctx.logger.warn(m, ...a),
   })

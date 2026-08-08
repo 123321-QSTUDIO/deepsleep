@@ -4,7 +4,8 @@ import { PluginConfig } from './config'
 import { MsgDB, dayKey } from './msgdb'
 import { OpencodeClient } from './opencode'
 import { buildGroupAgentsMd, buildPrivateAgentsMd } from './agentsmd'
-import { cleanCqForDisplay, dedupeImages, extractAtTargets, extractImages, extractImagesFromRaw, extractReplyTo, extractText, MsgSegment } from './format'
+import { cleanCqForDisplay, dedupeImages, extractAtTargets, extractImages, extractImagesFromRaw, extractReplyTo, extractText, MsgSegment, textToSegments } from './format'
+import { MuteStore } from './mutes'
 import { OB11MessageEvent, PluginContext } from './types'
 
 interface SessionEntry {
@@ -35,7 +36,8 @@ export class SessionController {
     private db: MsgDB,
     private oc: OpencodeClient,
     dataPath: string,
-    private log: (msg: string, ...args: unknown[]) => void
+    private log: (msg: string, ...args: unknown[]) => void,
+    public mutes: MuteStore = new MuteStore(dataPath)
   ) {
     this.mapFile = path.join(dataPath, 'sessions.json')
     this.workspacesDir = path.join(dataPath, 'workspaces')
@@ -165,9 +167,12 @@ export class SessionController {
   private isTriggered(event: OB11MessageEvent, segments: MsgSegment[]): boolean {
     if (event.message_type === 'private') return true
     const selfId = String(event.self_id ?? '')
-    if (selfId && extractAtTargets(segments).includes(selfId)) return true
+    const atTargets = extractAtTargets(segments)
+    if (selfId && atTargets.includes(selfId)) return true
     const replyTo = extractReplyTo(segments)
     if (replyTo !== null && selfId) {
+      // 回复了机器人、但同时在跟其他人说话（@了别人而没@机器人）→ 不触发
+      if (atTargets.length > 0) return false
       const scope = `group-${event.group_id}`
       const now = Math.floor(Date.now() / 1000)
       for (const day of [dayKey(now), dayKey(now - 86400)]) {
@@ -240,6 +245,7 @@ export class SessionController {
     if (event.user_id && event.self_id && event.user_id === event.self_id) return
     const segments = (Array.isArray(event.message) ? event.message : []) as MsgSegment[]
     const scope = event.message_type === 'group' ? `group-${event.group_id}` : `private-${event.user_id}`
+    if (event.user_id && this.mutes.isMuted(scope, String(event.user_id))) return
     const raw = (event.raw_message ?? '').trim().replace(/\[CQ:[^\]]+\]/g, '').trim()
 
     if (raw === '/reset') {
@@ -441,15 +447,15 @@ export class SessionController {
   }
 
   private async doSendToScope(scope: string, text: string, opts?: { replyTo?: number | string; atQq?: number | string }): Promise<void> {
-    let message: unknown = text
-    if (opts?.replyTo || opts?.atQq) {
-      const segments: Record<string, unknown>[] = []
-      if (opts.replyTo) segments.push({ type: 'reply', data: { id: String(opts.replyTo) } })
-      if (opts.atQq) segments.push({ type: 'at', data: { qq: String(opts.atQq) } })
-      segments.push({ type: 'text', data: { text: opts.atQq ? ` ${text}` : text } })
-      message = segments
+    const segments: Record<string, unknown>[] = []
+    if (opts?.replyTo) segments.push({ type: 'reply', data: { id: String(opts.replyTo) } })
+    let body = text
+    if (opts?.atQq && !text.includes(`[CQ:at,qq=${opts.atQq}]`)) {
+      segments.push({ type: 'at', data: { qq: String(opts.atQq) } })
+      body = ' ' + body
     }
-    const params: Record<string, unknown> = { message }
+    segments.push(...textToSegments(body))
+    const params: Record<string, unknown> = { message: segments }
     if (scope.startsWith('group-')) {
       params.message_type = 'group'
       params.group_id = scope.slice(6)
