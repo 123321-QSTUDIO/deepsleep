@@ -4,7 +4,7 @@ import { PluginConfig } from './config'
 import { MsgDB, dayKey } from './msgdb'
 import { OpencodeClient } from './opencode'
 import { buildGroupAgentsMd, buildPrivateAgentsMd } from './agentsmd'
-import { cleanCqForDisplay, dedupeImages, extractAtTargets, extractImages, extractImagesFromRaw, extractReplyTo, MsgSegment } from './format'
+import { cleanCqForDisplay, dedupeImages, extractAtTargets, extractImages, extractImagesFromRaw, extractReplyTo, extractText, MsgSegment } from './format'
 import { OB11MessageEvent, PluginContext } from './types'
 
 interface SessionEntry {
@@ -185,6 +185,7 @@ export class SessionController {
   private buildPrompt(event: OB11MessageEvent): string {
     const scope = event.message_type === 'group' ? `group-${event.group_id}` : `private-${event.user_id}`
     const now = Math.floor(Date.now() / 1000)
+    const currentId = typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null
     const lines: string[] = []
     const seen = new Set<number>()
     for (const day of [dayKey(now - 86400), dayKey(now)]) {
@@ -192,12 +193,13 @@ export class SessionController {
         const rows = this.db.query(
           scope,
           day,
-          'SELECT msg_pk, time, nickname, user_id, text FROM message ORDER BY msg_pk DESC LIMIT ?',
+          'SELECT msg_pk, message_id, time, nickname, user_id, text FROM message ORDER BY msg_pk DESC LIMIT ?',
           [this.config.contextMessageCount]
         )
         for (const r of rows.reverse()) {
           const pk = Number(r.msg_pk)
           if (seen.has(pk)) continue
+          if (currentId !== null && Number(r.message_id) === currentId) continue
           seen.add(pk)
           const nick = String(r.nickname || r.user_id)
           lines.push(`[${hhmm(Number(r.time))}] ${nick}(${r.user_id}): ${cleanCqForDisplay(String(r.text ?? ''))}`)
@@ -207,7 +209,6 @@ export class SessionController {
       }
     }
     const context = lines.slice(-this.config.contextMessageCount)
-    const current = context.pop() ?? ''
     const segments = (Array.isArray(event.message) ? event.message : []) as MsgSegment[]
     const replyTo = extractReplyTo(segments)
     if (replyTo !== null) {
@@ -223,9 +224,14 @@ export class SessionController {
         }
       }
     }
+    const nick = event.sender?.card || event.sender?.nickname || String(event.user_id ?? '')
+    const currentText = cleanCqForDisplay(
+      typeof event.raw_message === 'string' && event.raw_message ? event.raw_message : extractText(segments)
+    )
+    const current = `[${hhmm(event.time ?? now)}] ${nick}(${event.user_id}): ${currentText}`
     const parts: string[] = []
     if (context.length > 0) parts.push('[最近的聊天记录]\n' + context.join('\n'))
-    if (current) parts.push('[你需要回应的是这条]\n' + current)
+    parts.push('[你需要回应的是这条]\n' + current)
     return parts.join('\n')
   }
 
