@@ -338,6 +338,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 - `opencodePassword` 必须等于第 2 步的 `OPENCODE_SERVER_PASSWORD`
 - `dockerHost`：留空 = 本机 docker；方式 C 填 `tcp://127.0.0.1:2375`（走持久 SSH 隧道，见方式 C-1）
 - `remoteSsh`：方式 C 必填，`<HK用户>@<HK_IP>`，远程文件操作（建目录/解压/归档）走这条 SSH
+- `remoteSshKey`：可选，私钥绝对路径（如 `C:\\napcat-data\\hk_key`）。**NapCat 进程若非交互式用户启动（计划任务/服务），ssh 可能找不到 `~/.ssh` 里的密钥导致 BatchMode 失败——此时务必显式配置此项**，密钥用 `ssh-keygen -t ed25519 -f C:\napcat-data\hk_key -N '""'` 生成，公钥加到 HK 的 authorized_keys
 - `storageQuotaMB`：每个 QQ 的持久目录（home+workspace+archive）总配额，默认 500MB，超了从最旧归档开始删
 - `artifactBaseUrl` / `artifactToken` / `linkTtlMinutes`：产物下载服务（见 9.1 节）；链接为 HMAC 签名临时链接，默认 10 分钟有效，有效期内重复索要返回同一链接（不重复生成），失效后才能生成新链接
 - `archiveRetentionDays`：产物归档留存天数（默认 5），**每次该 QQ 的 session 被激活会自动刷新最近归档的过期时间**

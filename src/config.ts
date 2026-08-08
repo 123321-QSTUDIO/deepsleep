@@ -15,6 +15,7 @@ export interface PluginConfig {
   dockerImage: string
   dockerHost: string
   remoteSsh: string
+  remoteSshKey: string
   remoteWorkRoot: string
   archiveRetentionDays: number
   storageQuotaMB: number
@@ -43,6 +44,7 @@ export const defaultConfig: PluginConfig = {
   dockerImage: 'qqbot-opencode-task:latest',
   dockerHost: '',
   remoteSsh: '',
+  remoteSshKey: '',
   remoteWorkRoot: '/opt/qqbot-users',
   archiveRetentionDays: 5,
   storageQuotaMB: 500,

@@ -95,11 +95,14 @@ export class TaskExecutor {
       : process.env
   }
 
-  private ssh(script: string): Promise<string> {
+  private sshOnce(script: string): Promise<string> {
     const target = this.sshTarget()
-    if (!target) return Promise.reject(new Error('dockerHost 不是 ssh:// 形式，无法执行远程命令'))
+    if (!target) return Promise.reject(new Error('remoteSsh 未配置（且 dockerHost 不是 ssh:// 形式），无法执行远程命令'))
+    const args = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15']
+    if (this.deps.config.remoteSshKey) args.push('-i', this.deps.config.remoteSshKey)
+    args.push(target, 'bash -s')
     return new Promise((resolve, reject) => {
-      const p = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', target, 'bash -s'], {
+      const p = spawn('ssh', args, {
         stdio: ['pipe', 'pipe', 'pipe'],
       })
       let out = ''
@@ -111,6 +114,20 @@ export class TaskExecutor {
       p.stdin.write(script)
       p.stdin.end()
     })
+  }
+
+  private async ssh(script: string): Promise<string> {
+    let lastErr: unknown
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 3000))
+      try {
+        return await this.sshOnce(script)
+      } catch (e) {
+        lastErr = e
+        this.deps.log(`远程 SSH 操作失败 (第 ${attempt + 1}/3 次, 目标 ${this.sshTarget()}):`, e)
+      }
+    }
+    throw lastErr
   }
 
   private async ensureDocker(): Promise<boolean> {
