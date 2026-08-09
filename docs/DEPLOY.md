@@ -469,7 +469,8 @@ Windows Server 无嵌套虚拟化、shell/framework 都被踢时的终选方案�
    ```
    bot 服务配置完全不用改（`onebotUrl: ws://127.0.0.1:3001`，指向本地隧道入口）
 3. **Windows 上只剩**：QQ 客户端卸载都行，只剩 `qqbot-svc` + `opencode serve` + 两条隧道（docker 隧道已有 + 这条 OneBot 隧道）
-4. 注意：Linux QQ 同样在腾讯风控体系内（只是形态不同、官方群反馈存活率更好）；小号、限速原则照旧
+4. 注意：Linux QQ 同样在腾讯风控体系内（只是形态不同、官方群反馈存活率更好）；**境外数据中心 IP 登录本身就是高危信号**（比 Windows 国内 IDC 更可疑），小号在 HK 登录可能反而更容易被风控——此方案优先级低于方案 B，除非你有内地 Linux 机器
+5. 小号、限速原则照旧
 
 ### 方案 B：framework 模式（带 UI 的正常客户端，抗行为检测）
 shell 模式被踢的核心嫌疑是"无窗口 headless 客户端"这个行为特征。framework 模式让 NapCat 住进**正常运行的 QQ**（有窗口、有托盘、行为与真人客户端一致）：
