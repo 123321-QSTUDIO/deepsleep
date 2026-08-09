@@ -451,8 +451,27 @@ sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
 
 补充：shell 模式是 headless（QQ 无窗口），这本身是个行为异常特征。如果开了 bypass 仍频繁被踢，可考虑 NapCat framework 模式（挂进正常带 UI 的 QQ 客户端，客户端行为与真人一致），需要时找我出迁移步骤。
 
-### 方案 B：framework 模式（带 UI 的正常客户端，抗行为检测）
+### 方案 C：NapCat 移到 HK Linux VPS（官方 Docker，无需嵌套虚拟化）
 
+Windows Server 无嵌套虚拟化、shell/framework 都被踢时的终选方案——把 NapCat 整个搬到 HK 那台 Linux VPS（Docker 本来就可用），也是 NapCat 官方群主流形态：
+
+1. **HK 上跑 NapCat 官方 Docker**（内置 Linux QQ + NapCat + WebUI）：
+   ```bash
+   # 镜像与用法见 https://github.com/NapNeko/NapCatQQ/releases 的 Docker 说明
+   mkdir -p /opt/napcat-docker && cd /opt/napcat-docker
+   # 按官方 docker-compose 起服务；WebUI 端口映射到 127.0.0.1:6099（不要公网开放）
+   # 扫码登录：WebUI 经 SSH 本地转发访问（ssh -L 6099:127.0.0.1:6099 root@HK）
+   ```
+2. **OneBot WS 走 SSH 隧道回 Windows**：NapCat 容器里 WS server 配 `127.0.0.1:3001`，HK 上不需要对外开放；Windows 加一条持久隧道（与 docker 隧道并列）：
+   ```powershell
+   schtasks /create /tn "qqbot-onebot-tunnel" /sc onlogon /rl highest /f `
+     /tr "ssh -N -L 3001:127.0.0.1:3001 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 <HK用户>@<HK_IP>"
+   ```
+   bot 服务配置完全不用改（`onebotUrl: ws://127.0.0.1:3001`，指向本地隧道入口）
+3. **Windows 上只剩**：QQ 客户端卸载都行，只剩 `qqbot-svc` + `opencode serve` + 两条隧道（docker 隧道已有 + 这条 OneBot 隧道）
+4. 注意：Linux QQ 同样在腾讯风控体系内（只是形态不同、官方群反馈存活率更好）；小号、限速原则照旧
+
+### 方案 B：framework 模式（带 UI 的正常客户端，抗行为检测）
 shell 模式被踢的核心嫌疑是"无窗口 headless 客户端"这个行为特征。framework 模式让 NapCat 住进**正常运行的 QQ**（有窗口、有托盘、行为与真人客户端一致）：
 
 1. **装 LiteLoaderQQNT**（QQ NT 插件加载器，按它仓库 README 操作；会改 QQ 的 `resources/app/package.json` 入口指向 LiteLoader，这是磁盘修改，与 shell 模式二选一）
