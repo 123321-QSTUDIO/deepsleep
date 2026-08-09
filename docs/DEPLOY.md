@@ -451,6 +451,17 @@ sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
 
 补充：shell 模式是 headless（QQ 无窗口），这本身是个行为异常特征。如果开了 bypass 仍频繁被踢，可考虑 NapCat framework 模式（挂进正常带 UI 的 QQ 客户端，客户端行为与真人一致），需要时找我出迁移步骤。
 
+### 方案 B：framework 模式（带 UI 的正常客户端，抗行为检测）
+
+shell 模式被踢的核心嫌疑是"无窗口 headless 客户端"这个行为特征。framework 模式让 NapCat 住进**正常运行的 QQ**（有窗口、有托盘、行为与真人客户端一致）：
+
+1. **装 LiteLoaderQQNT**（QQ NT 插件加载器，按它仓库 README 操作；会改 QQ 的 `resources/app/package.json` 入口指向 LiteLoader，这是磁盘修改，与 shell 模式二选一）
+   - ⚠️ 先确认 LiteLoader 支持你装的 QQ 版本（9.9.32），不支持就按其支持列表选 QQ 版本
+2. **放 NapCat framework 包**：官方 Release 下载 `NapCat.Framework.zip`，解压到 LiteLoader 的 `plugins/napcat/` 目录（入口 `napcat.cjs`）
+3. **正常启动 QQ**：双击 QQ 图标，窗口正常出现，扫码登录机器人小号，**保持 QQ 窗口常驻**（服务器上挂着一个 RDP 会话或用 tscon 保持会话活跃，别最小化到完全无会话）
+4. NapCat WebUI 照常（6099），WS server 配置不变，`qqbot-svc` 服务零改动——OneBot 协议层完全一样
+5. LiteLoader 对 QQ 的磁盘 patch 本身是另一个检测面，但"有 UI 的正常客户端"行为特征收益通常大于这个风险；失效了就两个方案换着试
+
 ### 其他
 
 | 现象 | 排查 |
