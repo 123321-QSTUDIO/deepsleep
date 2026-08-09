@@ -430,7 +430,9 @@ sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
 - 兜底回复超过 `maxLinesPerReply`（默认 4）条时自动合并，防止刷屏式分句
 - 私聊任务结果最多 4 段、每段 1200 字，长结果引导走下载链接
 
-**开启 NapCat 内置反检测（默认是关的！）**：NapCat 发行默认配置把所有 bypass 关了。编辑 NapCat 数据目录下的 `config/napcat.json`（如 `C:\napcat-data\config\napcat.json`），把 bypass 全部打开：
+**开启 NapCat 内置反检测（默认是关的！）**：NapCat 发行默认配置把所有 bypass 关了。两种开法（二选一，Linux/Windows 通用）：
+- WebUI → 反检测开关配置页：Hook / Window / Module / Process / Container / JS 全部打开，保存后重启
+- 或编辑 NapCat 数据目录 `config/napcat.json`：
 
 ```json
 {
