@@ -456,12 +456,16 @@ sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
 Windows Server 无嵌套虚拟化、shell/framework 都被踢时的终选方案——把 NapCat 整个搬到一台**国内 Linux 机器**（Docker 在 Linux 上是原生的，与嵌套虚拟化无关），也是 NapCat 官方群主流形态：
 
 1. **机器要求**：能跑 Docker 的 Linux 即可，**便宜的 NAT 机（共享 IP + 端口映射）或公网 IPv6 机都够用**——QQ 是出站连接不需要独立公网 IPv4；SSH 走 NAT 映射端口或 IPv6 地址。优先选内地机房（登录 IP 画像比境外好）。IP 类型二选一原则：Windows 服务器有 IPv6 出口（`ping -6 ipv6.baidu.com` 测）就选**公网 IPv6**（独立地址声誉好）；没有就只能 IPv4 NAT（注意共享段声誉）。选 IPv6 时隧道目标写 `[v6地址]` 格式并自己配 ip6tables 只放 SSH
-2. **跑 NapCat 官方 Docker**（内置 Linux QQ + NapCat + WebUI）：
-   ```bash
-   mkdir -p /opt/napcat-docker && cd /opt/napcat-docker
-   # 按官方 docker-compose 起服务；WebUI 映射到 127.0.0.1:6099（不要公网开放）
-   # 扫码登录：WebUI 经 SSH 本地转发访问（ssh -L 6099:127.0.0.1:6099 -p <NAT映射端口> <用户>@<NAT_IP>)
-   ```
+2. **跑 NapCat（两种安装方式，优先 Launcher）**：
+   - **优先：NapCat.Linux.Launcher（非入侵式）**——`LD_PRELOAD` 动态劫持文件访问，磁盘上 QQ 文件零修改（少一个完整性校验检测面）：
+     ```bash
+     # 下载 libnapcat_launcher_amd64.so 后
+     Xvfb :1 -screen 0 1x1x8 +extension GLX +render > /dev/null 2>&1 &
+     export DISPLAY=:1
+     LD_PRELOAD=./libnapcat_launcher_amd64.so qq
+     ```
+   - **备选：官方 Docker（Installer 路线打包）**：`mkdir -p /opt/napcat-docker && cd /opt/napcat-docker`，按官方 compose 起
+   - 两者**互斥**，别混用；WebUI（6099）和 WS（3001）都只绑 127.0.0.1，扫码登录走 `ssh -L 6099:127.0.0.1:6099 -p <NAT映射端口> <用户>@<NAT_IP>`
 3. **OneBot WS 走 SSH 隧道回 Windows**：容器里 WS server 配 `127.0.0.1:3001`，Windows 加一条持久隧道（与 docker 隧道并列）：
    ```powershell
    schtasks /create /tn "qqbot-onebot-tunnel" /sc onlogon /rl highest /f `
