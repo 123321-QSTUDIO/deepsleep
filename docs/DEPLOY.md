@@ -455,7 +455,7 @@ sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
 
 Windows Server 无嵌套虚拟化、shell/framework 都被踢时的终选方案——把 NapCat 整个搬到一台**国内 Linux 机器**（Docker 在 Linux 上是原生的，与嵌套虚拟化无关），也是 NapCat 官方群主流形态：
 
-1. **机器要求**：能跑 Docker 的 Linux 即可，**便宜的 NAT 机（共享 IP + 端口映射）完全够用**——QQ 是出站连接不需要独立公网 IP；SSH 走 NAT 映射端口。优先选内地机房（登录 IP 画像比境外好），注意共享 IP 的声誉（太便宜的 NAT 段可能被别人跑过灰产，登录一样可疑，挑口碑好点的商家）
+1. **机器要求**：能跑 Docker 的 Linux 即可，**便宜的 NAT 机（共享 IP + 端口映射）或公网 IPv6 机都够用**——QQ 是出站连接不需要独立公网 IPv4；SSH 走 NAT 映射端口或 IPv6 地址。优先选内地机房（登录 IP 画像比境外好）。IP 类型二选一原则：Windows 服务器有 IPv6 出口（`ping -6 ipv6.baidu.com` 测）就选**公网 IPv6**（独立地址声誉好）；没有就只能 IPv4 NAT（注意共享段声誉）。选 IPv6 时隧道目标写 `[v6地址]` 格式并自己配 ip6tables 只放 SSH
 2. **跑 NapCat 官方 Docker**（内置 Linux QQ + NapCat + WebUI）：
    ```bash
    mkdir -p /opt/napcat-docker && cd /opt/napcat-docker
