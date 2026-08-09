@@ -451,26 +451,27 @@ sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
 
 补充：shell 模式是 headless（QQ 无窗口），这本身是个行为异常特征。如果开了 bypass 仍频繁被踢，可考虑 NapCat framework 模式（挂进正常带 UI 的 QQ 客户端，客户端行为与真人一致），需要时找我出迁移步骤。
 
-### 方案 C：NapCat 移到 HK Linux VPS（官方 Docker，无需嵌套虚拟化）
+### 方案 C：NapCat 移到国内 Linux 机器（官方 Docker，NAT 机即可）
 
-Windows Server 无嵌套虚拟化、shell/framework 都被踢时的终选方案——把 NapCat 整个搬到 HK 那台 Linux VPS（Docker 本来就可用），也是 NapCat 官方群主流形态：
+Windows Server 无嵌套虚拟化、shell/framework 都被踢时的终选方案——把 NapCat 整个搬到一台**国内 Linux 机器**（Docker 在 Linux 上是原生的，与嵌套虚拟化无关），也是 NapCat 官方群主流形态：
 
-1. **HK 上跑 NapCat 官方 Docker**（内置 Linux QQ + NapCat + WebUI）：
+1. **机器要求**：能跑 Docker 的 Linux 即可，**便宜的 NAT 机（共享 IP + 端口映射）完全够用**——QQ 是出站连接不需要独立公网 IP；SSH 走 NAT 映射端口。优先选内地机房（登录 IP 画像比境外好），注意共享 IP 的声誉（太便宜的 NAT 段可能被别人跑过灰产，登录一样可疑，挑口碑好点的商家）
+2. **跑 NapCat 官方 Docker**（内置 Linux QQ + NapCat + WebUI）：
    ```bash
-   # 镜像与用法见 https://github.com/NapNeko/NapCatQQ/releases 的 Docker 说明
    mkdir -p /opt/napcat-docker && cd /opt/napcat-docker
-   # 按官方 docker-compose 起服务；WebUI 端口映射到 127.0.0.1:6099（不要公网开放）
-   # 扫码登录：WebUI 经 SSH 本地转发访问（ssh -L 6099:127.0.0.1:6099 root@HK）
+   # 按官方 docker-compose 起服务；WebUI 映射到 127.0.0.1:6099（不要公网开放）
+   # 扫码登录：WebUI 经 SSH 本地转发访问（ssh -L 6099:127.0.0.1:6099 -p <NAT映射端口> <用户>@<NAT_IP>)
    ```
-2. **OneBot WS 走 SSH 隧道回 Windows**：NapCat 容器里 WS server 配 `127.0.0.1:3001`，HK 上不需要对外开放；Windows 加一条持久隧道（与 docker 隧道并列）：
+3. **OneBot WS 走 SSH 隧道回 Windows**：容器里 WS server 配 `127.0.0.1:3001`，Windows 加一条持久隧道（与 docker 隧道并列）：
    ```powershell
    schtasks /create /tn "qqbot-onebot-tunnel" /sc onlogon /rl highest /f `
-     /tr "ssh -N -L 3001:127.0.0.1:3001 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 <HK用户>@<HK_IP>"
+     /tr "ssh -N -L 3001:127.0.0.1:3001 -p <NAT映射端口> -o ServerAliveInterval=15 -o ServerAliveCountMax=3 <用户>@<NAT_IP>"
    ```
    bot 服务配置完全不用改（`onebotUrl: ws://127.0.0.1:3001`，指向本地隧道入口）
-3. **Windows 上只剩**：QQ 客户端卸载都行，只剩 `qqbot-svc` + `opencode serve` + 两条隧道（docker 隧道已有 + 这条 OneBot 隧道）
-4. 注意：Linux QQ 同样在腾讯风控体系内（只是形态不同、官方群反馈存活率更好）；**境外数据中心 IP 登录本身就是高危信号**（比 Windows 国内 IDC 更可疑），小号在 HK 登录可能反而更容易被风控——此方案优先级低于方案 B，除非你有内地 Linux 机器
-5. 小号、限速原则照旧
+4. **Windows 上只剩**：QQ 客户端卸载都行，只剩 `qqbot-svc` + `opencode serve` + 两条隧道
+5. 注意：Linux QQ 同样在腾讯风控体系内（只是形态不同、官方群反馈存活率更好）；**境外数据中心 IP 登录是更高危信号**（所以选内地机器）；小号、限速原则照旧
+
+### 方案 B：framework 模式（带 UI 的正常客户端，抗行为检测）
 
 ### 方案 B：framework 模式（带 UI 的正常客户端，抗行为检测）
 shell 模式被踢的核心嫌疑是"无窗口 headless 客户端"这个行为特征。framework 模式让 NapCat 住进**正常运行的 QQ**（有窗口、有托盘、行为与真人客户端一致）：
