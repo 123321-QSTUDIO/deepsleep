@@ -271,6 +271,10 @@ export class SessionController {
     this.pendingRequests.set(scope, pending)
 
     const parts: string[] = []
+    const d = new Date()
+    const p2 = (n: number) => String(n).padStart(2, '0')
+    const week = '日一二三四五六'[d.getDay()]
+    parts.push(`[当前时间] ${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())} 星期${week}（以此为准，下面消息前面的方括号是它们的发送时间）`)
     if (context.length > 0) parts.push('[新的聊天记录]\n' + context.map((c) => c.line).join('\n'))
     parts.push(
       `[待回应的请求，共 ${pending.length} 条，请逐条回应]\n` + pending.map((p, i) => `${i + 1}. ${p.line}`).join('\n')
