@@ -6,6 +6,7 @@ import { dayKey, MsgDB } from './msgdb'
 import { OcMessage, OpencodeClient } from './opencode'
 import { SessionController } from './sessions'
 import { TaskRegistry } from './tasks'
+import { DreamMemory } from './dream'
 import panelHtml from './panel.html'
 
 const PANEL_VERSION = '0.1.0'
@@ -21,6 +22,7 @@ export interface PanelDeps {
   db: MsgDB
   oc: OpencodeClient
   tasks: TaskRegistry
+  dream: DreamMemory
   log: (msg: string, ...args: unknown[]) => void
   onebotConnected?: () => boolean
 }
@@ -76,6 +78,12 @@ const FIELDS: FieldDef[] = [
   { key: 'panelHost', label: 'panelHost（绑定地址）', group: '控制面板', type: 'string', help: '默认 127.0.0.1，只允许本机访问' },
   { key: 'panelPort', label: 'panelPort', group: '控制面板', type: 'number', min: 1, max: 65535 },
   { key: 'panelToken', label: 'panelToken（访问 Token）', group: '控制面板', type: 'password', help: '非空时 API 需要 Authorization: Bearer <token> 或 URL ?token=' },
+
+  { key: 'dreamMemoryEnabled', label: 'dreamMemoryEnabled（启用梦境记忆）', group: '梦境记忆', type: 'boolean', help: '每天凌晨 fork 会话更新 MEMORY.md，然后压缩原 session' },
+  { key: 'dreamMemoryHour', label: 'dreamMemoryHour（整理开始小时）', group: '梦境记忆', type: 'number', min: 0, max: 23 },
+  { key: 'dreamMemoryMinute', label: 'dreamMemoryMinute（整理开始分钟）', group: '梦境记忆', type: 'number', min: 0, max: 59 },
+  { key: 'dreamMaxTranscriptChars', label: 'dreamMaxTranscriptChars（喂给梦境的聊天记录上限字符数）', group: '梦境记忆', type: 'number', min: 1000 },
+  { key: 'dreamMemoryMaxChars', label: 'dreamMemoryMaxChars（MEMORY.md 建议上限字符数）', group: '梦境记忆', type: 'number', min: 500 },
 ]
 
 const RESTART_KEYS = new Set<keyof PluginConfig>([
@@ -276,6 +284,7 @@ export class ControlPanel {
       panel: { host: config.panelHost, port: config.panelPort, tokenSet: !!config.panelToken },
       tasks: { queued, running: count('running'), done: count('done'), error: count('error'), total: all.length },
       sessions: { total: sessions.listScopes().length },
+      dream: { enabled: config.dreamMemoryEnabled, hour: config.dreamMemoryHour, minute: config.dreamMemoryMinute },
     }
   }
 
@@ -374,6 +383,7 @@ export class ControlPanel {
       mutes: sessions.mutes.list(scope),
       tasks: this.deps.tasks.all().filter((t) => t.scope === scope).slice(0, 20),
       files: this.readWorkspaceFiles(workspace),
+      dream: this.deps.dream.stateOf(scope),
     }
   }
 
@@ -438,17 +448,17 @@ export class ControlPanel {
     return out
   }
 
-  private readWorkspaceFiles(workspace: string): { agentsMd: string; opencodeJson: string } {
-    const read = (name: string) => {
+  private readWorkspaceFiles(workspace: string): { agentsMd: string | null; opencodeJson: string | null; memoryMd: string | null; memoryBackup: string | null } {
+    const read = (name: string): string | null => {
       try {
         const file = path.join(workspace, name)
-        if (!fs.existsSync(file)) return ''
+        if (!fs.existsSync(file)) return null
         return fs.readFileSync(file, 'utf-8').slice(0, 200_000)
       } catch {
-        return ''
+        return null
       }
     }
-    return { agentsMd: read('AGENTS.md'), opencodeJson: read('opencode.json') }
+    return { agentsMd: read('AGENTS.md'), opencodeJson: read('opencode.json'), memoryMd: read('MEMORY.md'), memoryBackup: read('MEMORY.md.bak') }
   }
 
   // ---- 配置 ----
@@ -566,6 +576,11 @@ export class ControlPanel {
     if (action === 'abort') {
       const ok = await sessions.abortScope(scope)
       return ok ? { ok: true, message: '已发送打断' } : { error: '会话不存在' }
+    }
+    if (action === 'dream') {
+      if (!sessions.sessionIdOf(scope)) return { error: '该会话还没有 OpenCode session' }
+      void this.deps.dream.runForScope(scope).catch((e: unknown) => this.deps.log('手动梦境整理失败:', e))
+      return { ok: true, message: '已开始梦境整理，约 1-3 分钟后可在会话详情看到结果' }
     }
     if (action === 'send') {
       const text = String(body.text ?? '').trim()

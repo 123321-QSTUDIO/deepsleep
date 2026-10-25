@@ -11,6 +11,7 @@ import { TaskExecutor } from './executor'
 import { QqMcpServer } from './mcp'
 import { OneBotClient } from './onebot'
 import { ControlPanel } from './panel'
+import { DreamMemory } from './dream'
 
 const dataDir = process.env.QQBOT_DATA ?? path.join(process.cwd(), 'data')
 fs.mkdirSync(dataDir, { recursive: true })
@@ -51,6 +52,16 @@ const executor = new TaskExecutor({
   log,
 })
 
+const dream = new DreamMemory({
+  config,
+  db,
+  sessions,
+  oc,
+  dataPath: dataDir,
+  log: (m, ...a) => log(m, ...a),
+})
+dream.start()
+
 const mcp = new QqMcpServer({
   config,
   db,
@@ -71,6 +82,7 @@ const panel = new ControlPanel({
   db,
   oc,
   tasks,
+  dream,
   log: (m, ...a) => log(m, ...a),
   onebotConnected: () => ob.isConnected(),
 })
@@ -124,6 +136,7 @@ async function shutdown() {
   if (!running) return
   running = false
   clearInterval(reminderTimer)
+  dream.stop()
   panel.stop()
   mcp.stop()
   ob.close()

@@ -102,6 +102,16 @@ export class OpencodeClient {
     })
   }
 
+  // 会话 fork（继承到最新消息的上下文），用于夜间"梦境整理"短命会话
+  forkSession(sessionId: string): Promise<SessionInfo> {
+    return this.requestData('POST', `/api/session/${sessionId}/fork`, {})
+  }
+
+  // 压缩会话：入队一条 compaction 消息，OpenCode 生成摘要后接管后续上下文
+  async compactSession(sessionId: string): Promise<void> {
+    await this.requestData('POST', `/api/session/${sessionId}/compact`, {})
+  }
+
   async abort(sessionId: string): Promise<void> {
     await this.request('POST', `/api/session/${sessionId}/interrupt`)
   }

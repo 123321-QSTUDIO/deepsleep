@@ -371,7 +371,12 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
   "panelEnabled": true,
   "panelHost": "127.0.0.1",
   "panelPort": 5101,
-  "panelToken": "CHANGE_ME_PANEL_TOKEN"
+  "panelToken": "CHANGE_ME_PANEL_TOKEN",
+  "dreamMemoryEnabled": true,
+  "dreamMemoryHour": 4,
+  "dreamMemoryMinute": 30,
+  "dreamMaxTranscriptChars": 120000,
+  "dreamMemoryMaxChars": 8000
 }
 ```
 
@@ -388,6 +393,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 - `archiveRetentionDays`：产物归档留存天数（默认 5），**每次该 QQ 的 session 被激活会自动刷新最近归档的过期时间**
 - `replyDelayMinMs` / `replyDelayMaxMs` 默认 `1200` / `3000` 毫秒，`maxLinesPerReply` 默认 `4`
 - `panelEnabled` / `panelHost` / `panelPort` / `panelToken`：控制面板（见 8.1 节）。默认开启、只绑 `127.0.0.1:5101`；**远程访问必须设 `panelToken`**
+- `dreamMemoryEnabled` / `dreamMemoryHour` / `dreamMemoryMinute`：梦境记忆（见 8.2 节）。默认每天 4:30（服务器本地时区）整理 MEMORY.md 并压缩会话；`dreamMaxTranscriptChars` 限单次喂入的聊天记录字符数，`dreamMemoryMaxChars` 限 MEMORY.md 目标字数
 - `dockerEnv`：**用免费模型时留空 `{}` 即可**；要给容器换付费模型时才填 key（如 `ANTHROPIC_API_KEY`），同时调整 qqbot-hk-runner 的模型配置并重新 build 镜像
 - 方式 B（WSL2 docker）时 `mcpUrlForDocker` 改为 `http://<Windows主机IP>:5100/mcp`；方式 C 改为 `http://<本机IP>:5100/mcp`
 - 改完重启机器人服务（旧插件模式则重启 NapCat）生效
@@ -402,6 +408,23 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 - **安全**：默认只绑回环；不要把 `panelHost` 改成 `0.0.0.0` 直接暴露公网。SSH 隧道/反代场景请务必设置 `panelToken`（面板能看到配置里的密钥，也能改配置）
 
 【验证】`curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:5101/api/status`：设了 token 返回 401 属正常；页面 `http://127.0.0.1:5101/` 返回 200。
+
+## 8.2 梦境记忆（默认已开启）
+
+每个工作区有一个 `MEMORY.md` 作为长期记忆，通过 workspace `opencode.json` 的 `instructions` 注入，不再让 session 上下文无限增长。每天凌晨（默认 4:30 本地时间）：
+
+1. `fork` 原 session（继承上下文，不动原 session）
+2. 把最近 24 小时群聊记录喂给梦境会话，让它读取旧 MEMORY.md 并写出 `MEMORY.new.md`
+3. 校验后备份旧记忆（`MEMORY.md.bak`）→ 原子替换 MEMORY.md
+4. 删除临时梦境会话
+5. `compact` 原 session（摘要接管旧上下文，并让新 instructions 生效）
+
+- 服务进程需要跑着；在整理窗口（4:30 起 3 小时内）重启也会补跑，错过则等第二天
+- 失败不会破坏旧记忆（不动 MEMORY.md、不 compact），原因记录在数据目录 `dream.json` 与面板会话详情「梦境记忆」卡片
+- 面板「会话详情 → 梦境记忆」有「立即整理」按钮可手动触发；工作区文件标签可直接查看 MEMORY.md
+- **instructions 是 session 级快照**：手动改 MEMORY.md 对已存在 session 不会立即生效，需 compact（或 /reset 重建、或等下一次梦境整理）
+
+【验证】面板打开任一有 session 的群会话 → 「梦境记忆」卡片应显示上次整理时间/记忆字数/是否已压缩；点击「立即整理」后 1-3 分钟出现结果，工作区文件中 MEMORY.md 内容被更新。
 
 ## 9. 构建任务沙箱镜像
 
@@ -442,6 +465,7 @@ sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
 - [ ] `opencode --version` 与任务镜像内版本均为 2.1.4
 - [ ] `curl.exe -u opencode:PASS http://127.0.0.1:4096/api/info` 返回 200（也可用 `/api/session/active`）
 - [ ] 控制面板 `http://127.0.0.1:5101/` 可打开，能列出会话、保存一次配置（设置了 panelToken 时记得带上）
+- [ ] 群会话工作区已有 `MEMORY.md`，面板会话详情「梦境记忆」卡片存在（可点一次「立即整理」验证端到端）
 - [ ] `curl.exe -s -X POST -H "authorization: Bearer MCP_TOKEN" -H "content-type: application/json" -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"c\",\"version\":\"1\"}}}' http://127.0.0.1:5100/mcp` 返回 JSON（不是 401/404）
 - [ ] QQ 在线，机器人在测试群里
 - [ ] 日志有 `[qqbot] 初始化完成`

@@ -13,6 +13,33 @@ interface SessionEntry {
   directory: string
 }
 
+// 梦境记忆维护的结构化记忆文件：instructions 注入，夜间由 dream.ts 更新
+export const MEMORY_FILE = 'MEMORY.md'
+export const MEMORY_TEMPLATE = `# 记忆 · MEMORY.md
+
+> 这个文件是机器人的长期记忆，由每日"梦境整理"自动维护，也可以手工编辑。
+> 原则：只记长期有用的事实/关系/偏好/未完成事项，不记流水账，不记隐私敏感信息。
+> OpenCode 通过 workspace opencode.json 的 instructions 注入本文件。
+
+## 群聊概况
+- 待补充
+
+## 长期事实
+- 待补充
+
+## 群成员
+- 待补充
+
+## 话题与偏好
+- 待补充
+
+## 未完成的事
+- 待补充
+
+## 更新时间
+- 尚未整理
+`
+
 function hhmm(timeSec: number): string {
   const d = new Date(timeSec * 1000)
   const p = (n: number) => String(n).padStart(2, '0')
@@ -146,6 +173,8 @@ export class SessionController {
     const ocJson = JSON.stringify(
       {
         $schema: 'https://opencode.ai/config.json',
+        // instructions 是 session 级快照：新会话生效；已有会话在 compact 后重新读取
+        instructions: ['./' + MEMORY_FILE],
         model: this.config.hostModel,
         agents: {
           'vision-bridge': {
@@ -176,6 +205,16 @@ export class SessionController {
       null,
       2
     )
+    // 记忆文件只做"不存在则创建"，永不覆盖（梦境整理会原子替换它）
+    try {
+      const memoryPath = path.join(directory, MEMORY_FILE)
+      if (!fs.existsSync(memoryPath)) {
+        fs.writeFileSync(memoryPath, MEMORY_TEMPLATE)
+        this.log(`工作区文件已创建: ${scope}/${MEMORY_FILE}`)
+      }
+    } catch (e) {
+      this.log(`创建 ${MEMORY_FILE} 失败:`, e)
+    }
     for (const [name, content] of [
       ['AGENTS.md', agentsMd],
       ['opencode.json', ocJson],

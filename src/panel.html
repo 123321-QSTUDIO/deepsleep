@@ -1481,8 +1481,8 @@ var modalFocus=[];
 function buildMock(){
   var NOW=Math.floor(Date.now()/1000);
   var BOT="DeepSleep", BOTQQ='999999';
-  var cfg={"botName":"DeepSleep","onebotUrl":"ws://127.0.0.1:3001","onebotToken":"","hostModel":"opencode/deepseek-v4.1-flash-free","visionModel":"opencode/mimo-v2.6-flash-free","opencodeUrl":"http://127.0.0.1:4096","opencodePassword":"","mcpPort":5100,"mcpHost":"127.0.0.1","mcpToken":"","mcpUrl":"http://127.0.0.1:5100/mcp","mcpUrlForDocker":"http://host.docker.internal:5100/mcp","dockerImage":"qqbot-opencode-task:latest","dockerHost":"","remoteSsh":"","remoteSshKey":"","remoteWorkRoot":"/opt/qqbot-users","archiveRetentionDays":5,"storageQuotaMB":500,"artifactBaseUrl":"","artifactToken":"","linkTtlMinutes":10,"dockerEnv":{},"taskTimeoutSec":900,"taskConcurrency":3,"turnTimeoutSec":240,"contextMessageCount":15,"replyDelayMinMs":1200,"replyDelayMaxMs":3000,"maxLinesPerReply":4,"panelEnabled":true,"panelHost":"127.0.0.1","panelPort":5101,"panelToken":""};
-  var FIELDS=[{"key":"botName","label":"botName（机器人自称）","group":"基础","type":"string","help":"写入群/私聊工作区的人设，下一条消息触发时重建 AGENTS.md"},{"key":"hostModel","label":"hostModel（主模型）","group":"模型","type":"string"},{"key":"visionModel","label":"visionModel（识图子代理模型）","group":"模型","type":"string"},{"key":"opencodeUrl","label":"opencodeUrl","group":"连接","type":"string","help":"host opencode V2 地址"},{"key":"opencodePassword","label":"opencodePassword","group":"连接","type":"password","help":"必须与 serve 的 OPENCODE_PASSWORD 一致"},{"key":"onebotUrl","label":"onebotUrl（独立服务模式）","group":"连接","type":"string"},{"key":"onebotToken","label":"onebotToken（独立服务模式）","group":"连接","type":"password"},{"key":"contextMessageCount","label":"contextMessageCount（上下文条数）","group":"消息与回复","type":"number","min":1},{"key":"replyDelayMinMs","label":"replyDelayMinMs（兜底分句最小间隔）","group":"消息与回复","type":"number","min":0},{"key":"replyDelayMaxMs","label":"replyDelayMaxMs（兜底分句最大间隔）","group":"消息与回复","type":"number","min":0},{"key":"maxLinesPerReply","label":"maxLinesPerReply（兜底最大分句数）","group":"消息与回复","type":"number","min":1},{"key":"turnTimeoutSec","label":"turnTimeoutSec（单轮超时秒数）","group":"消息与回复","type":"number","min":10},{"key":"mcpHost","label":"mcpHost（MCP 绑定地址）","group":"MCP","type":"string"},{"key":"mcpPort","label":"mcpPort","group":"MCP","type":"number","min":1,"max":65535},{"key":"mcpToken","label":"mcpToken","group":"MCP","type":"password"},{"key":"mcpUrl","label":"mcpUrl（host 侧工作区注入）","group":"MCP","type":"string"},{"key":"mcpUrlForDocker","label":"mcpUrlForDocker（容器内地址）","group":"MCP","type":"string"},{"key":"taskConcurrency","label":"taskConcurrency（任务并发）","group":"任务沙箱","type":"number","min":1},{"key":"taskTimeoutSec","label":"taskTimeoutSec（任务超时秒数）","group":"任务沙箱","type":"number","min":30},{"key":"dockerImage","label":"dockerImage","group":"任务沙箱","type":"string"},{"key":"dockerHost","label":"dockerHost（远程 docker 主机）","group":"任务沙箱","type":"string"},{"key":"dockerEnv","label":"dockerEnv（容器环境变量 JSON）","group":"任务沙箱","type":"json","help":"给容器注入的 API key 等，形如 {\"KEY\":\"value\"}"},{"key":"remoteSsh","label":"remoteSsh（远程文件操作 SSH）","group":"任务沙箱","type":"string"},{"key":"remoteSshKey","label":"remoteSshKey（SSH 私钥路径）","group":"任务沙箱","type":"string"},{"key":"remoteWorkRoot","label":"remoteWorkRoot","group":"任务沙箱","type":"string"},{"key":"archiveRetentionDays","label":"archiveRetentionDays（产物留存天数）","group":"任务沙箱","type":"number","min":1},{"key":"storageQuotaMB","label":"storageQuotaMB（每 QQ 配额 MB）","group":"任务沙箱","type":"number","min":10},{"key":"artifactBaseUrl","label":"artifactBaseUrl（产物下载服务）","group":"产物下载","type":"string"},{"key":"artifactToken","label":"artifactToken","group":"产物下载","type":"password"},{"key":"linkTtlMinutes","label":"linkTtlMinutes（下载链接有效期）","group":"产物下载","type":"number","min":1},{"key":"panelEnabled","label":"panelEnabled（启用控制面板）","group":"控制面板","type":"boolean"},{"key":"panelHost","label":"panelHost（绑定地址）","group":"控制面板","type":"string","help":"默认 127.0.0.1，只允许本机访问"},{"key":"panelPort","label":"panelPort","group":"控制面板","type":"number","min":1,"max":65535},{"key":"panelToken","label":"panelToken（访问 Token）","group":"控制面板","type":"password","help":"非空时 API 需要 Authorization: Bearer <token> 或 URL ?token="}];
+  var cfg={"botName":"DeepSleep","onebotUrl":"ws://127.0.0.1:3001","onebotToken":"","hostModel":"opencode/deepseek-v4.1-flash-free","visionModel":"opencode/mimo-v2.6-flash-free","opencodeUrl":"http://127.0.0.1:4096","opencodePassword":"","mcpPort":5100,"mcpHost":"127.0.0.1","mcpToken":"","mcpUrl":"http://127.0.0.1:5100/mcp","mcpUrlForDocker":"http://host.docker.internal:5100/mcp","dockerImage":"qqbot-opencode-task:latest","dockerHost":"","remoteSsh":"","remoteSshKey":"","remoteWorkRoot":"/opt/qqbot-users","archiveRetentionDays":5,"storageQuotaMB":500,"artifactBaseUrl":"","artifactToken":"","linkTtlMinutes":10,"dockerEnv":{},"taskTimeoutSec":900,"taskConcurrency":3,"turnTimeoutSec":240,"contextMessageCount":15,"replyDelayMinMs":1200,"replyDelayMaxMs":3000,"maxLinesPerReply":4,"panelEnabled":true,"panelHost":"127.0.0.1","panelPort":5101,"panelToken":"","dreamMemoryEnabled":true,"dreamMemoryHour":4,"dreamMemoryMinute":30,"dreamMaxTranscriptChars":120000,"dreamMemoryMaxChars":8000};
+  var FIELDS=[{"key":"botName","label":"botName（机器人自称）","group":"基础","type":"string","help":"写入群/私聊工作区的人设，下一条消息触发时重建 AGENTS.md"},{"key":"hostModel","label":"hostModel（主模型）","group":"模型","type":"string"},{"key":"visionModel","label":"visionModel（识图子代理模型）","group":"模型","type":"string"},{"key":"opencodeUrl","label":"opencodeUrl","group":"连接","type":"string","help":"host opencode V2 地址"},{"key":"opencodePassword","label":"opencodePassword","group":"连接","type":"password","help":"必须与 serve 的 OPENCODE_PASSWORD 一致"},{"key":"onebotUrl","label":"onebotUrl（独立服务模式）","group":"连接","type":"string"},{"key":"onebotToken","label":"onebotToken（独立服务模式）","group":"连接","type":"password"},{"key":"contextMessageCount","label":"contextMessageCount（上下文条数）","group":"消息与回复","type":"number","min":1},{"key":"replyDelayMinMs","label":"replyDelayMinMs（兜底分句最小间隔）","group":"消息与回复","type":"number","min":0},{"key":"replyDelayMaxMs","label":"replyDelayMaxMs（兜底分句最大间隔）","group":"消息与回复","type":"number","min":0},{"key":"maxLinesPerReply","label":"maxLinesPerReply（兜底最大分句数）","group":"消息与回复","type":"number","min":1},{"key":"turnTimeoutSec","label":"turnTimeoutSec（单轮超时秒数）","group":"消息与回复","type":"number","min":10},{"key":"mcpHost","label":"mcpHost（MCP 绑定地址）","group":"MCP","type":"string"},{"key":"mcpPort","label":"mcpPort","group":"MCP","type":"number","min":1,"max":65535},{"key":"mcpToken","label":"mcpToken","group":"MCP","type":"password"},{"key":"mcpUrl","label":"mcpUrl（host 侧工作区注入）","group":"MCP","type":"string"},{"key":"mcpUrlForDocker","label":"mcpUrlForDocker（容器内地址）","group":"MCP","type":"string"},{"key":"taskConcurrency","label":"taskConcurrency（任务并发）","group":"任务沙箱","type":"number","min":1},{"key":"taskTimeoutSec","label":"taskTimeoutSec（任务超时秒数）","group":"任务沙箱","type":"number","min":30},{"key":"dockerImage","label":"dockerImage","group":"任务沙箱","type":"string"},{"key":"dockerHost","label":"dockerHost（远程 docker 主机）","group":"任务沙箱","type":"string"},{"key":"dockerEnv","label":"dockerEnv（容器环境变量 JSON）","group":"任务沙箱","type":"json","help":"给容器注入的 API key 等，形如 {\"KEY\":\"value\"}"},{"key":"remoteSsh","label":"remoteSsh（远程文件操作 SSH）","group":"任务沙箱","type":"string"},{"key":"remoteSshKey","label":"remoteSshKey（SSH 私钥路径）","group":"任务沙箱","type":"string"},{"key":"remoteWorkRoot","label":"remoteWorkRoot","group":"任务沙箱","type":"string"},{"key":"archiveRetentionDays","label":"archiveRetentionDays（产物留存天数）","group":"任务沙箱","type":"number","min":1},{"key":"storageQuotaMB","label":"storageQuotaMB（每 QQ 配额 MB）","group":"任务沙箱","type":"number","min":10},{"key":"artifactBaseUrl","label":"artifactBaseUrl（产物下载服务）","group":"产物下载","type":"string"},{"key":"artifactToken","label":"artifactToken","group":"产物下载","type":"password"},{"key":"linkTtlMinutes","label":"linkTtlMinutes（下载链接有效期）","group":"产物下载","type":"number","min":1},{"key":"panelEnabled","label":"panelEnabled（启用控制面板）","group":"控制面板","type":"boolean"},{"key":"panelHost","label":"panelHost（绑定地址）","group":"控制面板","type":"string","help":"默认 127.0.0.1，只允许本机访问"},{"key":"panelPort","label":"panelPort","group":"控制面板","type":"number","min":1,"max":65535},{"key":"panelToken","label":"panelToken（访问 Token）","group":"控制面板","type":"password","help":"非空时 API 需要 Authorization: Bearer <token> 或 URL ?token="},{"key":"dreamMemoryEnabled","label":"dreamMemoryEnabled（启用梦境记忆）","group":"梦境记忆","type":"boolean","help":"每天凌晨 fork 会话更新 MEMORY.md，然后压缩原 session"},{"key":"dreamMemoryHour","label":"dreamMemoryHour（整理开始小时）","group":"梦境记忆","type":"number","min":0,"max":23},{"key":"dreamMemoryMinute","label":"dreamMemoryMinute（整理开始分钟）","group":"梦境记忆","type":"number","min":0,"max":59},{"key":"dreamMaxTranscriptChars","label":"dreamMaxTranscriptChars（喂给梦境的聊天记录上限字符数）","group":"梦境记忆","type":"number","min":1000},{"key":"dreamMemoryMaxChars","label":"dreamMemoryMaxChars（MEMORY.md 建议上限字符数）","group":"梦境记忆","type":"number","min":500}];
   var RESTART=["opencodeUrl","opencodePassword","onebotUrl","onebotToken","mcpHost","mcpPort","panelEnabled","panelHost","panelPort"];
   var sys1={role:'system', text:'你是 QQ 群助手「DeepSleep」，接入了 OpenCode。回答要简洁，代码用 Markdown 代码块。群内消息格式：@DeepSleep <问题>。', time:NOW-86400*3};
   var details={
@@ -1521,8 +1521,10 @@ function buildMock(){
         {task_id:'t-17e3', status:'running', task:'把修改建议贴出来', created_at:NOW-60, summary:null, error:null},
         {task_id:'t-17d8', status:'error', task:'查一下明天的天气', created_at:NOW-7200, summary:null, error:'工具调用超时：opencode 30s 未响应'}
       ],
+      dream:{ok:true,at:NOW-86400,transcriptChars:12600,memoryChars:3860,compacted:true,durationMs:64000},
       mutes:[{qq:'100000002', until:NOW+86400*2, reason:'刷屏'}],
       files:{
+        memoryMd:'# 记忆 · MEMORY.md\n\n## 群聊概况\n- 前端摸鱼群：日常聊部署、报错和摸鱼\n\n## 长期事实\n- 群友「阿K」常遇到 TypeError，喜欢先问再动手\n- 部署环境是 Windows Server + OpenCode 2.1.4\n\n## 群成员\n- 林小满：群主，做前端\n- 阿K：后端，最近在学 Rust\n\n## 话题与偏好\n- 喜欢简洁直接的回答，不喜欢长篇大论\n\n## 未完成的事\n- 帮阿K 看 lockfile 相关的报错\n\n## 更新时间\n- 2026-08-25 04:31',
         agentsMd:'# AGENTS.md · DeepSleep工作约定\n\n## 角色\n你是 QQ 群助手「DeepSleep」，接入了 OpenCode。回答要简洁、准确。\n\n## 群上下文\n- 群名：前端摸鱼群（group-100012345）\n- 常见话题：前端工程、部署、报错排查\n\n## 约定\n1. 先查工作区代码，不要凭空猜。\n2. 回答控制在 200 字内，除非用户明确要求详细解释。\n3. 破坏性操作（删文件、改配置）先说影响，再动手。\n4. 消息里 @DeepSleep 才响应；紧急问题优先。',
         opencodeJson:'{\n  "model": "deepseek-v4.1-flash",\n  "provider": "openai",\n  "max_tokens": 8192,\n  "permission": {\n    "bash": "auto",\n    "edit": "ask"\n  },\n  "mcp_servers": ["qqbot-local"]\n}'
       }
@@ -1544,8 +1546,10 @@ function buildMock(){
         {role:'assistant', text:'我是 AI，不会打瓦。但可以帮你查段位攻略，发我分段位就行。', model:'deepseek-v4.1-flash', time:NOW-7140}
       ],
       tasks:[{task_id:'t-17c9', status:'done', task:'今晚瓦吗', created_at:NOW-7200, summary:'已回复', error:null}],
+      dream:{ok:true,at:NOW-86400,transcriptChars:12600,memoryChars:3860,compacted:true,durationMs:64000},
       mutes:[],
       files:{
+        memoryMd:'# 记忆 · MEMORY.md\n\n## 群聊概况\n- 前端摸鱼群：日常聊部署、报错和摸鱼\n\n## 长期事实\n- 群友「阿K」常遇到 TypeError，喜欢先问再动手\n- 部署环境是 Windows Server + OpenCode 2.1.4\n\n## 群成员\n- 林小满：群主，做前端\n- 阿K：后端，最近在学 Rust\n\n## 话题与偏好\n- 喜欢简洁直接的回答，不喜欢长篇大论\n\n## 未完成的事\n- 帮阿K 看 lockfile 相关的报错\n\n## 更新时间\n- 2026-08-25 04:31',
         agentsMd:'# AGENTS.md · DeepSleep工作约定\n\n## 角色\n你是 QQ 群助手「DeepSleep」。\n\n## 群上下文\n- 群名：游戏搭子群（group-100012346）\n\n## 约定\n1. 简洁回答，不超过 100 字。\n2. 不参与人身攻击。',
         opencodeJson:'{\n  "model": "deepseek-v4.1-flash",\n  "provider": "openai"\n}'
       }
@@ -1564,6 +1568,7 @@ function buildMock(){
       ],
       tasks:[], mutes:[],
       files:{
+        memoryMd:'# 记忆 · MEMORY.md\n\n## 群聊概况\n- 前端摸鱼群：日常聊部署、报错和摸鱼\n\n## 长期事实\n- 群友「阿K」常遇到 TypeError，喜欢先问再动手\n- 部署环境是 Windows Server + OpenCode 2.1.4\n\n## 群成员\n- 林小满：群主，做前端\n- 阿K：后端，最近在学 Rust\n\n## 话题与偏好\n- 喜欢简洁直接的回答，不喜欢长篇大论\n\n## 未完成的事\n- 帮阿K 看 lockfile 相关的报错\n\n## 更新时间\n- 2026-08-25 04:31',
         agentsMd:'# AGENTS.md · DeepSleep工作约定\n\n## 角色\n你是 QQ 群助手「DeepSleep」。私聊场景下直接回答，无需 @ 前缀。',
         opencodeJson:'{\n  "model": "deepseek-v4.1-flash",\n  "provider": "openai"\n}'
       }
@@ -2342,7 +2347,8 @@ function renderDetailShell(scope){
       +'<div class="panel side-card" data-od-id="side-pending"><div class="panel-head"><span class="panel-title">待回应请求<span class="count-badge" id="cnt-pending">0</span></span></div><div class="panel-body side-body" id="side-pending"><div class="empty-note">—</div></div></div>'
       +'<div class="panel side-card" data-od-id="side-tasks"><div class="panel-head"><span class="panel-title">该会话任务<span class="count-badge" id="cnt-tasks">0</span></span></div><div class="panel-body side-body" id="side-tasks"><div class="empty-note">—</div></div></div>'
       +'<div class="panel side-card" data-od-id="side-mutes"><div class="panel-head"><span class="panel-title">被屏蔽用户<span class="count-badge" id="cnt-mutes">0</span></span></div><div class="panel-body side-body" id="side-mutes"><div class="empty-note">—</div></div></div>'
-    +'</aside>'
+    +'<div class="panel side-card" data-od-id="side-dream"><div class="panel-head"><span class="panel-title">梦境记忆</span></div><div class="panel-body side-body" id="side-dream"><div class="empty-note">—</div></div></div>'
++'</aside>'
     +'</div>';
   var ta=$('#send-input');
   ta.value=draft;
@@ -2412,6 +2418,8 @@ function fileCountOf(d){
   var n=0;
   if(f.agentsMd!=null) n++;
   if(f.opencodeJson!=null) n++;
+  if(f.memoryMd!=null) n++;
+  if(f.memoryBackup!=null) n++;
   return n;
 }
 var TSTATUS={
@@ -2420,7 +2428,7 @@ var TSTATUS={
 };
 function renderSide(d){
   if(!d){
-    ['#side-pending','#side-tasks','#side-mutes'].forEach(function(id){
+    ['#side-pending','#side-tasks','#side-mutes','#side-dream'].forEach(function(id){
       var el=$(id); if(el) el.innerHTML='<div class="empty-note">会话数据不可用</div>';
     });
     return;
@@ -2455,6 +2463,20 @@ function renderSide(d){
           +'</div>';
       }).join('')
     : '<div class="empty-note">没有被屏蔽的用户。</div>';
+  var dream=d.dream&&typeof d.dream==='object'?d.dream:null;
+  var dreamEl=$('#side-dream');
+  if(dreamEl){
+    var dreamHtml='';
+    if(dream){
+      dreamHtml+='<div class="side-main">'+(dream.ok?'<span class="dot live s-dot"></span>':'<span class="dot err s-dot"></span>')+esc(dream.ok?'上次整理成功':'上次整理失败')+'</div>';
+      dreamHtml+='<div class="side-meta">'+fmtTime(dream.at||0)+' · 记忆 '+(dream.memoryChars?formatNumber(dream.memoryChars)+' 字':'—')+' · '+(dream.compacted?'会话已压缩':'会话未压缩')+'</div>';
+      if(dream.error) dreamHtml+='<div class="task-error-line">'+esc(dream.error)+'</div>';
+    }else{
+      dreamHtml+='<div class="empty-note">还没有整理过。每天凌晨自动整理，也可以手动触发。</div>';
+    }
+    dreamHtml+='<button class="btn btn-sm" type="button" data-action="dt-dream" style="margin-top:8px">立即整理</button>';
+    dreamEl.innerHTML=dreamHtml;
+  }
 }
 function msgSkeleton(){
   var h='';
@@ -2570,7 +2592,7 @@ function fileBlock(name, which, content, path, defaultOpen){
 function renderFiles(d){
   var f=d.files&&typeof d.files==='object'&&!Array.isArray(d.files)?d.files:{};
   var path=d.workspace||'workspace';
-  var h=fileBlock('AGENTS.md','agentsMd',fileText(f.agentsMd),path,true)+fileBlock('opencode.json','opencodeJson',fileText(f.opencodeJson),path,false);
+  var h=fileBlock('AGENTS.md','agentsMd',fileText(f.agentsMd),path,true)+fileBlock('opencode.json','opencodeJson',fileText(f.opencodeJson),path,false)+fileBlock('MEMORY.md','memoryMd',fileText(f.memoryMd),path,false)+fileBlock('MEMORY.md.bak','memoryBackup',fileText(f.memoryBackup),path,false);
   if(!h) return '<div class="empty-state">'+icon('file','empty-ic')+'<div class="empty-title">工作区没有可预览文件</div><div class="empty-text">后端没有返回 AGENTS.md 或 opencode.json。文件仅用于只读查看。</div></div>';
   return '<div class="file-workspace"><span class="eyebrow">workspace</span><span class="mono" title="'+esc(path)+'">'+esc(path)+'</span></div>'+h;
 }
@@ -2639,8 +2661,9 @@ async function doSend(){
 function copyCurrentFile(which){
   var d=S.detail.data;
   if(!d||!d.files) return;
-  var content=fileText(which==='agentsMd'?d.files.agentsMd:d.files.opencodeJson);
-  copyValue(content,which==='agentsMd'?'AGENTS.md':'opencode.json');
+  var map={agentsMd:['AGENTS.md','agentsMd'],opencodeJson:['opencode.json','opencodeJson'],memoryMd:['MEMORY.md','memoryMd'],memoryBackup:['MEMORY.md.bak','memoryBackup']};
+  var item=map[which]||map.opencodeJson;
+  copyValue(fileText(d.files[item[1]]),item[0]);
 }
 async function copyValue(value,label){
   if(value==null||value===''){ toast('没有可复制的内容','info',2400); return; }
@@ -2673,6 +2696,17 @@ function confirmAbort(){
     text:'将对该会话执行 /abort，正在运行的任务会立即中止。',
     confirmLabel:'打断生成', danger:true,
     onConfirm:function(){ sendAction('abort'); }
+  });
+}
+function confirmDream(){
+  confirmModal({
+    title:'立即整理梦境记忆？',
+    text:'将 fork 当前会话，把最近的群聊记录交给它更新 MEMORY.md，然后原子替换并压缩原会话。过程约 1-3 分钟。',
+    confirmLabel:'开始整理', danger:false,
+    onConfirm:function(){
+      sendAction('dream');
+      var n=0, timer=setInterval(function(){ n++; if(n>36){ clearInterval(timer); return; } refreshDetail(false).catch(function(){}); }, 5000);
+    }
   });
 }
 async function sendAction(action){
@@ -3218,6 +3252,7 @@ document.addEventListener('click', async function(e){
   if(a==='send'){ doSend(); return; }
   if(a==='dt-reset'){ confirmReset(); return; }
   if(a==='dt-abort'){ confirmAbort(); return; }
+  if(a==='dt-dream'){ confirmDream(); return; }
   if(a==='toggle-pass'){ togglePass(el.dataset.for); return; }
   if(a==='cfg-save'){ saveConfig(); return; }
   if(a==='cfg-format'){ formatJson(); return; }

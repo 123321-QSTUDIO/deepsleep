@@ -37,6 +37,12 @@ export interface PluginConfig {
   panelHost: string
   panelPort: number
   panelToken: string
+  // 梦境记忆：每晚 fork 会话整理 MEMORY.md，然后压缩原 session
+  dreamMemoryEnabled: boolean
+  dreamMemoryHour: number
+  dreamMemoryMinute: number
+  dreamMaxTranscriptChars: number
+  dreamMemoryMaxChars: number
 }
 
 export const defaultConfig: PluginConfig = {
@@ -74,6 +80,11 @@ export const defaultConfig: PluginConfig = {
   panelHost: '127.0.0.1',
   panelPort: 5101,
   panelToken: '',
+  dreamMemoryEnabled: true,
+  dreamMemoryHour: 4,
+  dreamMemoryMinute: 30,
+  dreamMaxTranscriptChars: 120000,
+  dreamMemoryMaxChars: 8000,
 }
 
 const modelMigrations: Record<string, string> = {

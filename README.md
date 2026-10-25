@@ -17,6 +17,8 @@ QQ群/私聊 ⇄ NapCat (官方发行版；仅旧插件模式需自编译加白�
                 ├─ MCP Server（HTTP+Bearer，共 8 个工具）
                 │   模型可见名带 qqbot_ 前缀，MCP 服务注册名不变
                 ├─ 控制面板（WebUI）：改配置 / 看会话 / 操作 Session，与插件同进程
+                ├─ 梦境记忆：每晚 fork 会话整理 MEMORY.md（instructions 注入）→ 原子替换
+                │    → compact 原 session，避免上下文无限增长
                 ├─ 任务注册表：task_id ↔ 属主QQ/群号/消息ID（持久化，重启恢复）
                 └─ 任务执行器：本地 docker 一次性容器；或远程 docker 主机（ssh://）——
                     每 QQ 一个可休眠容器（qqbot-user-<QQ>），任务完成 stop + 产物压缩归档
@@ -53,6 +55,7 @@ src/
 ├── tasks.ts      任务注册表（tasks.json 持久化）
 ├── executor.ts   任务执行器（远程 docker：每 QQ 可休眠容器、归档、配额、过期提醒）
 ├── mcp.ts        MCP Server（8 工具，scope 头路由，沙箱模式，属主权限校验）
+├── dream.ts      梦境记忆：每晚 fork 会话用当天群聊更新 MEMORY.md，再 compact 原 session
 ├── panel.ts      控制面板 HTTP 服务（配置读写/校验、会话快照、Session 操作 API）
 └── panel.html    控制面板前端（单文件，构建时内联进 dist）
 smoke*.mjs        冒烟测试（消息库 / V2 session / MCP 八工具 / 图片与视觉 / watchdog / 服务模式 / 控制面板）
@@ -76,6 +79,7 @@ node smoke6.mjs          # 冒烟：watchdog 兜底（需本地 opencode serve�
 node smoke9.mjs          # 冒烟：离线 V2 生命周期
 node smoke10.mjs         # 冒烟：配置模型 ID 自动迁移（离线）
 node smoke11.mjs         # 冒烟：控制面板（mock opencode，离线）
+node smoke12.mjs         # 冒烟：梦境记忆 fork/替换/compact + 定时调度（mock opencode，离线）
 node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 ```
 
@@ -119,11 +123,34 @@ node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 | `panelEnabled` | `true` | 是否启用控制面板 |
 | `panelHost` / `panelPort` | `127.0.0.1` / `5101` | 控制面板监听地址与端口（默认只允许本机访问） |
 | `panelToken` | 空 | 面板访问 Token；非空时 API 需要 `Authorization: Bearer <token>` 或 URL `?token=` |
+| `dreamMemoryEnabled` | `true` | 启用梦境记忆（每晚整理 MEMORY.md 并压缩会话） |
+| `dreamMemoryHour` / `dreamMemoryMinute` | `4` / `30` | 每日整理开始时间（服务器本地时区，4:30 起；错过 3 小时内会补跑） |
+| `dreamMaxTranscriptChars` | `120000` | 单次喂给梦境会话的群聊记录字符上限（超出截断保留最近部分） |
+| `dreamMemoryMaxChars` | `8000` | 要求梦境产出的 MEMORY.md 建议字数上限（超过 2 倍视为无效输出） |
 
 ## 群命令
 
 - `/reset`：清空当前对话的记忆（删除并重建 opencode session）；旧 session 存了弃用模型时也可用它恢复
 - `/abort`：打断正在生成的回复
+
+## 梦境记忆（MEMORY.md）
+
+长期记忆不靠无限增长的上下文，而是外置到每个工作区的 `MEMORY.md`：通过 workspace `opencode.json` 的 `instructions` 注入系统提示，结构是人可读的 Markdown（群聊概况 / 长期事实 / 群成员 / 话题与偏好 / 未完成的事 / 更新时间）。
+
+每天凌晨（默认 4:30，本地时区）自动执行：
+
+1. `fork` 原会话（继承对话上下文，不影响原会话）
+2. 把最近 24 小时的群聊记录喂给 fork 出的「梦境会话」，要求它读取旧 MEMORY.md、写出完整的 `MEMORY.new.md`
+3. 校验产物（Markdown、有标题、大小合理）→ 备份旧记忆为 `MEMORY.md.bak` → **原子替换** MEMORY.md
+4. 删除临时梦境会话
+5. `compact` 原 session：OpenCode 生成摘要接管旧上下文，同时**重新读取 instructions**，让新记忆在原会话生效
+
+要点：
+
+- **instructions 是 session 级快照**：直接改 MEMORY.md 对已存在的 session 不生效；新 session 或 compact 后才会读到新内容——所以第 5 步的 compact 是让新记忆进入原会话的关键。
+- 整理失败不会破坏旧记忆（不动 MEMORY.md、不 compact），错误会记录在 `dream.json` 与面板的「梦境记忆」卡片里。
+- 需要服务进程在运行；进程在整理窗口内重启也会在 3 小时内补跑。面板会话详情可手动「立即整理」。
+- 记忆文件在工作区目录 `workspaces/<scope>/MEMORY.md`，可手工编辑。
 
 ## 控制面板
 
@@ -131,7 +158,7 @@ node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 
 - **改配置**：表单方式编辑全部 config 字段（含分组说明），写回 config.json；能热更新的字段立即生效，标「需重启」的字段（opencode 地址/密码、MCP 端口、面板端口等）需重启进程。也可以直接编辑 JSON。
 - **看会话**：列出所有群/私聊会话及其 Session、忙碌状态、今日消息数、最后一条消息、待回应条数。
-- **打开某个群/私聊的 Session**：查看 OpenCode 侧对话（含思考过程、工具调用折叠）与 QQ 消息库记录、工作区 AGENTS.md/opencode.json、屏蔽名单、该会话的任务。
+- **打开某个群/私聊的 Session**：查看 OpenCode 侧对话（含思考过程、工具调用折叠）与 QQ 消息库记录、工作区 AGENTS.md/opencode.json/MEMORY.md、屏蔽名单、该会话的任务，以及「梦境记忆」卡片（上次整理结果 + 立即整理按钮）。
 - **操作 Session**：清空记忆（`/reset`）、打断生成（`/abort`）、以机器人身份发一条 QQ 消息、或把一段文字作为 prompt 直接发给 Agent（回复仍会正常发到 QQ）。
 
 **远程访问**（服务器上部署时）：

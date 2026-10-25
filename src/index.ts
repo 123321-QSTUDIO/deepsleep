@@ -8,6 +8,7 @@ import { TaskRegistry } from './tasks'
 import { TaskExecutor } from './executor'
 import { QqMcpServer } from './mcp'
 import { ControlPanel } from './panel'
+import { DreamMemory } from './dream'
 
 let config: PluginConfig
 let db: MsgDB | null = null
@@ -16,6 +17,7 @@ let sessions: SessionController | null = null
 let executor: TaskExecutor | null = null
 let mcp: QqMcpServer | null = null
 let panel: ControlPanel | null = null
+let dream: DreamMemory | null = null
 let reminderTimer: ReturnType<typeof setInterval> | null = null
 let running = false
 
@@ -39,6 +41,16 @@ export async function plugin_init(ctx: PluginContext) {
     log: (m, ...a) => ctx.logger.info(m, ...a),
   })
 
+  dream = new DreamMemory({
+    config,
+    db,
+    sessions,
+    oc,
+    dataPath: ctx.dataPath,
+    log: (m, ...a) => ctx.logger.info(m, ...a),
+  })
+  dream.start()
+
   mcp = new QqMcpServer({
     config,
     db,
@@ -59,6 +71,7 @@ export async function plugin_init(ctx: PluginContext) {
     db,
     oc,
     tasks,
+    dream,
     log: (m, ...a) => ctx.logger.info(m, ...a),
   })
   await panel.start()
@@ -121,6 +134,8 @@ export async function plugin_cleanup(ctx: PluginContext) {
     clearInterval(reminderTimer)
     reminderTimer = null
   }
+  dream?.stop()
+  dream = null
   panel?.stop()
   panel = null
   mcp?.stop()
