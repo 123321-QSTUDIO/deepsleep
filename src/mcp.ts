@@ -8,6 +8,7 @@ import { MsgDB, dayKey } from './msgdb'
 import { SessionController } from './sessions'
 import { TaskRec, TaskRegistry } from './tasks'
 import { MuteStore } from './mutes'
+import { StickerStore } from './stickers'
 
 interface McpDeps {
   config: PluginConfig
@@ -15,6 +16,7 @@ interface McpDeps {
   sessions: SessionController
   tasks: TaskRegistry
   mutes: MuteStore
+  stickers: StickerStore
   enqueueTask: (rec: TaskRec) => void
   log: (msg: string, ...args: unknown[]) => void
 }
@@ -99,17 +101,14 @@ export class QqMcpServer {
       },
       async ({ query, limit }) => {
         if (!scope) return text('错误: 未知对话上下文')
-        try {
-          const list = await sessions.listStickers(Math.min(Math.max(limit ?? 30, 1), 100))
-          const kw = (query ?? '').trim().toLowerCase()
-          const filtered = kw
-            ? list.filter((s) => (s.desc + ' ' + s.md5 + ' ' + s.id).toLowerCase().includes(kw))
-            : list
-          if (filtered.length === 0) return text(kw ? '没有找到匹配的收藏表情' : '这个账号没有收藏表情')
-          return text(JSON.stringify(filtered.slice(0, 50).map((s) => ({ id: s.id, desc: s.desc || '(无描述)' }))))
-        } catch (e) {
-          return text('读取收藏表情失败: ' + String((e as Error)?.message ?? e))
+        const list = this.deps.stickers.listForAgent(query)
+        if (list.length === 0) {
+          return text(
+            '当前没有可用的收藏表情（需要先在控制面板「表情」页同步并打标签/启用）。' +
+              (query ? '换个关键词试试。' : '')
+          )
         }
+        return text(JSON.stringify(list.slice(0, Math.min(Math.max(limit ?? 30, 1), 50))))
       }
     )
 
@@ -125,10 +124,14 @@ export class QqMcpServer {
       async ({ sticker, reply_to }) => {
         if (!scope) return text('错误: 未知对话上下文')
         if (taskMode) return text('错误: 沙箱任务中不能发消息')
+        const record = this.deps.stickers.findEnabled(sticker)
+        if (!record) {
+          return text('这个表情不在可用列表里：请先 qqbot_list_stickers 挑一个已打标/启用的表情（id 或 MD5）')
+        }
         try {
-          await sessions.sendStickerToScope(scope, sticker, { replyTo: reply_to })
+          await sessions.sendStickerToScope(scope, record.id, { replyTo: reply_to })
           sessions.markSentByScope(scope)
-          return text('已发送收藏表情')
+          return text('已发送收藏表情: ' + record.label)
         } catch (e) {
           return text('发送收藏表情失败: ' + String((e as Error)?.message ?? e))
         }

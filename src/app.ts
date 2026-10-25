@@ -10,6 +10,7 @@ import { TaskExecutor } from './executor'
 import { QqMcpServer } from './mcp'
 import { ControlPanel } from './panel'
 import { DreamMemory } from './dream'
+import { StickerStore } from './stickers'
 import { AppLogger, OB11MessageEvent, OutboundActions } from './types'
 
 // 独立服务形态的组装层：main.ts（CLI 入口）与冒烟测试共用
@@ -32,6 +33,7 @@ export interface App {
   tasks: TaskRegistry
   executor: TaskExecutor
   dream: DreamMemory
+  stickers: StickerStore
   mcp: QqMcpServer
   panel: ControlPanel
   dataPath: string
@@ -84,12 +86,14 @@ export async function createApp(options: AppOptions): Promise<App> {
     log: (m, ...a) => logger.info(m, ...a),
   })
   dream.start()
+  const stickers = new StickerStore(options.dataPath, (m, ...x) => logger.warn(m, ...x))
   const mcp = new QqMcpServer({
     config,
     db,
     sessions,
     tasks,
     mutes: sessions.mutes,
+    stickers,
     enqueueTask: (rec) => executor.enqueue(rec),
     log: (m, ...a) => logger.warn(m, ...a),
   })
@@ -104,6 +108,7 @@ export async function createApp(options: AppOptions): Promise<App> {
     oc,
     tasks,
     dream,
+    stickers,
     log: (m, ...a) => logger.info(m, ...a),
     onebotConnected: options.onebotConnected,
   })
@@ -156,6 +161,7 @@ export async function createApp(options: AppOptions): Promise<App> {
     tasks,
     executor,
     dream,
+    stickers,
     mcp,
     panel,
     dataPath: options.dataPath,

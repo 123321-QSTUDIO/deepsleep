@@ -1232,6 +1232,42 @@ body.modal-open{overflow:hidden}
   .btn-icon{width:44px;height:44px}
   .input{min-height:44px}
 }
+
+/* ═══════════════════════ 表情页 ═══════════════════════ */
+.st-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.st-stats{display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin:0 0 16px}
+.st-stat{display:flex;align-items:baseline;gap:6px}
+.st-stat-n{font-size:20px;font-weight:600;color:var(--fg);font-variant-numeric:tabular-nums}
+.st-stat-n.ok{color:var(--success)}
+.st-stat-n.warn{color:var(--warn)}
+.st-stat-l{font-size:12px;color:var(--muted)}
+.st-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.st-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s ease,box-shadow .15s ease}
+.st-card:hover{border-color:rgba(255,255,255,.14)}
+.st-card.on{border-color:rgba(39,166,68,.38)}
+.st-thumb{position:relative;height:132px;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.01));border-bottom:1px solid var(--border-soft)}
+.st-img{max-width:104px;max-height:104px;object-fit:contain;border-radius:10px}
+.st-img-ph{font-size:26px;color:var(--meta)}
+.st-thumb.broken .st-img{display:none}
+.st-badge{position:absolute;top:10px;right:10px;font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--muted);border:1px solid var(--border)}
+.st-badge.warn{color:var(--warn);border-color:rgba(234,179,8,.35);background:rgba(234,179,8,.08)}
+.st-badge.ok{color:var(--success);border-color:rgba(39,166,68,.35);background:rgba(39,166,68,.08)}
+.st-body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:9px}
+.st-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.st-id{font-size:10px;color:var(--meta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px}
+.st-toggle{position:relative;display:inline-flex;width:34px;height:19px;cursor:pointer;flex:none}
+.st-toggle input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+.st-toggle span{position:absolute;inset:0;background:rgba(255,255,255,.12);border-radius:999px;transition:background .15s ease}
+.st-toggle span::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;transition:transform .15s ease}
+.st-toggle input:checked+span{background:var(--accent)}
+.st-toggle input:checked+span::after{transform:translateX(15px)}
+.st-toggle input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.st-field{display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--muted)}
+.st-field .input{height:30px;font-size:12px}
+.st-orig{font-size:11px;color:var(--meta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px}
+.st-note{font-size:11px;color:var(--meta)}
+@media (max-width:640px){.st-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -1263,6 +1299,10 @@ body.modal-open{overflow:hidden}
       <button class="nav-item" type="button" data-action="nav" data-view="sessions" aria-label="会话" title="会话" aria-current="false">
         <svg class="nav-ico svg-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11.4a7.6 7.6 0 0 1-7.6 7.6H7l-3.5 2.1v-5.3A7.6 7.6 0 0 1 11 4h1.4A7.6 7.6 0 0 1 20 11.4Z"/><path d="M8.5 10.7h7M8.5 13.8h4.2"/></svg>
         <span class="nav-text">会话</span><span class="nav-count" id="nav-sess-count" hidden></span>
+      </button>
+      <button class="nav-item" type="button" data-action="nav" data-view="stickers" aria-label="表情" title="表情" aria-current="false">
+        <svg class="nav-ico svg-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/><path d="M8.5 14.2c1 1.5 2.3 2.2 3.5 2.2s2.5-.7 3.5-2.2"/></svg>
+        <span class="nav-text">表情</span>
       </button>
       <button class="nav-item" type="button" data-action="nav" data-view="config" aria-label="配置" title="配置" aria-current="false">
         <svg class="nav-ico svg-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h6.5M16.5 7H20M4 17h3.5M13.5 17H20"/><circle cx="13.5" cy="7" r="2.5"/><circle cx="10.5" cy="17" r="2.5"/></svg>
@@ -1328,6 +1368,7 @@ body.modal-open{overflow:hidden}
 
       <section class="view" id="view-sessions" aria-labelledby="se-title" data-od-id="sessions-view" hidden></section>
       <section class="view" id="view-detail" aria-labelledby="dt-title" data-od-id="detail-view" hidden></section>
+      <section class="view" id="view-stickers" aria-labelledby="st-title" data-od-id="stickers-view" hidden></section>
       <section class="view" id="view-config" aria-labelledby="cf-title" data-od-id="config-view" hidden></section>
     </main>
   </div>
@@ -1472,7 +1513,8 @@ var S={
   q:'', busyOnly:false,
   detail:{ scope:null, data:null, tab:'agent', target:'qq', error:null, returnView:'overview', loadedAt:0, sending:false },
   cfg:{ fields:null, config:null, edit:null, restartKeys:[], dirty:false, advanced:false, file:'', version:null, savedAt:null, loadError:null, activeGroup:0, saving:false },
-  lastRefreshOk:null, refreshStreak:0, lastSync:null, scroll:{}, refreshing:false
+  lastRefreshOk:null, refreshStreak:0, lastSync:null, scroll:{}, refreshing:false,
+  stickers:{ items:null, stats:null, loading:false, error:null, syncing:false, syncResult:null }
 };
 var draftT=null;
 var modalFocus=[];
@@ -1484,6 +1526,20 @@ function buildMock(){
   var cfg={"botName":"DeepSleep","onebotUrl":"ws://127.0.0.1:3001","onebotToken":"","hostModel":"opencode/deepseek-v4.1-flash-free","visionModel":"opencode/mimo-v2.6-flash-free","opencodeUrl":"http://127.0.0.1:4096","opencodePassword":"","mcpPort":5100,"mcpHost":"127.0.0.1","mcpToken":"","mcpUrl":"http://127.0.0.1:5100/mcp","mcpUrlForDocker":"http://host.docker.internal:5100/mcp","dockerImage":"qqbot-opencode-task:latest","dockerHost":"","remoteSsh":"","remoteSshKey":"","remoteWorkRoot":"/opt/qqbot-users","archiveRetentionDays":5,"storageQuotaMB":500,"artifactBaseUrl":"","artifactToken":"","linkTtlMinutes":10,"dockerEnv":{},"taskTimeoutSec":900,"taskConcurrency":3,"turnTimeoutSec":240,"contextMessageCount":15,"replyDelayMinMs":1200,"replyDelayMaxMs":3000,"maxLinesPerReply":4,"panelEnabled":true,"panelHost":"127.0.0.1","panelPort":5101,"panelToken":"","dreamMemoryEnabled":true,"dreamMemoryHour":4,"dreamMemoryMinute":30,"dreamMaxTranscriptChars":120000,"dreamMemoryMaxChars":8000};
   var FIELDS=[{"key":"botName","label":"botName（机器人自称）","group":"基础","type":"string","help":"写入群/私聊工作区的人设，下一条消息触发时重建 AGENTS.md"},{"key":"hostModel","label":"hostModel（主模型）","group":"模型","type":"string"},{"key":"visionModel","label":"visionModel（识图子代理模型）","group":"模型","type":"string"},{"key":"opencodeUrl","label":"opencodeUrl","group":"连接","type":"string","help":"host opencode V2 地址"},{"key":"opencodePassword","label":"opencodePassword","group":"连接","type":"password","help":"必须与 serve 的 OPENCODE_PASSWORD 一致"},{"key":"onebotUrl","label":"onebotUrl（OneBot WS 地址）","group":"连接","type":"string","help":"SnowLuma/NapCat 等 OneBot v11 网关的 WebSocket 地址，默认 ws://127.0.0.1:3001"},{"key":"onebotToken","label":"onebotToken（独立服务模式）","group":"连接","type":"password"},{"key":"contextMessageCount","label":"contextMessageCount（上下文条数）","group":"消息与回复","type":"number","min":1},{"key":"replyDelayMinMs","label":"replyDelayMinMs（兜底分句最小间隔）","group":"消息与回复","type":"number","min":0},{"key":"replyDelayMaxMs","label":"replyDelayMaxMs（兜底分句最大间隔）","group":"消息与回复","type":"number","min":0},{"key":"maxLinesPerReply","label":"maxLinesPerReply（兜底最大分句数）","group":"消息与回复","type":"number","min":1},{"key":"turnTimeoutSec","label":"turnTimeoutSec（单轮超时秒数）","group":"消息与回复","type":"number","min":10},{"key":"mcpHost","label":"mcpHost（MCP 绑定地址）","group":"MCP","type":"string"},{"key":"mcpPort","label":"mcpPort","group":"MCP","type":"number","min":1,"max":65535},{"key":"mcpToken","label":"mcpToken","group":"MCP","type":"password"},{"key":"mcpUrl","label":"mcpUrl（host 侧工作区注入）","group":"MCP","type":"string"},{"key":"mcpUrlForDocker","label":"mcpUrlForDocker（容器内地址）","group":"MCP","type":"string"},{"key":"taskConcurrency","label":"taskConcurrency（任务并发）","group":"任务沙箱","type":"number","min":1},{"key":"taskTimeoutSec","label":"taskTimeoutSec（任务超时秒数）","group":"任务沙箱","type":"number","min":30},{"key":"dockerImage","label":"dockerImage","group":"任务沙箱","type":"string"},{"key":"dockerHost","label":"dockerHost（远程 docker 主机）","group":"任务沙箱","type":"string"},{"key":"dockerEnv","label":"dockerEnv（容器环境变量 JSON）","group":"任务沙箱","type":"json","help":"给容器注入的 API key 等，形如 {\"KEY\":\"value\"}"},{"key":"remoteSsh","label":"remoteSsh（远程文件操作 SSH）","group":"任务沙箱","type":"string"},{"key":"remoteSshKey","label":"remoteSshKey（SSH 私钥路径）","group":"任务沙箱","type":"string"},{"key":"remoteWorkRoot","label":"remoteWorkRoot","group":"任务沙箱","type":"string"},{"key":"archiveRetentionDays","label":"archiveRetentionDays（产物留存天数）","group":"任务沙箱","type":"number","min":1},{"key":"storageQuotaMB","label":"storageQuotaMB（每 QQ 配额 MB）","group":"任务沙箱","type":"number","min":10},{"key":"artifactBaseUrl","label":"artifactBaseUrl（产物下载服务）","group":"产物下载","type":"string"},{"key":"artifactToken","label":"artifactToken","group":"产物下载","type":"password"},{"key":"linkTtlMinutes","label":"linkTtlMinutes（下载链接有效期）","group":"产物下载","type":"number","min":1},{"key":"panelEnabled","label":"panelEnabled（启用控制面板）","group":"控制面板","type":"boolean"},{"key":"panelHost","label":"panelHost（绑定地址）","group":"控制面板","type":"string","help":"默认 127.0.0.1，只允许本机访问"},{"key":"panelPort","label":"panelPort","group":"控制面板","type":"number","min":1,"max":65535},{"key":"panelToken","label":"panelToken（访问 Token）","group":"控制面板","type":"password","help":"非空时 API 需要 Authorization: Bearer <token> 或 URL ?token="},{"key":"dreamMemoryEnabled","label":"dreamMemoryEnabled（启用梦境记忆）","group":"梦境记忆","type":"boolean","help":"每天凌晨 fork 会话更新 MEMORY.md，然后压缩原 session"},{"key":"dreamMemoryHour","label":"dreamMemoryHour（整理开始小时）","group":"梦境记忆","type":"number","min":0,"max":23},{"key":"dreamMemoryMinute","label":"dreamMemoryMinute（整理开始分钟）","group":"梦境记忆","type":"number","min":0,"max":59},{"key":"dreamMaxTranscriptChars","label":"dreamMaxTranscriptChars（喂给梦境的聊天记录上限字符数）","group":"梦境记忆","type":"number","min":1000},{"key":"dreamMemoryMaxChars","label":"dreamMemoryMaxChars（MEMORY.md 建议上限字符数）","group":"梦境记忆","type":"number","min":500}];
   var RESTART=["opencodeUrl","opencodePassword","onebotUrl","onebotToken","mcpHost","mcpPort","panelEnabled","panelHost","panelPort"];
+  var mkSticker=function(id,label,tags,enabled,desc,color){
+    var svg='<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" rx="20" fill="'+color+'"/><circle cx="34" cy="40" r="6" fill="#fff"/><circle cx="62" cy="40" r="6" fill="#fff"/><path d="M30 62q18 14 36 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/></svg>';
+    return {id:id,md5:'',url:'data:image/svg+xml,'+encodeURIComponent(svg),desc:desc,label:label,tags:tags,enabled:enabled,syncedAt:NOW,updatedAt:NOW};
+  };
+  var stickers=[
+    mkSticker('demo-face-001','猫猫点赞',['日常','可爱'],true,'猫猫点赞','#eab308'),
+    mkSticker('demo-face-002','无语',['嘲讽'],true,'','#62666d'),
+    mkSticker('demo-face-003','',[],false,'不确定是什么','#5e6ad2')
+  ];
+  function stickerStats(){
+    var on=0,labeled=0;
+    stickers.forEach(function(s){ if(s.enabled)on++; if(String(s.label||'').trim())labeled++; });
+    return {total:stickers.length,enabled:on,labeled:labeled,unlabeled:stickers.length-labeled,lastSyncAt:NOW-1800};
+  }
   var sys1={role:'system', text:'你是 QQ 群助手「DeepSleep」，接入了 OpenCode。回答要简洁，代码用 Markdown 代码块。群内消息格式：@DeepSleep <问题>。', time:NOW-86400*3};
   var details={
     'group-100012345':{
@@ -1638,6 +1694,19 @@ function buildMock(){
       }
       var e3=new Error('未知 action：'+body.action); e3.status=400; throw e3;
     },
+    stickers:function(){ return deepCopy(stickers); },
+    stickerStats:stickerStats,
+    syncStickers:function(){ return {ok:true,added:0,updated:stickers.length,total:stickers.length,stats:stickerStats()}; },
+    saveSticker:function(id,body){
+      var s=null; stickers.forEach(function(x){ if(x.id===id) s=x; });
+      if(!s){ var e=new Error('表情不存在'); e.status=404; throw e; }
+      if(body.label!==undefined) s.label=String(body.label||'').trim();
+      if(body.tags!==undefined) s.tags=(Array.isArray(body.tags)?body.tags:String(body.tags||'').split(/[,，]/)).map(String).filter(Boolean);
+      if(body.enabled!==undefined) s.enabled=body.enabled===true||body.enabled==='true';
+      if(s.enabled&&!s.label) s.enabled=false;
+      s.updatedAt=NOW;
+      return {ok:true,item:deepCopy(s),stats:stickerStats()};
+    },
     config:function(){
       return {config:deepCopy(cfg), fields:FIELDS, restartKeys:RESTART.slice(), file:'config.json', version:12};
     },
@@ -1663,6 +1732,10 @@ function mockApi(path, opts){
     if(m){ var d=MOCK.detail(decodeURIComponent(m[1])); if(!d){ var e1=new Error('会话不存在：'+m[1]); e1.status=404; throw e1; } return d; }
     m=path.match(/^\/sessions\/([^/]+)\/action$/);
     if(m) return MOCK.action(decodeURIComponent(m[1]), opts&&opts.body||{});
+    if(path==='/stickers') return {items:MOCK.stickers(),stats:MOCK.stickerStats()};
+    if(path==='/stickers/sync') return MOCK.syncStickers();
+    m=path.match(/^\/stickers\/([^/]+)$/);
+    if(m && method==='PUT') return MOCK.saveSticker(decodeURIComponent(m[1]), opts&&opts.body||{});
     if(path==='/config'){
       if(method==='PUT') return MOCK.saveConfig(opts&&opts.body||{});
       return MOCK.config();
@@ -1724,7 +1797,7 @@ function setNav(v){
     if(on) b.setAttribute('aria-current','page');
     else b.removeAttribute('aria-current');
   });
-  var names={overview:'概览',sessions:'会话',detail:'会话详情',config:'配置'};
+  var names={overview:'概览',sessions:'会话',detail:'会话详情',config:'配置',stickers:'表情'};
   var crumb=$('#crumb-current');
   if(crumb) crumb.textContent=names[S.view]||'概览';
   document.title=(names[S.view]||'控制面板')+' · DeepSleep 控制面板';
@@ -1739,6 +1812,7 @@ function go(v){
     window.scrollTo(0,0);
     if(v==='overview') refreshOverview(false);
     else if(v==='sessions') refreshSessions(false);
+    else if(v==='stickers') refreshStickers(false);
     return;
   }
   S.view=v;
@@ -1747,6 +1821,7 @@ function go(v){
   window.scrollTo(0,0);
   if(v==='overview'){ refreshOverview(false); }
   else if(v==='sessions'){ renderSessions(); refreshSessions(false); }
+  else if(v==='stickers'){ renderStickers(); refreshStickers(false); }
   else if(v==='config'){ if(S.cfg.fields) renderConfig(); else loadConfig(); }
 }
 function goBack(){
@@ -2720,6 +2795,111 @@ async function sendAction(action){
   }
 }
 
+/* ═══════════════════════ 表情（收藏表情同步 + 打标） ═══════════════════════ */
+function stickerStatsHTML(){
+  var st=S.stickers.stats||{};
+  var last=st.lastSyncAt?fmtTime(st.lastSyncAt):'尚未同步';
+  return '<div class="st-stats">'
+    +'<div class="st-stat"><span class="st-stat-n">'+(st.total!=null?formatNumber(st.total):'—')+'</span><span class="st-stat-l">已同步</span></div>'
+    +'<div class="st-stat"><span class="st-stat-n ok">'+(st.enabled!=null?formatNumber(st.enabled):'—')+'</span><span class="st-stat-l">Agent 可用</span></div>'
+    +'<div class="st-stat"><span class="st-stat-n warn">'+(st.unlabeled!=null?formatNumber(st.unlabeled):'—')+'</span><span class="st-stat-l">待打标</span></div>'
+    +'<div class="st-stat"><span class="st-stat-l">最近同步：'+esc(last)+'</span></div>'
+    +'</div>';
+}
+function stickerCardHTML(it){
+  var labeled=!!(it.label&&it.label.trim());
+  var enabled=!!it.enabled;
+  var img=it.url
+    ? '<img class="st-img" src="'+esc(it.url)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=\'none\';this.parentNode.classList.add(\'broken\')">'
+    : '<span class="st-img-ph">?</span>';
+  return '<div class="st-card'+(enabled?' on':'')+'" data-st-id="'+esc(it.id)+'">'
+    +'<div class="st-thumb">'+img+(labeled?'<span class="st-badge'+(enabled?' ok':'')+'">'+(enabled?'可用':'已打标')+'</span>':'<span class="st-badge warn">待打标</span>')+'</div>'
+    +'<div class="st-body">'
+    +'<div class="st-head"><span class="mono st-id" title="'+esc(it.id)+'">'+esc(shortId(it.id))+'</span>'
+      +'<label class="st-toggle" title="启用后 Agent 才能使用这个表情"><input type="checkbox" data-st-toggle="'+esc(it.id)+'" '+(enabled?'checked':'')+'><span></span></label></div>'
+    +'<label class="st-field"><span>标签（Agent 看到的描述）</span><input class="input st-label" data-st-label="'+esc(it.id)+'" value="'+esc(it.label||'')+'" placeholder="例如：猫猫点赞 / 无语 / 狗头"></label>'
+    +'<label class="st-field"><span>分类（逗号分隔）</span><input class="input st-tags" data-st-tags="'+esc(it.id)+'" value="'+esc((it.tags||[]).join(', '))+'" placeholder="日常, 嘲讽"></label>'
+    +(it.desc?'<div class="st-orig">QQ 原描述：'+esc(it.desc)+'</div>':'')
+    +'<div class="st-foot"><button class="btn btn-sm" type="button" data-action="st-save" data-id="'+esc(it.id)+'">保存</button>'
+      +'<span class="st-note">'+(labeled?(enabled?'Agent 现在可以用它':'已打标，启用后可用'):'未打标（不会暴露给 Agent）')+'</span></div>'
+    +'</div></div>';
+}
+function renderStickers(){
+  var v=$('#view-stickers');
+  if(!v) return;
+  var items=S.stickers.items;
+  var head='<div class="view-head"><div><h1 class="view-title" id="st-title">表情</h1>'
+    +'<p class="view-sub"><span>QQ 收藏表情</span><span class="sep">/</span><span>同步后先打标签再启用，Agent 只会看到已启用的</span></p></div>'
+    +'<div class="st-actions"><button class="btn btn-sm btn-icon" type="button" data-action="st-refresh" title="刷新" aria-label="刷新">'+icon('refresh')+'</button>'
+    +'<button class="btn btn-sm btn-primary" type="button" data-action="st-sync" '+(S.stickers.syncing?'disabled':'')+'>'+(S.stickers.syncing?'同步中…':'同步收藏表情')+'</button></div></div>';
+  var body='';
+  if(S.stickers.loading&&!items){ body=stickerStatsHTML()+'<div class="panel"><div class="panel-body"><div class="sk" style="height:14px;width:40%"></div><div class="sk" style="height:90px;margin-top:14px"></div></div></div>'; }
+  else if(S.stickers.error){ body=stickerStatsHTML()+'<div class="panel"><div class="panel-body"><div class="cfg-error">'+icon('warn','empty-ic')+'<div><div class="empty-title">表情列表加载失败</div><div class="empty-text">'+esc(S.stickers.error)+'</div></div></div><button class="btn btn-sm" type="button" data-action="st-refresh">重试</button></div></div>'; }
+  else if(!items||items.length===0){ body=stickerStatsHTML()+'<div class="panel"><div class="panel-body"><div class="empty-title">还没有同步过收藏表情</div><div class="empty-text">点右上角「同步收藏表情」从当前 QQ 号拉取收藏夹里的自定义表情；同步后逐个打标签并启用，Agent 才能用。</div></div></div>'; }
+  else {
+    body=stickerStatsHTML()+'<div class="st-grid">'+items.map(stickerCardHTML).join('')+'</div>';
+  }
+  v.innerHTML=head+body;
+}
+async function refreshStickers(manual){
+  var btn=$('#view-stickers [data-action="st-refresh"]');
+  if(btn&&manual){ btn.classList.add('spin'); btn.setAttribute('aria-busy','true'); }
+  S.stickers.loading=true;
+  if(!$('#view-stickers .st-grid')&&S.view==='stickers') renderStickers();
+  try{
+    var out=await api('/stickers');
+    S.stickers.items=Array.isArray(out&&out.items)?out.items:[];
+    S.stickers.stats=out&&out.stats?out.stats:null;
+    S.stickers.error=null;
+    if(manual) toast('表情列表已刷新','success',1800);
+  }catch(err){
+    S.stickers.error=friendlyError(err);
+    if(manual) toast(S.stickers.error,'error',4200);
+  }finally{
+    S.stickers.loading=false;
+    if(S.view==='stickers') renderStickers();
+    if(btn&&manual){ btn.classList.remove('spin'); btn.removeAttribute('aria-busy'); }
+  }
+}
+async function syncStickers(){
+  if(S.stickers.syncing) return;
+  S.stickers.syncing=true;
+  if(S.view==='stickers') renderStickers();
+  try{
+    var out=await api('/stickers/sync',{method:'POST',body:{}});
+    S.stickers.syncResult=out;
+    toast('同步完成：新增 '+(out.added||0)+' 个，更新 '+(out.updated||0)+' 个；未打标的不会给 Agent 用','success',4200);
+    await refreshStickers(false);
+  }catch(err){
+    toast(friendlyError(err),'error',5200);
+  }finally{
+    S.stickers.syncing=false;
+    if(S.view==='stickers') renderStickers();
+  }
+}
+function stickerInputs(id){
+  var label=$('[data-st-label="'+id+'"]');
+  var tags=$('[data-st-tags="'+id+'"]');
+  return { label:label?label.value:'', tags:tags?tags.value:'' };
+}
+async function saveSticker(id){
+  var input=stickerInputs(id);
+  var tags=String(input.tags||'').split(/[,，]/).map(function(x){return x.trim();}).filter(Boolean);
+  try{
+    await api('/stickers/'+encodeURIComponent(id),{method:'PUT',body:{label:input.label,tags:tags}});
+    toast('已保存','success',1800);
+    await refreshStickers(false);
+  }catch(err){ toast(friendlyError(err),'error',4200); }
+}
+async function toggleSticker(id,enabled){
+  var input=stickerInputs(id);
+  try{
+    var out=await api('/stickers/'+encodeURIComponent(id),{method:'PUT',body:{label:input.label,tags:String(input.tags||'').split(/[,，]/).map(function(x){return x.trim();}).filter(Boolean),enabled:enabled}});
+    if(out&&out.enabled===false&&enabled){ toast('先填写标签再启用','warn',3200); }
+    await refreshStickers(false);
+  }catch(err){ toast(friendlyError(err),'error',4200); }
+}
+
 /* ═══════════════════════ 配置 ═══════════════════════ */
 var CFG_TYPES={string:1,number:1,boolean:1,password:1,json:1};
 function normalizeConfigFields(raw){
@@ -3253,6 +3433,9 @@ document.addEventListener('click', async function(e){
   if(a==='dt-reset'){ confirmReset(); return; }
   if(a==='dt-abort'){ confirmAbort(); return; }
   if(a==='dt-dream'){ confirmDream(); return; }
+  if(a==='st-refresh'){ refreshStickers(true); return; }
+  if(a==='st-sync'){ syncStickers(); return; }
+  if(a==='st-save'){ saveSticker(el.dataset.id); return; }
   if(a==='toggle-pass'){ togglePass(el.dataset.for); return; }
   if(a==='cfg-save'){ saveConfig(); return; }
   if(a==='cfg-format'){ formatJson(); return; }
@@ -3282,6 +3465,12 @@ function trapModalFocus(e){
     if(active===last||!ov.contains(active)){ e.preventDefault(); first.focus(); }
   }
 }
+document.addEventListener('change', function(e){
+  var t=e.target;
+  if(t&&t.matches&&t.matches('[data-st-toggle]')){
+    toggleSticker(t.getAttribute('data-st-toggle'), t.checked);
+  }
+});
 document.addEventListener('keydown', function(e){
   var overlay=$('#overlay');
   if(overlay&&!overlay.hidden){

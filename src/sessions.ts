@@ -656,16 +656,20 @@ export class SessionController {
 
   // ---- 收藏表情（SnowLuma / NapCat：fetch_custom_face_detail + send_custom_face）----
 
-  async listStickers(limit = 48): Promise<{ id: string; md5: string; desc: string }[]> {
-    const count = Math.min(Math.max(1, Math.floor(limit)), 200)
+  // 从网关拉取账号收藏表情的原始详情（同步到本地表情库用，不直接给 Agent）
+  async fetchStickerDetails(limit = 200): Promise<{ id: string; md5: string; url: string; desc: string }[]> {
+    const count = Math.min(Math.max(1, Math.floor(limit)), 500)
     const raw = await this.runtime.actions.call('fetch_custom_face_detail', { count })
     const data =
       raw && typeof raw === 'object' && !Array.isArray(raw) && 'data' in raw ? (raw as { data?: unknown }).data : raw
-    const list = Array.isArray(data) ? (data as { emoji_id?: unknown; resId?: unknown; md5?: unknown; desc?: unknown }[]) : []
+    const list = Array.isArray(data)
+      ? (data as { emoji_id?: unknown; resId?: unknown; md5?: unknown; url?: unknown; desc?: unknown }[])
+      : []
     return list
       .map((d) => ({
         id: String(d.emoji_id ?? d.resId ?? ''),
         md5: String(d.md5 ?? ''),
+        url: String(d.url ?? ''),
         desc: String(d.desc ?? ''),
       }))
       .filter((d) => d.id.length > 0)

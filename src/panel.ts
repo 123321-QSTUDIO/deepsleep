@@ -7,6 +7,7 @@ import { OcMessage, OpencodeClient } from './opencode'
 import { SessionController } from './sessions'
 import { TaskRegistry } from './tasks'
 import { DreamMemory } from './dream'
+import { StickerStore } from './stickers'
 import panelHtml from './panel.html'
 
 const PANEL_VERSION = '0.1.0'
@@ -23,6 +24,7 @@ export interface PanelDeps {
   oc: OpencodeClient
   tasks: TaskRegistry
   dream: DreamMemory
+  stickers: StickerStore
   log: (msg: string, ...args: unknown[]) => void
   onebotConnected?: () => boolean
 }
@@ -221,7 +223,42 @@ export class ControlPanel {
       this.sendJson(res, 'error' in result ? 400 : 200, result)
       return
     }
+    if (method === 'GET' && pathname === '/api/stickers') {
+      this.sendJson(res, 200, this.stickersPayload())
+      return
+    }
+    if (method === 'POST' && pathname === '/api/stickers/sync') {
+      const body = await this.readBody(req)
+      try {
+        const limit = typeof body.limit === 'number' ? body.limit : 300
+        const details = await this.deps.sessions.fetchStickerDetails(limit)
+        const result = this.deps.stickers.upsertSynced(details)
+        this.sendJson(res, 200, { ok: true, ...result, stats: this.deps.stickers.stats() })
+      } catch (e) {
+        this.sendJson(res, 502, { error: '同步收藏表情失败: ' + String((e as Error)?.message ?? e) })
+      }
+      return
+    }
+    const stickerMatch = /^\/api\/stickers\/([^/]+)$/.exec(pathname)
+    if (method === 'PUT' && stickerMatch) {
+      const id = decodeURIComponent(stickerMatch[1])
+      const body = await this.readBody(req)
+      const updated = this.deps.stickers.update(id, body)
+      if (!updated) {
+        this.sendJson(res, 404, { error: '表情不存在' })
+        return
+      }
+      this.sendJson(res, 200, { ok: true, item: updated, stats: this.deps.stickers.stats() })
+      return
+    }
     this.sendJson(res, 404, { error: 'not found' })
+  }
+
+  private stickersPayload() {
+    return {
+      items: this.deps.stickers.list(),
+      stats: this.deps.stickers.stats(),
+    }
   }
 
   private authOk(req: http.IncomingMessage, url: URL): boolean {
