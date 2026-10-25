@@ -1,24 +1,24 @@
 # DeepSleep
 
-QQ 群 AI 机器人（DeepSleep）：双形态——**独立服务（推荐，OneBot v11 WS 连 NapCat）** 或 NapCat 插件 + opencode 双层架构。
+QQ 群 AI 机器人（DeepSleep）：**独立服务形态**——OneBot v11 WS 连 NapCat 作为 QQ 网关，本机 OpenCode 作为对话/调度层（NapCat 进程内插件形态已停止维护）。
 
 群友在 QQ 群里 @机器人 聊天，机器人把消息交给本机的 opencode（每群一个持久会话，拟人化分句回复）；遇到复杂任务（探索代码、跑命令、查资料），opencode 通过 MCP 把任务提交出来，机器人在**远程 Docker 沙箱**（HK 主机，每 QQ 一个可休眠容器）里执行，完成后**群里回复原消息发一句话结论、完整结果私聊发给提问的人**。
 
-> **仓库已改名**：本仓库原名 `napcat-plugin-qqbot`，现更名为 **DeepSleep**（GitHub 旧链接会自动跳转）。npm 包名、插件目录与部署示例同步改为 `deepsleep`；服务模式数据目录与 `dist-service` 目录契约不变，已有部署只需替换代码目录，无需迁移数据。
+> **仓库已改名**：本仓库原名 `napcat-plugin-qqbot`，现更名为 **DeepSleep**（GitHub 旧链接会自动跳转）。npm 包名与部署示例同步改为 `deepsleep`；数据目录与 `dist-service` 目录契约不变，已有部署只需替换代码目录，无需迁移数据。
 
 ## 架构
 
 要求 **OpenCode 2.1.4**，使用 V2 API（`/api/session`、`/api/session/active`、`/api/event`、`/api/info`）。创建 session 的 `directory` 放在 POST body；新 session 未显式传模型时不再一概在创建时锁死。
 
 ```
-QQ群/私聊 ⇄ NapCat (官方发行版；仅旧插件模式需自编译加白名单)
-             └─ DeepSleep（本插件，系统中枢）
-                ├─ 消息收发（plugin_onmessage / send_msg）
+QQ群/私聊 ⇄ NapCat（官方发行版，仅作 QQ 网关；OneBot v11 WS）
+             └─ DeepSleep 服务（本仓库，系统中枢）
+                ├─ 消息收发（OneBot WS 事件 / send_msg）
                 ├─ 消息库：每群/每人每天一个 SQLite（sql.js WASM）
                 ├─ Session 控制器 → 本机 opencode serve（每群/每人一个持久 session）
                 ├─ MCP Server（HTTP+Bearer，共 8 个工具）
                 │   模型可见名带 qqbot_ 前缀，MCP 服务注册名不变
-                ├─ 控制面板（WebUI）：改配置 / 看会话 / 操作 Session，与插件同进程
+                ├─ 控制面板（WebUI）：改配置 / 看会话 / 操作 Session，与服务同进程
                 ├─ 梦境记忆：每晚 fork 会话整理 MEMORY.md（instructions 注入）→ 原子替换
                 │    → compact 原 session，避免上下文无限增长
                 ├─ 任务注册表：task_id ↔ 属主QQ/群号/消息ID（持久化，重启恢复）
@@ -36,7 +36,7 @@ Docker opencode（下层）：一次性容器跑重活；结果 → 私聊全文
 1. 群消息全部写入消息库（不触发的也写，供 Agent 检索上下文）
 2. @机器人 / 回复机器人消息 → 组装 prompt（最近 N 条上下文 + 引用还原）→ 群 session
 3. Agent 用 `qqbot_send_message` 分句回复（每条一次调用，像真人打字）；忘了调则兜底按行拆发
-4. 复杂请求 → Agent 调 `qqbot_submit_task` → 自己回一句"处理完回复你" → 插件排队起容器
+4. 复杂请求 → Agent 调 `qqbot_submit_task` → 自己回一句"处理完回复你" → 服务排队起容器
 5. 容器完成 → 群里 reply 原提问 + @发起人 + 一句话结论（Agent 措辞）；全文私聊属主并注入私聊上下文
 6. 属主私聊问"我的任务怎么样了" → 私聊 session 用 `qqbot_list_tasks`/`qqbot_get_task_detail` 查（越权只给状态不给内容）
 
@@ -44,8 +44,8 @@ Docker opencode（下层）：一次性容器跑重活；结果 → 私聊全文
 
 ```
 src/
-├── index.ts      插件入口（plugin_init / plugin_onmessage / plugin_cleanup，旧模式）
-├── main.ts       独立服务入口（OneBot WS 连接 NapCat，推荐模式）
+├── app.ts        服务组装层（配置/消息库/Session/MCP/面板/梦境 + 生命周期，测试也复用）
+├── main.ts       独立服务入口（OneBot WS 连接 NapCat + 进程生命周期）
 ├── onebot.ts     OneBot v11 WebSocket 客户端（自动重连、action/echo 往返）
 ├── config.ts     配置（config.json 首次运行自动生成，已知旧模型 ID 自动迁移）
 ├── msgdb.ts      消息库：sql.js(WASM SQLite)，按 scope+天 分文件
@@ -71,7 +71,7 @@ smoke*.mjs        冒烟测试（消息库 / V2 session / MCP 八工具 / 图片
 ```bash
 npm install
 npm run typecheck
-npm run build        # 产出 dist/（NapCat 插件）+ dist-service/（独立服务，推荐）
+npm run build        # 产出 dist-service/（独立服务）
 node smoke.mjs           # 冒烟：消息库
 node smoke2.mjs          # 冒烟：V2 session 创建（需本地 OpenCode 2.1.4 serve）
 node smoke3.mjs          # 冒烟：MCP 八工具
@@ -111,7 +111,7 @@ node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 | `visionModel` | `opencode/mimo-v2.6-flash-free` | vision-bridge 桥接 subagent 的识图模型（免费 MiMo V2.6；图片下载到 inbox/ 由 subagent 读图） |
 | `opencodeUrl` | `http://127.0.0.1:4096` | host opencode V2 地址 |
 | `opencodePassword` | 空（部署必填） | 必须与 serve 的 `OPENCODE_PASSWORD` 一致 |
-| `mcpPort` / `mcpToken` / `mcpUrl` | `5100` | 插件 MCP Server 监听与鉴权 |
+| `mcpPort` / `mcpToken` / `mcpUrl` | `5100` | MCP Server 监听与鉴权 |
 | `mcpUrlForDocker` | `http://host.docker.internal:5100/mcp` | 容器访问 MCP 的地址 |
 | `dockerImage` / `dockerEnv` | `qqbot-opencode-task:latest` | 任务镜像与注入容器的环境变量（API key），镜像须为 OpenCode 2.1.4 |
 | `dockerHost` | 空（本机） | 远程 docker 主机（如 `ssh://user@x.x.x.x`），本机无法虚拟化时用 |
@@ -173,5 +173,5 @@ ssh -N -L 5101:127.0.0.1:5101 <用户>@<服务器IP>   # 然后本机打开 http
 
 ## 注意
 
-- 插件跑在 NapCat 主进程内（无沙箱），所有 handler 已做异常隔离，但请勿让它处理不可信输入以外的操作。
-- 消息库存于插件数据目录 `messages/<group|private>-<id>/msg_<YYYY-MM-DD>.db`，只增不删，注意定期清理。
+- 服务与 NapCat 分离部署（OneBot WS 连接）：业务进程崩溃不影响 QQ，NapCat 重启后服务会自动重连。
+- 消息库存于服务数据目录 `messages/<group|private>-<id>/msg_<YYYY-MM-DD>.db`，只增不删，注意定期清理。

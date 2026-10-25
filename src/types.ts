@@ -1,27 +1,18 @@
-export interface PluginLogger {
+export interface AppLogger {
   info: (...args: unknown[]) => void
   warn: (...args: unknown[]) => void
   error: (...args: unknown[]) => void
   debug?: (...args: unknown[]) => void
 }
 
-export interface ActionMap {
-  call: (action: string, params: unknown, adapter?: string, config?: unknown) => Promise<never>
+export interface OutboundActions {
+  call: (action: string, params: unknown) => Promise<unknown>
 }
 
-export interface PluginManagerLike {
-  config: unknown
-}
-
-export interface PluginContext {
-  pluginName: string
-  pluginPath: string
-  configPath: string
-  dataPath: string
-  adapterName: string
-  logger: PluginLogger
-  actions: ActionMap
-  pluginManager: PluginManagerLike
+/** SessionController 的出站/日志接口：独立服务由 OneBot WS 注入，测试可注入 mock */
+export interface SessionRuntime {
+  logger: AppLogger
+  actions: OutboundActions
 }
 
 export interface OB11Sender {

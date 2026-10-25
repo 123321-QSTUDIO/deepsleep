@@ -6,7 +6,7 @@ import { OpencodeClient, OpencodeEvent } from './opencode'
 import { buildGroupAgentsMd, buildPrivateAgentsMd, ALLOWED_FACE_IDS } from './agentsmd'
 import { cleanCqForDisplay, dedupeImages, extractAtTargets, extractImages, extractImagesFromRaw, extractReplyTo, extractText, MsgSegment, textToSegments } from './format'
 import { MuteStore } from './mutes'
-import { OB11MessageEvent, PluginContext } from './types'
+import { OB11MessageEvent, SessionRuntime } from './types'
 
 interface SessionEntry {
   sessionId: string
@@ -56,7 +56,7 @@ export class SessionController {
   private lastTrigger = new Map<string, { userId: number; messageId: number; groupId: number | null }>()
   private selfId = 0
   private sendQueues = new Map<string, Promise<void>>()
-  private ctx!: PluginContext
+  private runtime!: SessionRuntime
 
   constructor(
     private config: PluginConfig,
@@ -71,8 +71,8 @@ export class SessionController {
     this.load()
   }
 
-  attach(ctx: PluginContext) {
-    this.ctx = ctx
+  attach(runtime: SessionRuntime) {
+    this.runtime = runtime
   }
 
   private load() {
@@ -587,7 +587,7 @@ export class SessionController {
     const params: Record<string, unknown> = { message_type: event.message_type, message: text }
     if (event.message_type === 'group' && event.group_id) params.group_id = String(event.group_id)
     if (event.message_type === 'private' && event.user_id) params.user_id = String(event.user_id)
-    await this.ctx.actions.call('send_msg', params, this.ctx.adapterName, this.ctx.pluginManager.config)
+    await this.runtime.actions.call('send_msg', params)
     this.recordSent(
       event.message_type === 'group' ? `group-${event.group_id}` : `private-${event.user_id}`,
       text
@@ -642,7 +642,7 @@ export class SessionController {
       params.message_type = 'private'
       params.user_id = scope.slice(8)
     }
-    await this.ctx.actions.call('send_msg', params, this.ctx.adapterName, this.ctx.pluginManager.config)
+    await this.runtime.actions.call('send_msg', params)
     this.recordSent(scope, text)
     await this.delay()
   }

@@ -1,8 +1,7 @@
 # 部署手册（Windows Server 版）
 
-> **v2 起推荐独立服务模式**：机器人是独立 Node 进程，通过 OneBot v11 WebSocket 连接 NapCat，
-> 更新只需重启 bot 进程（不动 QQ/NapCat），且 NapCat 用官方发行版即可（无需自编译白名单）。
-> 插件模式仍保留但不再推荐。
+> **只部署独立服务形态**：机器人是独立 Node 进程，通过 OneBot v11 WebSocket 连接 NapCat（NapCat 仅作 QQ 网关，官方发行版即可，无需自编译白名单）。
+> 更新只需重启 bot 进程，不动 QQ/NapCat。NapCat 进程内插件形态已停止维护。
 
 ## 0. 前置检查
 
@@ -36,7 +35,7 @@ wsl --install -d Ubuntu-22.04   # 需重启
 # 进 WSL 后：curl -fsSL https://get.docker.com | bash; sudo service docker start
 ```
 > 方式 B 时容器里 `host.docker.internal` 指向的是 WSL 虚拟机而非 Windows 宿主机，
-> 插件配置 `mcpUrlForDocker` 要改成 `http://<Windows主机IP>:5100/mcp`，且 `mcpHost` 要设 `0.0.0.0`。
+> 服务配置 `mcpUrlForDocker` 要改成 `http://<Windows主机IP>:5100/mcp`，且 `mcpHost` 要设 `0.0.0.0`。
 
 **方式 C：远程 Docker 主机（本机无嵌套虚拟化时，实测场景）**
 > 云服务器若是 KVM 且没开嵌套虚拟化（coreinfo 看 SVM/NP 为 `-`），方式 A/B 都跑不了，
@@ -77,7 +76,7 @@ Start-Process -WindowStyle Hidden ssh -ArgumentList '-N','-L','2375:127.0.0.1:23
 docker -H tcp://127.0.0.1:2375 version    # 能连上 HK 的 docker 即成功
 ```
 
-插件配置（见第 8 节）：
+服务配置（见第 8 节）：
 - `dockerHost`: `tcp://127.0.0.1:2375`（走隧道）
 - `remoteSsh`: `<HK用户>@<HK_IP>`（远程文件操作走独立 SSH：建目录/解压/归档；与 docker 隧道分离，互不影响）
 
@@ -94,7 +93,7 @@ Set-Service sshd -StartupType Automatic; Start-Service sshd
 ssh -N -L 5100:127.0.0.1:5100 user@<Windows服务器IP> \
   -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes
 ```
-插件配置保持：`mcpHost: 127.0.0.1`、`mcpUrlForDocker: http://host.docker.internal:5100/mcp`
+服务配置保持：`mcpHost: 127.0.0.1`、`mcpUrlForDocker: http://host.docker.internal:5100/mcp`
 （容器经 host-gateway 到达远程主机的 5100 = 隧道入口，转发回本机回环 MCP）
 
 方案 C-2b（简单，MCP 暴露公网但限源 IP）：
@@ -103,7 +102,7 @@ ssh -N -L 5100:127.0.0.1:5100 user@<Windows服务器IP> \
 - Windows 防火墙：5100 入站只允许远程 docker 主机的 IP
 - 注意：HTTP 明文，mcpToken 会在公网传输（被中间人看到即可调 MCP），介意就用 C-2a
 
-插件配置相应字段（见第 8 节）：
+服务配置相应字段（见第 8 节）：
 - `dockerHost`: `ssh://user@<远程主机IP>`（留空则读本机）
 - 远程模式下的任务生命周期（每 QQ 一个可休眠会话）：
   1. 首个复杂任务：在远程主机为该 QQ 创建容器 `qqbot-user-<QQ>`（挂载 `/opt/qqbot-users/<QQ>/home` 和 `workspace`），用 `opencode run --standalone --format json --model ...` 建立 session
@@ -132,7 +131,7 @@ opencode --version   # 必须为 2.1.4
 ```
 
 **模型**：默认 host 模型为 OpenCode Zen 免费模型 `opencode/deepseek-v4.1-flash-free`，vision 模型为 `opencode/mimo-v2.6-flash-free`，**无需任何登录/密钥**
-（opencode 对 zen 免费模型内置 `apiKey: "public"`，开箱即用）。插件会给每个工作区自动写入默认模型；配置加载会自动迁移已知旧模型 ID，旧 session 若仍存弃用模型则执行 `/reset` 重建。
+（opencode 对 zen 免费模型内置 `apiKey: "public"`，开箱即用）。服务会给每个工作区自动写入默认模型；配置加载会自动迁移已知旧模型 ID，旧 session 若仍存弃用模型则执行 `/reset` 重建。
 想换更强的付费模型才需要 `opencode auth login`（选 OpenCode Zen 或其他 provider）。
 
 先验证免费模型可用：
@@ -159,7 +158,7 @@ curl.exe -s -u opencode:CHANGE_ME_STRONG_PASSWORD http://127.0.0.1:4096/api/info
 # 也可检查 /api/session/active；期望返回 JSON。401=密码不对；连不上=服务没起，看 C:\qqbot\opencode-serve.log
 ```
 
-## 3. 构建本插件
+## 3. 构建服务
 
 ```powershell
 mkdir C:\qqbot; cd C:\qqbot
@@ -173,52 +172,12 @@ npm run build
 node smoke.mjs     # 期望输出 SMOKE TEST 1 PASS
 ```
 
-【验证】`ls dist` 有 `index.mjs`、`package.json`、`sql-wasm.wasm`。
+【验证】`ls dist-service` 有 `index.mjs`、`app.mjs`、`sql-wasm.wasm`。
 
-## 4. （仅旧插件模式）自编译 NapCat + 白名单
+## 4. NapCat 用官方发行版（无需自编译）
 
-> 推荐形态是**独立服务**（`src/main.ts`，OneBot WS 连 NapCat），用官方发行版 NapCat 即可，**本节整节可跳过**。
-> 只有坚持用 `src/index.ts` 的 NapCat 进程内插件模式时，才需要自编译并加白名单。
-
-```powershell
-cd C:\qqbot
-git clone https://github.com/NapNeko/NapCatQQ.git
-cd NapCatQQ
-
-# 4.1 白名单补丁（OFFICIAL_PLUGIN_IDS 数组加一行）
-$f = 'packages\napcat-onebot\network\plugin\loader.ts'
-(Get-Content $f -Raw) -replace "'napcat-plugin-qce',", "'napcat-plugin-qce',`r`n  'deepsleep'," | Set-Content $f -NoNewline
-Select-String -Path $f -Pattern 'deepsleep'   # 期望有输出，否则补丁没打上
-
-# 4.2 pnpm-workspace.yaml 的 allowBuilds 占位符必须改成 true
-@'
-packages:
-  - packages/*
-allowBuilds:
-  '@heroui/shared-utils': true
-  '@homebridge/node-pty-prebuilt-multiarch': true
-  '@swc/core': true
-  esbuild: true
-  sharp: true
-  ttf2woff2: true
-  unrs-resolver: true
-'@ | Set-Content pnpm-workspace.yaml
-
-# 4.3 构建（node_modules 量大，耐心等）
-pnpm install
-pnpm build:webui
-pnpm build:shell
-
-# 【验证】白名单已编入产物
-Select-String -Path packages\napcat-shell\dist\napcat.mjs -Pattern 'deepsleep' -SimpleMatch | Select-Object -First 1
-```
-
-> **pnpm install 失败规避**：`@homebridge/node-pty-prebuilt-multiarch` 的 install 脚本在部分 Windows 机器报 `spawn EINVAL`（仅影响 webui 终端功能，shell 运行不需要）。改用：
-> ```powershell
-> pnpm install --ignore-scripts
-> pnpm rebuild @swc/core esbuild sharp ttf2woff2 unrs-resolver
-> pnpm build:webui; pnpm build:shell
-> ```
+> NapCat 进程内插件形态已停止维护，**本节不再需要**：直接用官方发行版 NapCat，按第 5、6 节部署即可，无需自编译、无需白名单补丁。
+> 旧插件模式部署的用户请改为第 7 节的独立服务形态（迁移见 7b 节）。
 
 ## 5. 安装 QQ + 部署 NapCat 运行目录
 
@@ -284,7 +243,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 30 | Select-String -Pattern 'webui|W
 3. 扫码登录机器人 QQ 号
 4. 【验证】WebUI 显示在线；把机器人拉进测试群
 
-## 7. 部署机器人（独立服务模式，推荐）
+## 7. 部署机器人服务
 
 ```powershell
 mkdir C:\qqbot-svc
@@ -292,7 +251,7 @@ xcopy /E /I C:\qqbot\deepsleep\dist-service C:\qqbot-svc
 ```
 
 **NapCat 侧**：WebUI → 网络配置 → 新建 **WebSocket 服务器**：`127.0.0.1:3001`，token 设一个强随机串。
-（stock 官方 NapCat 即可，不再需要自编译白名单）
+（官方发行版 NapCat 即可）
 
 **启动服务**：
 
@@ -312,35 +271,20 @@ Get-Content C:\qqbot-svc\svc.log -Tail 5
 # 且有 "OneBot WS 已连接"
 ```
 
-**配置文件**：`C:\qqbot-svc\data\config.json`（首次运行自动生成），在原有插件配置基础上多了：
+**配置文件**：`C:\qqbot-svc\data\config.json`（首次运行自动生成），在默认配置基础上多了：
 - `onebotUrl`：NapCat WS 地址（默认 `ws://127.0.0.1:3001`）
 - `onebotToken`：上一步在 NapCat 设的 WS token
 
-**从插件模式迁移**：把 `C:\napcat-data\config\plugins\deepsleep\` 下的 `messages`、`sessions.json`、`tasks.json`、`users.json`、`workspaces` 拷到 `C:\qqbot-svc\data\`，配置合并进新 config.json，WebUI 里**停用插件**，启动服务。消息库、会话映射、任务记录全部继承。
 
-## 7b. 插件模式（旧，不推荐）
+## 7b. 旧插件模式（已停止维护）
 
-```powershell
-mkdir C:\napcat-data\plugins\deepsleep
-xcopy /E /I C:\qqbot\deepsleep\dist C:\napcat-data\plugins\deepsleep
+NapCat 进程内插件形态已移除（`src/index.ts` 删除，不再构建 `dist/`），请使用第 7 节的独立服务形态。
 
-# 重启 NapCat（杀掉 QQ 进程重跑 start.bat，或在 WebUI 插件页重载）
-Get-Process QQ -ErrorAction SilentlyContinue | Stop-Process -Force
-Start-Process -FilePath "C:\napcat\start.bat" -Verb RunAs
-```
+**从旧插件模式迁移**：把旧插件数据目录（`C:\napcat-data\config\plugins\deepsleep\`）下的 `messages`、`sessions.json`、`tasks.json`、`users.json`、`workspaces` 拷到 `C:\qqbot-svc\data\`，配置按第 8 节合并；消息库、会话映射、任务记录全部继承。
 
-【验证】
-```powershell
-Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
-# 期望: [qqbot] 初始化完成, botName=DeepSleep, opencode=... (在线), MCP :5100
-```
+## 8. 配置服务
 
-没初始化：查 `C:\napcat-data\config\plugins.json` 是否有 `"deepsleep": true`，没有就在 WebUI 启用或手动写入后重启。
-提示 "not in official plugin whitelist"：QQ 加载的还是旧 napcat.mjs，确认 `C:\napcat\start.bat` 指向的是自编译产物。
-
-## 8. 配置插件
-
-编辑 `C:\napcat-data\config\plugins\deepsleep\config.json`（首次运行自动生成）：
+编辑 `C:\qqbot-svc\data\config.json`（首次运行自动生成）：
 
 ```json
 {
@@ -398,7 +342,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 - `dreamMemoryEnabled` / `dreamMemoryHour` / `dreamMemoryMinute`：梦境记忆（见 8.2 节）。默认每天 4:30（服务器本地时区）整理 MEMORY.md 并压缩会话；`dreamMaxTranscriptChars` 限单次喂入的聊天记录字符数，`dreamMemoryMaxChars` 限 MEMORY.md 目标字数
 - `dockerEnv`：**用免费模型时留空 `{}` 即可**；要给容器换付费模型时才填 key（如 `ANTHROPIC_API_KEY`），同时调整 qqbot-hk-runner 的模型配置并重新 build 镜像
 - 方式 B（WSL2 docker）时 `mcpUrlForDocker` 改为 `http://<Windows主机IP>:5100/mcp`；方式 C 改为 `http://<本机IP>:5100/mcp`
-- 改完重启机器人服务（旧插件模式则重启 NapCat）生效
+- 改完重启机器人服务生效
 
 ## 8.1 控制面板（推荐开启）
 
@@ -459,8 +403,8 @@ sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
 
 - **域名走 Cloudflare 代理（橙云，推荐）**：TLS 在 CF 边缘终结，源站 Caddy 只开 80（脚本已按此配置），CF 面板 SSL/TLS 模式选 Full。CF 免费版 100MB 限制只管**上传**方向，产物下载不受影响，还能隐藏源站 IP
 - **灰云直连**：把 Caddyfile 的 `http://` 前缀去掉（Caddy 自动签 TLS）。源站 IP 会随域名解析暴露，脚本已自动配 ufw 只放行 22/80/443；建议再给 sshd 关密码登录（`PasswordAuthentication no`，前提是密钥已配好）
-- 链接机制：插件按需 HMAC 签名生成（`?exp=&sig=`），默认 24 小时有效（`linkTtlHours`），**机器人不主动发链接，用户私聊索要时才生成**；产物到期前一天机器人会主动私聊提醒用户留存
-- 插件配置填 `artifactBaseUrl: "https://<域名>"` 和 `artifactToken`（与脚本参数一致），重启 NapCat 生效
+- 链接机制：服务按需 HMAC 签名生成（`?exp=&sig=`），默认 24 小时有效（`linkTtlHours`），**机器人不主动发链接，用户私聊索要时才生成**；产物到期前一天机器人会主动私聊提醒用户留存
+- 服务配置填 `artifactBaseUrl: "https://<域名>"` 和 `artifactToken`（与脚本参数一致），重启 NapCat 生效
 
 ## 10. 部署完成检查单
 
@@ -548,11 +492,11 @@ shell 模式被踢的核心嫌疑是"无窗口 headless 客户端"这个行为�
 
 | 现象 | 排查 |
 |---|---|
-| 插件列表没有本插件 / 提示 not in whitelist | 白名单补丁没打上或没重新 build:shell；确认 start.bat 加载的是自编译的 `C:\napcat\napcat.mjs`（对比构建产物 MD5） |
+| 服务连不上 NapCat | 检查 NapCat WebUI 的 WebSocket 服务器（127.0.0.1:3001 + token）与 config.json 的 onebotUrl/onebotToken |
 | launcher 报 "provided QQ path is invalid" | QQ 未安装或装在非默认路径，改 start.bat 里 QQ.exe 路径 |
-| 插件初始化报 MCP 端口占用 | 5100 被占：三处配置（mcpPort/mcpUrl/mcpUrlForDocker）一起改 |
+| 服务启动报 MCP 端口占用 | 5100 被占：三处配置（mcpPort/mcpUrl/mcpUrlForDocker）一起改 |
 | @机器人没反应 | 看日志 opencode 请求报错：401=密码不对；ECONNREFUSED=serve 没起；没报错但没回复=模型问题，手动跑 `opencode run --model opencode/deepseek-v4.1-flash-free "hi"` 排查 |
 | zen 免费模型报 "usage limit reached" | 免费模型有额度限制（几小时重置），密集测试时悠着点；或 `opencode auth login` 登录 zen 账号提额/换付费模型 |
-| 任务 error "沙箱环境不可用" | NapCat 进程里调不到 docker：确认 Docker Desktop 在跑；QQ 进程环境与当前用户一致（docker CLI 在 PATH 里） |
+| 任务 error "沙箱环境不可用" | 服务进程调不到 docker：确认 Docker Desktop 在跑；QQ 进程环境与当前用户一致（docker CLI 在 PATH 里） |
 | 容器连不上 MCP | Docker Desktop 自带 host.docker.internal；方式 B 见第 8 节说明；Windows 防火墙放行 5100 |
 | 服务器重启后全挂了 | 两个计划任务（opencode-serve / napcat）是否建成 onlogon；服务器需自动登录或改任务为不管登录与否都运行 |
