@@ -16,6 +16,7 @@ QQ群/私聊 ⇄ NapCat (官方发行版；仅旧插件模式需自编译加白�
                 ├─ Session 控制器 → 本机 opencode serve（每群/每人一个持久 session）
                 ├─ MCP Server（HTTP+Bearer，共 8 个工具）
                 │   模型可见名带 qqbot_ 前缀，MCP 服务注册名不变
+                ├─ 控制面板（WebUI）：改配置 / 看会话 / 操作 Session，与插件同进程
                 ├─ 任务注册表：task_id ↔ 属主QQ/群号/消息ID（持久化，重启恢复）
                 └─ 任务执行器：本地 docker 一次性容器；或远程 docker 主机（ssh://）——
                     每 QQ 一个可休眠容器（qqbot-user-<QQ>），任务完成 stop + 产物压缩归档
@@ -51,8 +52,10 @@ src/
 ├── agentsmd.ts   各群/私聊工作区 AGENTS.md 生成器（人设+分句规则+表情表+工具说明）
 ├── tasks.ts      任务注册表（tasks.json 持久化）
 ├── executor.ts   任务执行器（远程 docker：每 QQ 可休眠容器、归档、配额、过期提醒）
-└── mcp.ts        MCP Server（8 工具，scope 头路由，沙箱模式，属主权限校验）
-smoke*.mjs        冒烟测试（消息库 / V2 session / MCP 八工具 / 图片与视觉 / watchdog / 服务模式）
+├── mcp.ts        MCP Server（8 工具，scope 头路由，沙箱模式，属主权限校验）
+├── panel.ts      控制面板 HTTP 服务（配置读写/校验、会话快照、Session 操作 API）
+└── panel.html    控制面板前端（单文件，构建时内联进 dist）
+smoke*.mjs        冒烟测试（消息库 / V2 session / MCP 八工具 / 图片与视觉 / watchdog / 服务模式 / 控制面板）
 ```
 
 > 任务沙箱镜像、HK 部署脚本、产物下载服务在独立的执行层仓库
@@ -72,6 +75,7 @@ node smoke5.mjs <图片路径>  # 冒烟：视觉；也可设 QQBOT_TEST_IMAGE
 node smoke6.mjs          # 冒烟：watchdog 兜底（需本地 opencode serve）
 node smoke9.mjs          # 冒烟：离线 V2 生命周期
 node smoke10.mjs         # 冒烟：配置模型 ID 自动迁移（离线）
+node smoke11.mjs         # 冒烟：控制面板（mock opencode，离线）
 node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 ```
 
@@ -112,11 +116,31 @@ node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 | `contextMessageCount` | `15` | 触发时携带的最近上下文条数 |
 | `replyDelayMinMs` / `replyDelayMaxMs` | `1200` / `3000` | 兜底分句发送的随机间隔 |
 | `maxLinesPerReply` | `4` | 兜底回复最大分句数，超出自动合并 |
+| `panelEnabled` | `true` | 是否启用控制面板 |
+| `panelHost` / `panelPort` | `127.0.0.1` / `5101` | 控制面板监听地址与端口（默认只允许本机访问） |
+| `panelToken` | 空 | 面板访问 Token；非空时 API 需要 `Authorization: Bearer <token>` 或 URL `?token=` |
 
 ## 群命令
 
 - `/reset`：清空当前对话的记忆（删除并重建 opencode session）；旧 session 存了弃用模型时也可用它恢复
 - `/abort`：打断正在生成的回复
+
+## 控制面板
+
+内置一个 WebUI 控制面板（默认 <http://127.0.0.1:5101/>，绑定回环），用来：
+
+- **改配置**：表单方式编辑全部 config 字段（含分组说明），写回 config.json；能热更新的字段立即生效，标「需重启」的字段（opencode 地址/密码、MCP 端口、面板端口等）需重启进程。也可以直接编辑 JSON。
+- **看会话**：列出所有群/私聊会话及其 Session、忙碌状态、今日消息数、最后一条消息、待回应条数。
+- **打开某个群/私聊的 Session**：查看 OpenCode 侧对话（含思考过程、工具调用折叠）与 QQ 消息库记录、工作区 AGENTS.md/opencode.json、屏蔽名单、该会话的任务。
+- **操作 Session**：清空记忆（`/reset`）、打断生成（`/abort`）、以机器人身份发一条 QQ 消息、或把一段文字作为 prompt 直接发给 Agent（回复仍会正常发到 QQ）。
+
+**远程访问**（服务器上部署时）：
+
+```powershell
+ssh -N -L 5101:127.0.0.1:5101 <用户>@<服务器IP>   # 然后本机打开 http://127.0.0.1:5101/
+```
+
+**安全**：面板默认只绑 `127.0.0.1`；只要不是本机直连（SSH 隧道/反代），务必设置 `panelToken`，否则任何能连到该端口的人都能读取密钥、改配置。面板 API 与 MCP 一样无状态、只支持同源访问，不做 CORS。
 
 ## 注意
 

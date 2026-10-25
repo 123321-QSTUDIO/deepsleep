@@ -367,7 +367,11 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
   "contextMessageCount": 15,
   "replyDelayMinMs": 1200,
   "replyDelayMaxMs": 3000,
-  "maxLinesPerReply": 4
+  "maxLinesPerReply": 4,
+  "panelEnabled": true,
+  "panelHost": "127.0.0.1",
+  "panelPort": 5101,
+  "panelToken": "CHANGE_ME_PANEL_TOKEN"
 }
 ```
 
@@ -383,9 +387,21 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 - `artifactBaseUrl` / `artifactToken` / `linkTtlMinutes`：产物下载服务（见 9.1 节）；链接为 HMAC 签名临时链接，默认 10 分钟有效，有效期内重复索要返回同一链接（不重复生成），失效后才能生成新链接
 - `archiveRetentionDays`：产物归档留存天数（默认 5），**每次该 QQ 的 session 被激活会自动刷新最近归档的过期时间**
 - `replyDelayMinMs` / `replyDelayMaxMs` 默认 `1200` / `3000` 毫秒，`maxLinesPerReply` 默认 `4`
+- `panelEnabled` / `panelHost` / `panelPort` / `panelToken`：控制面板（见 8.1 节）。默认开启、只绑 `127.0.0.1:5101`；**远程访问必须设 `panelToken`**
 - `dockerEnv`：**用免费模型时留空 `{}` 即可**；要给容器换付费模型时才填 key（如 `ANTHROPIC_API_KEY`），同时调整 qqbot-hk-runner 的模型配置并重新 build 镜像
 - 方式 B（WSL2 docker）时 `mcpUrlForDocker` 改为 `http://<Windows主机IP>:5100/mcp`；方式 C 改为 `http://<本机IP>:5100/mcp`
 - 改完重启机器人服务（旧插件模式则重启 NapCat）生效
+
+## 8.1 控制面板（推荐开启）
+
+机器人进程内置 WebUI 控制面板，部署完即可用：
+
+- 本机直接打开 <http://127.0.0.1:5101/>（服务器上则用 SSH 隧道：`ssh -N -L 5101:127.0.0.1:5101 <用户>@<服务器IP>`，再在本机浏览器打开同一地址）
+- `panelToken` 非空时，页面会提示输入 token（也能用 `http://127.0.0.1:5101/?token=xxx` 直接进）
+- 功能：表单改全部配置（写回 config.json，部分字段提示需重启）、看所有群/私聊会话与 Session 状态、打开某个会话看 OpenCode 对话/QQ 消息记录/工作区文件、执行 `/reset`、`/abort`、以机器人身份发 QQ 消息、把文字作为 prompt 直接发给 Agent
+- **安全**：默认只绑回环；不要把 `panelHost` 改成 `0.0.0.0` 直接暴露公网。SSH 隧道/反代场景请务必设置 `panelToken`（面板能看到配置里的密钥，也能改配置）
+
+【验证】`curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:5101/api/status`：设了 token 返回 401 属正常；页面 `http://127.0.0.1:5101/` 返回 200。
 
 ## 9. 构建任务沙箱镜像
 
@@ -425,6 +441,7 @@ sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
 
 - [ ] `opencode --version` 与任务镜像内版本均为 2.1.4
 - [ ] `curl.exe -u opencode:PASS http://127.0.0.1:4096/api/info` 返回 200（也可用 `/api/session/active`）
+- [ ] 控制面板 `http://127.0.0.1:5101/` 可打开，能列出会话、保存一次配置（设置了 panelToken 时记得带上）
 - [ ] `curl.exe -s -X POST -H "authorization: Bearer MCP_TOKEN" -H "content-type: application/json" -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"c\",\"version\":\"1\"}}}' http://127.0.0.1:5100/mcp` 返回 JSON（不是 401/404）
 - [ ] QQ 在线，机器人在测试群里
 - [ ] 日志有 `[qqbot] 初始化完成`
