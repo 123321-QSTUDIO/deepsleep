@@ -1,12 +1,16 @@
 export interface OpencodeEvent {
   type: string
-  properties: Record<string, unknown>
+  data: Record<string, unknown>
 }
 
 interface SessionInfo {
   id: string
-  directory?: string
   title?: string
+  location?: { directory: string }
+}
+
+interface DataResponse<T> {
+  data: T
 }
 
 export class OpencodeClient {
@@ -35,43 +39,47 @@ export class OpencodeClient {
     return (await res.json()) as T
   }
 
+  private async requestData<T>(method: string, urlPath: string, body?: unknown): Promise<T> {
+    const res = await this.request<DataResponse<T>>(method, urlPath, body)
+    return res.data
+  }
+
   createSession(directory: string, title: string): Promise<SessionInfo> {
-    return this.request('POST', `/session?directory=${encodeURIComponent(directory)}`, { title })
+    return this.requestData('POST', '/api/session', { title, location: { directory } })
   }
 
   findSessionByDirectory(directory: string): Promise<SessionInfo[]> {
-    return this.request('GET', `/session?directory=${encodeURIComponent(directory)}`)
+    return this.requestData('GET', `/api/session?directory=${encodeURIComponent(directory)}&limit=1&order=desc&parentID=null`)
   }
 
-  promptAsync(sessionId: string, text: string): Promise<void> {
-    return this.request('POST', `/session/${sessionId}/prompt_async`, {
-      parts: [{ type: 'text', text }],
+  async promptAsync(sessionId: string, text: string): Promise<void> {
+    await this.requestData('POST', `/api/session/${sessionId}/prompt`, { text })
+  }
+
+  async inject(sessionId: string, text: string): Promise<void> {
+    await this.requestData('POST', `/api/session/${sessionId}/synthetic`, {
+      text,
+      delivery: 'queue',
+      resume: false,
     })
   }
 
-  inject(sessionId: string, text: string): Promise<void> {
-    return this.request('POST', `/session/${sessionId}/message`, {
-      noReply: true,
-      parts: [{ type: 'text', text }],
-    })
+  async abort(sessionId: string): Promise<void> {
+    await this.request('POST', `/api/session/${sessionId}/interrupt`)
   }
 
-  abort(sessionId: string): Promise<void> {
-    return this.request('POST', `/session/${sessionId}/abort`)
-  }
-
-  getStatus(): Promise<Record<string, unknown>> {
-    return this.request('GET', '/session/status')
+  getStatus(): Promise<Record<string, { type?: string }>> {
+    return this.requestData('GET', '/api/session/active')
   }
 
   async getLastAssistantText(sessionId: string): Promise<string> {
     try {
-      const msgs = await this.request<
-        Array<{ info?: { role?: string }; role?: string; parts?: Array<{ type?: string; text?: string }> }>
-      >('GET', `/session/${sessionId}/message?limit=10`)
-      const last = [...msgs].reverse().find((m) => (m.info?.role ?? m.role) === 'assistant')
-      if (!last?.parts) return ''
-      return last.parts
+      const msgs = await this.requestData<
+        Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }>
+      >('GET', `/api/session/${sessionId}/message?type=assistant&order=desc&limit=1`)
+      const last = msgs[0]
+      if (last?.type !== 'assistant' || !last.content) return ''
+      return last.content
         .filter((p) => p.type === 'text' && typeof p.text === 'string')
         .map((p) => p.text!)
         .join('\n')
@@ -80,13 +88,13 @@ export class OpencodeClient {
     }
   }
 
-  deleteSession(sessionId: string): Promise<void> {
-    return this.request('DELETE', `/session/${sessionId}`)
+  async deleteSession(sessionId: string): Promise<void> {
+    await this.request('DELETE', `/api/session/${sessionId}`)
   }
 
   async health(): Promise<boolean> {
     try {
-      const res = await fetch(this.baseUrl + '/session/status', { headers: this.headers() })
+      const res = await fetch(this.baseUrl + '/api/info', { headers: this.headers() })
       return res.ok
     } catch {
       return false
@@ -97,7 +105,9 @@ export class OpencodeClient {
     const loop = async () => {
       while (shouldRun()) {
         try {
-          const res = await fetch(this.baseUrl + '/event', { headers: this.headers() })
+          const res = await fetch(this.baseUrl + '/api/event', {
+            headers: { ...this.headers(), accept: 'text/event-stream' },
+          })
           if (!res.ok || !res.body) throw new Error(`sse ${res.status}`)
           const reader = res.body.getReader()
           const decoder = new TextDecoder()

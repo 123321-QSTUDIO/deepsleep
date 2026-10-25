@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { PluginConfig } from './config'
 import { MsgDB, dayKey } from './msgdb'
-import { OpencodeClient } from './opencode'
+import { OpencodeClient, OpencodeEvent } from './opencode'
 import { buildGroupAgentsMd, buildPrivateAgentsMd, ALLOWED_FACE_IDS } from './agentsmd'
 import { cleanCqForDisplay, dedupeImages, extractAtTargets, extractImages, extractImagesFromRaw, extractReplyTo, extractText, MsgSegment, textToSegments } from './format'
 import { MuteStore } from './mutes'
@@ -113,25 +113,30 @@ export class SessionController {
         : buildPrivateAgentsMd(this.config, String(event.user_id), event.sender?.nickname ?? '')
     const ocJson = JSON.stringify(
       {
+        $schema: 'https://opencode.ai/config.json',
         model: this.config.hostModel,
-        agent: {
+        agents: {
           'vision-bridge': {
             description: '视觉跳板：读取图片/视频文件并输出详细文字描述，供纯文本模型调用',
             model: this.config.visionModel,
             mode: 'subagent',
-            prompt:
+            system:
               '你是视觉跳板。用户会给你一个图片或视频的文件路径（在工作目录下，如 inbox/xxx.jpg）。用 read 工具读取该文件，然后用中文输出详细、客观的内容描述（画面主体、文字、细节、氛围）。只输出描述本身，不要评价、不要回答用户其他问题。',
           },
         },
         mcp: {
-          qqbot: {
-            type: 'remote',
-            url: this.config.mcpUrl,
-            enabled: true,
-            timeout: 8000,
-            headers: {
-              authorization: `Bearer ${this.config.mcpToken}`,
-              'x-qqbot-scope': scope,
+          servers: {
+            qqbot: {
+              type: 'remote',
+              url: this.config.mcpUrl,
+              disabled: false,
+              codemode: false,
+              oauth: false,
+              timeout: { startup: 8000, catalog: 8000, execution: 8000 },
+              headers: {
+                authorization: `Bearer ${this.config.mcpToken}`,
+                'x-qqbot-scope': scope,
+              },
             },
           },
         },
@@ -371,7 +376,7 @@ export class SessionController {
         notes.push('(图片下载失败)')
       }
     }
-    return `\n[系统] 这条消息带了图片，已存到工作目录：${notes.join('、')}。用 Task 工具调 vision-bridge 子代理读取图片内容后再回答。`
+    return `\n[系统] 这条消息带了图片，已存到工作目录：${notes.join('、')}。用 subagent 工具调 vision-bridge 子代理读取图片内容后再回答。`
   }
 
   private async reset(scope: string) {
@@ -383,6 +388,12 @@ export class SessionController {
     this.save()
   }
 
+  private clearPending(scope: string) {
+    const pending = this.pendingRequests.get(scope) ?? []
+    if (pending.length > 0) this.markSent(scope, pending.map((p) => p.id))
+    this.pendingRequests.delete(scope)
+  }
+
   private watch(sessionId: string) {
     void (async () => {
       const deadline = Date.now() + 10 * 60 * 1000
@@ -392,16 +403,13 @@ export class SessionController {
       while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 2000))
         let present = false
-        let type = ''
         try {
           const map = await this.oc.getStatus()
-          const st = map[sessionId]
-          present = st !== undefined
-          type = typeof st === 'string' ? st : ((st as { type?: string })?.type ?? '')
+          present = map[sessionId] !== undefined
         } catch {
           continue
         }
-        if (type === 'busy' || type === 'retry') {
+        if (present) {
           sawBusy = true
           if (busySince === 0) busySince = Date.now()
           if (Date.now() - busySince > this.config.turnTimeoutSec * 1000) {
@@ -409,11 +417,7 @@ export class SessionController {
             await this.oc.abort(sessionId).catch(() => undefined)
             const scope = this.reverse.get(sessionId)
             if (scope) {
-              const stuck = this.pendingRequests.get(scope) ?? []
-              if (stuck.length > 0) {
-                this.markSent(scope, stuck.map((p) => p.id))
-                this.pendingRequests.delete(scope)
-              }
+              this.clearPending(scope)
               await this.sendTextToScope(scope, '我这边卡住了，刚才那条没接上，再说一次呗')
             }
             return
@@ -421,22 +425,13 @@ export class SessionController {
           continue
         }
         busySince = 0
-        const idle = !present || type === 'idle'
-        if (idle) {
-          if (!sawBusy && Date.now() < busyDeadline) continue
-          await this.onSessionIdle(sessionId)
-          return
-        }
+        if (!sawBusy && Date.now() < busyDeadline) continue
+        await this.onSessionIdle(sessionId)
+        return
       }
       this.log(`watchdog 超时 session=${sessionId}`)
       const scope = this.reverse.get(sessionId)
-      if (scope) {
-        const stuck = this.pendingRequests.get(scope) ?? []
-        if (stuck.length > 0) {
-          this.markSent(scope, stuck.map((p) => p.id))
-          this.pendingRequests.delete(scope)
-        }
-      }
+      if (scope) this.clearPending(scope)
     })()
   }
 
@@ -446,7 +441,39 @@ export class SessionController {
   }
 
   onAssistantText(sessionId: string, text: string) {
-    if (this.reverse.has(sessionId)) this.lastText.set(sessionId, text)
+    if (!this.reverse.has(sessionId)) return
+    const previous = this.lastText.get(sessionId)
+    this.lastText.set(sessionId, previous ? `${previous}\n${text}` : text)
+  }
+
+  async handleOpencodeEvent(ev: OpencodeEvent): Promise<void> {
+    const sessionId = typeof ev.data.sessionID === 'string' ? ev.data.sessionID : ''
+    if (!sessionId) return
+    if (ev.type === 'session.text.ended') {
+      if (typeof ev.data.text === 'string') this.onAssistantText(sessionId, ev.data.text)
+      return
+    }
+    if (ev.type === 'session.execution.succeeded') {
+      await this.onSessionIdle(sessionId)
+      return
+    }
+    if (ev.type === 'session.execution.failed') {
+      const scope = this.reverse.get(sessionId)
+      if (!scope) return
+      this.clearPending(scope)
+      this.sentViaTool.delete(sessionId)
+      this.lastText.delete(sessionId)
+      this.log(`opencode 执行失败 session=${sessionId}:`, ev.data.error)
+      await this.sendTextToScope(scope, '我这边刚才出了点问题，再说一次呗')
+      return
+    }
+    if (ev.type === 'session.execution.interrupted') {
+      this.lastText.delete(sessionId)
+      if (ev.data.reason !== 'user') return
+      const scope = this.reverse.get(sessionId)
+      if (scope) this.clearPending(scope)
+      this.sentViaTool.delete(sessionId)
+    }
   }
 
   async onSessionIdle(sessionId: string): Promise<void> {
@@ -514,7 +541,7 @@ export class SessionController {
   }
 
   async sendTextToScope(scope: string, text: string, opts?: { replyTo?: number | string; atQq?: number | string }): Promise<void> {
-    // Agent 一轮可能并发调多次 send_message；按 scope 串行化 + 小间隔，保证 QQ 端显示顺序与调用顺序一致
+    // Agent 一轮可能并发调多次 qqbot_send_message；按 scope 串行化 + 小间隔，保证 QQ 端显示顺序与调用顺序一致
     const prev = this.sendQueues.get(scope) ?? Promise.resolve()
     const next = prev.then(() => this.doSendToScope(scope, text, opts)).catch((e) => {
       this.log('发送失败:', e)

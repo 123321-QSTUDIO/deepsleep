@@ -60,30 +60,10 @@ export async function plugin_init(ctx: PluginContext) {
   ctx.logger.info(`[qqbot] 初始化完成, botName=${config.botName}, opencode=${config.opencodeUrl} (${healthy ? '在线' : '离线, 将在收到消息时重试'}), MCP :${config.mcpPort}`)
 
   oc.subscribeEvents((ev) => {
-    void handleEvent(ctx, ev)
+    const controller = sessions
+    if (!controller) return
+    void controller.handleOpencodeEvent(ev).catch((e) => ctx.logger.error('[qqbot] 事件处理失败', e))
   }, () => running)
-}
-
-async function handleEvent(ctx: PluginContext, ev: { type: string; properties: Record<string, unknown> }) {
-  try {
-    if (ev.type === 'message.part.updated') {
-      const part = ev.properties.part as { type?: string; sessionID?: string; text?: string } | undefined
-      if (part?.type === 'text' && part.sessionID && typeof part.text === 'string') {
-        sessions?.onAssistantText(part.sessionID, part.text)
-      }
-      return
-    }
-    if (ev.type === 'session.idle' || (ev.type === 'session.status' && (ev.properties.status as { type?: string })?.type === 'idle')) {
-      const sessionId = (ev.properties.sessionID ?? (ev.properties.info as { id?: string })?.id) as string | undefined
-      if (sessionId) await sessions?.onSessionIdle(sessionId)
-      return
-    }
-    if (ev.type === 'session.error') {
-      ctx.logger.error('[qqbot] opencode 会话错误', JSON.stringify(ev.properties))
-    }
-  } catch (e) {
-    ctx.logger.error('[qqbot] 事件处理失败', e)
-  }
 }
 
 function scopeOf(event: OB11MessageEvent): string {

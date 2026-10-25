@@ -38,8 +38,8 @@ export const defaultConfig: PluginConfig = {
   botName: 'DeepSleep',
   onebotUrl: 'ws://127.0.0.1:3001',
   onebotToken: '',
-  hostModel: 'opencode/deepseek-v4-flash-free',
-  visionModel: 'opencode/mimo-v2.5-free',
+  hostModel: 'opencode/deepseek-v4.1-flash-free',
+  visionModel: 'opencode/mimo-v2.6-flash-free',
   opencodeUrl: 'http://127.0.0.1:4096',
   opencodePassword: '',
   mcpPort: 5100,
@@ -67,13 +67,32 @@ export const defaultConfig: PluginConfig = {
   maxLinesPerReply: 4,
 }
 
+const modelMigrations: Record<string, string> = {
+  'opencode/deepseek-v4-flash-free': 'opencode/deepseek-v4.1-flash-free',
+  'opencode/mimo-v2.5-free': 'opencode/mimo-v2.6-flash-free',
+  'deepseek/deepseek-v4-flash': 'deepseek/deepseek-flash',
+}
+
 // NapCat ctx.configPath 语义：插件配置文件路径（<config>/plugins/<id>/config.json）。
 // 兼容旧语义：若以 .json 结尾视为文件路径，否则视为目录并拼接 config.json。
 export function loadConfig(configPath: string): PluginConfig {
   const file = configPath.endsWith('.json') ? configPath : path.join(configPath, 'config.json')
   try {
     if (fs.existsSync(file)) {
-      return { ...defaultConfig, ...JSON.parse(fs.readFileSync(file, 'utf-8')) }
+      const saved = JSON.parse(fs.readFileSync(file, 'utf-8')) as Partial<PluginConfig>
+      let migrated = saved
+      for (const key of ['hostModel', 'visionModel'] as const) {
+        const current = migrated[key]
+        if (current && modelMigrations[current]) migrated = { ...migrated, [key]: modelMigrations[current] }
+      }
+      if (migrated !== saved) {
+        try {
+          fs.writeFileSync(file, JSON.stringify(migrated, null, 2))
+        } catch {
+          // 迁移写回失败（只读/被占用）不影响本次加载：继续使用迁移后的值，不能退回默认配置
+        }
+      }
+      return { ...defaultConfig, ...migrated }
     }
   } catch {
     // fall through to defaults

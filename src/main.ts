@@ -99,23 +99,7 @@ ob = new OneBotClient(config.onebotUrl, config.onebotToken, onOneBotEvent, log)
 ob.start(() => running)
 
 oc.subscribeEvents((ev) => {
-  void (async () => {
-    try {
-      if (ev.type === 'message.part.updated') {
-        const part = ev.properties.part as { type?: string; sessionID?: string; text?: string } | undefined
-        if (part?.type === 'text' && part.sessionID && typeof part.text === 'string') {
-          sessions.onAssistantText(part.sessionID, part.text)
-        }
-        return
-      }
-      if (ev.type === 'session.idle' || (ev.type === 'session.status' && (ev.properties.status as { type?: string })?.type === 'idle')) {
-        const sessionId = (ev.properties.sessionID ?? (ev.properties.info as { id?: string })?.id) as string | undefined
-        if (sessionId) await sessions.onSessionIdle(sessionId)
-      }
-    } catch (e) {
-      logErr('opencode 事件处理失败', e)
-    }
-  })()
+  void sessions.handleOpencodeEvent(ev).catch((e) => logErr('opencode 事件处理失败', e))
 }, () => running)
 
 const healthy = await oc.health()

@@ -200,7 +200,7 @@ export class QqMcpServer {
     mcp.registerTool(
       'mute_user',
       {
-        description: '临时屏蔽某个群友：在指定时间内他的消息不会触发你回复。谨慎使用（见 AGENTS.md 的使用原则）。屏蔽时建议你用 send_message 告知对方原因和时长。',
+        description: '临时屏蔽某个群友：在指定时间内他的消息不会触发你回复。谨慎使用（见 AGENTS.md 的使用原则）。屏蔽时建议你用 qqbot_send_message 告知对方原因和时长。',
         inputSchema: {
           qq: z.string().describe('对方QQ号'),
           minutes: z.number().describe('屏蔽时长（分钟），最大1440'),

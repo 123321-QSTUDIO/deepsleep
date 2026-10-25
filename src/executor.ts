@@ -23,23 +23,32 @@ interface UserState {
   remindedArchive?: string
 }
 
-const CONTAINER_OPENCODE_JSON = `{
-  "$schema": "https://opencode.ai/config.json",
-  "model": "opencode/deepseek-v4-flash-free",
-  "mcp": {
-    "qqbot": {
-      "type": "remote",
-      "url": "{env:QQBOT_MCP_URL}",
-      "enabled": true,
-      "headers": {
-        "authorization": "Bearer {env:MCP_TOKEN}",
-        "x-qqbot-scope": "{env:QQBOT_SCOPE}",
-        "x-qqbot-task": "1"
-      }
-    }
-  }
-}
-`
+const CONTAINER_MODEL = 'opencode/deepseek-v4.1-flash-free'
+const CONTAINER_OPENCODE_JSON = JSON.stringify(
+  {
+    $schema: 'https://opencode.ai/config.json',
+    model: CONTAINER_MODEL,
+    mcp: {
+      servers: {
+        qqbot: {
+          type: 'remote',
+          url: '{env:QQBOT_MCP_URL}',
+          disabled: false,
+          codemode: false,
+          oauth: false,
+          timeout: { startup: 8000, catalog: 8000, execution: 8000 },
+          headers: {
+            authorization: 'Bearer {env:MCP_TOKEN}',
+            'x-qqbot-scope': '{env:QQBOT_SCOPE}',
+            'x-qqbot-task': '1',
+          },
+        },
+      },
+    },
+  },
+  null,
+  2
+)
 
 export class TaskExecutor {
   private queue: TaskRec[] = []
@@ -199,8 +208,8 @@ ${this.contextFor(rec)}
 
 要求：
 - 你在一个隔离沙箱里，可以随意使用命令行、网络、读写文件（当前目录 /workspace）。
-- 你可以用 MCP 工具 query_chat_log 查询更多群聊记录来理解上下文。
-- 不要尝试调用 send_message 发消息（已禁用）。
+- 你可以用 MCP 工具 qqbot_query_chat_log 查询更多群聊记录来理解上下文。
+- 不要尝试调用 qqbot_send_message 发消息（已禁用）。
 - 完成后，你的最终回复第一行用一句话总结结论（不超过50个字，不要加"结论："以外的前缀），从第二行开始写详细结果（中文，可以包含必要的细节、代码、链接）。`
     return continued ? base : base + '\n- 工作目录 /workspace 里的文件是你自己的持久工作区，产物都放这里。'
   }
@@ -222,8 +231,12 @@ ${this.contextFor(rec)}
       })
       p.on('exit', (code) => {
         clearTimeout(timer)
-        if (code !== 0 && !out.trim()) reject(new Error(`沙箱退出码 ${code}: ${err.slice(-500)}`))
-        else resolve({ code, out })
+        if (code !== 0) {
+          const detail = (err.trim() || out.trim()).slice(-500)
+          reject(new Error(`沙箱退出码 ${code}${detail ? `: ${detail}` : ''}`))
+          return
+        }
+        resolve({ code, out })
       })
     })
   }
@@ -251,7 +264,7 @@ ${this.contextFor(rec)}
       '-w', '/workspace',
       ...this.containerEnv(rec),
       this.deps.config.dockerImage,
-      'run', this.buildPrompt(rec, false),
+      'run', '--standalone', '--format', 'json', '--model', CONTAINER_MODEL, this.buildPrompt(rec, false),
     ]
     return this.spawnDocker(args, this.deps.config.taskTimeoutSec, ['kill', name])
   }
@@ -272,9 +285,7 @@ ${this.contextFor(rec)}
     await this.ssh(`
 set -e
 mkdir -p "${root}/home/.config/opencode" "${root}/workspace" "${root}/archive"
-if [ ! -f "${root}/home/.config/opencode/opencode.json" ]; then
-  echo "${ocJson}" | base64 -d > "${root}/home/.config/opencode/opencode.json"
-fi
+echo "${ocJson}" | base64 -d > "${root}/home/.config/opencode/opencode.json"
 latest=$(ls -1t "${root}/archive"/*.tar.gz 2>/dev/null | head -1 || true)
 if [ -n "$latest" ]; then
   touch "$latest"
@@ -357,7 +368,8 @@ basename "$(ls -1t "${root}/archive"/*.tar.gz 2>/dev/null | head -1)" 2>/dev/nul
       'exec',
       ...this.containerEnv(rec),
       name,
-      'opencode', 'run', ...continueArgs, this.buildPrompt(rec, state.initialized),
+      'opencode', 'run', '--standalone', '--format', 'json', '--model', CONTAINER_MODEL,
+      ...continueArgs, this.buildPrompt(rec, state.initialized),
     ]
     try {
       return await this.spawnDocker(args, this.deps.config.taskTimeoutSec, ['stop', name])
@@ -415,6 +427,36 @@ basename "$(ls -1t "${root}/archive"/*.tar.gz 2>/dev/null | head -1)" 2>/dev/nul
 
   // ---- 主流程 ----
 
+  private parseRunOutput(out: string): string {
+    const messages = new Map<string, string[]>()
+    for (const line of out.split(/\r?\n/)) {
+      if (!line.trim()) continue
+      let ev: {
+        type?: string
+        part?: { messageID?: string; text?: string }
+        error?: { message?: string } | string
+      }
+      try {
+        ev = JSON.parse(line)
+      } catch {
+        throw new Error(`沙箱输出不是有效的 NDJSON: ${line.slice(0, 200)}`)
+      }
+      if (ev.type === 'error') {
+        const message = typeof ev.error === 'string' ? ev.error : ev.error?.message
+        throw new Error(message || 'OpenCode 任务执行失败')
+      }
+      if (ev.type !== 'text' || typeof ev.part?.text !== 'string') continue
+      const messageId = typeof ev.part.messageID === 'string' ? ev.part.messageID : ''
+      const parts = messages.get(messageId) ?? []
+      parts.push(ev.part.text)
+      messages.set(messageId, parts)
+    }
+    const last = [...messages.values()].at(-1)
+    const text = last?.join('\n').trim() ?? ''
+    if (!text) throw new Error('沙箱没有返回助手文本')
+    return text
+  }
+
   private async run(rec: TaskRec) {
     const { tasks, log } = this.deps
     log(`任务 ${rec.task_id} 开始执行 (属主 ${rec.owner_qq})`)
@@ -430,7 +472,7 @@ basename "$(ls -1t "${root}/archive"/*.tar.gz 2>/dev/null | head -1)" 2>/dev/nul
 
     try {
       const { out } = this.remote ? await this.runRemote(rec) : await this.runOneShot(rec, workdir)
-      const text = out.trim()
+      const text = this.parseRunOutput(out)
       const firstBreak = text.indexOf('\n')
       const summary = (firstBreak > 0 ? text.slice(0, firstBreak) : text).trim().slice(0, 80)
       const result = firstBreak > 0 ? text.slice(firstBreak + 1).trim() : text
@@ -467,7 +509,7 @@ basename "$(ls -1t "${root}/archive"/*.tar.gz 2>/dev/null | head -1)" 2>/dev/nul
         if (rec.group_id) {
           await this.injectToScope(
             rec.scope,
-            `[系统通知] 你之前受理的任务「${rec.task.slice(0, 60)}」(编号 ${rec.task_id}) 已经完成了。结论：${rec.summary}。详细结果已经私聊发给发起人(QQ ${rec.owner_qq})。请你现在用一两句话把结论发到群里，记得@发起人并回复他提问的那条消息（send_message 的 at_qq 填 ${rec.owner_qq}，reply_to 填 ${rec.message_id ?? ''}）。`
+            `[系统通知] 你之前受理的任务「${rec.task.slice(0, 60)}」(编号 ${rec.task_id}) 已经完成了。结论：${rec.summary}。详细结果已经私聊发给发起人(QQ ${rec.owner_qq})。请你现在用一两句话把结论发到群里，记得@发起人并回复他提问的那条消息（qqbot_send_message 的 at_qq 填 ${rec.owner_qq}，reply_to 填 ${rec.message_id ?? ''}）。`
           )
         }
       } else {
@@ -476,7 +518,7 @@ basename "$(ls -1t "${root}/archive"/*.tar.gz 2>/dev/null | head -1)" 2>/dev/nul
         if (rec.group_id) {
           await this.injectToScope(
             rec.scope,
-            `[系统通知] 任务「${rec.task.slice(0, 60)}」(编号 ${rec.task_id}) 失败了：${rec.error}。请你用一句话告诉发起人(QQ ${rec.owner_qq})，@他并回复他提问的那条消息（send_message 的 at_qq 填 ${rec.owner_qq}，reply_to 填 ${rec.message_id ?? ''}），语气自然点。`
+            `[系统通知] 任务「${rec.task.slice(0, 60)}」(编号 ${rec.task_id}) 失败了：${rec.error}。请你用一句话告诉发起人(QQ ${rec.owner_qq})，@他并回复他提问的那条消息（qqbot_send_message 的 at_qq 填 ${rec.owner_qq}，reply_to 填 ${rec.message_id ?? ''}），语气自然点。`
           )
         }
       }
