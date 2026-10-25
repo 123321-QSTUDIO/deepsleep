@@ -40,7 +40,7 @@ Docker opencode（下层）：一次性容器跑重活；结果 → 私聊全文
 1. 群消息全部写入消息库（不触发的也写，供 Agent 检索上下文）
 2. @机器人 / 回复机器人消息 → 组装 prompt（最近 N 条上下文 + 引用还原）→ 群 session
 3. Agent 用 `qqbot_send_message` 分句回复（每条一次调用，像真人打字）；忘了调则兜底按行拆发
-3b. 收藏表情包：先在控制面板「表情」页从当前 QQ 同步收藏、逐个打标签并启用；Agent 之后会用 `qqbot_list_stickers` 挑、`qqbot_send_sticker` 发（未打标/未启用的不会暴露给 Agent）
+3b. 收藏表情包：先在控制面板「表情」页从当前 QQ 同步收藏、按合集归组并打标启用；Agent 之后会用 `qqbot_list_stickers` 挑（显示为「合集:描述」）、`qqbot_send_sticker` 发（未打标/未启用的不会暴露给 Agent）
 4. 复杂请求 → Agent 调 `qqbot_submit_task` → 自己回一句"处理完回复你" → 服务排队起容器
 5. 容器完成 → 群里 reply 原提问 + @发起人 + 一句话结论（Agent 措辞）；全文私聊属主并注入私聊上下文
 6. 属主私聊问"我的任务怎么样了" → 私聊 session 用 `qqbot_list_tasks`/`qqbot_get_task_detail` 查（越权只给状态不给内容）

@@ -1268,6 +1268,19 @@ body.modal-open{overflow:hidden}
 .st-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px}
 .st-note{font-size:11px;color:var(--meta)}
 @media (max-width:640px){.st-grid{grid-template-columns:1fr}}
+
+.st-group{margin:0 0 18px}
+.st-group-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 2px 10px;border-bottom:1px solid var(--border-soft);margin-bottom:12px}
+.st-group-title{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--fg);font-weight:560}
+.st-group-title .count-badge{font-weight:400}
+.st-group-sub{font-size:11px;color:var(--meta);font-weight:400;margin-left:4px}
+.st-coll-toggle{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);cursor:pointer;user-select:none}
+.st-coll-toggle input{position:absolute;opacity:0;pointer-events:none}
+.st-coll-toggle span{position:relative;width:32px;height:18px;border-radius:999px;background:rgba(255,255,255,.12);transition:background .15s ease;flex:none}
+.st-coll-toggle span::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s ease}
+.st-coll-toggle input:checked+span{background:var(--accent)}
+.st-coll-toggle input:checked+span::after{transform:translateX(14px)}
+.st-coll-toggle input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -1526,13 +1539,13 @@ function buildMock(){
   var cfg={"botName":"DeepSleep","onebotUrl":"ws://127.0.0.1:3001","onebotToken":"","hostModel":"opencode/deepseek-v4.1-flash-free","visionModel":"opencode/mimo-v2.6-flash-free","opencodeUrl":"http://127.0.0.1:4096","opencodePassword":"","mcpPort":5100,"mcpHost":"127.0.0.1","mcpToken":"","mcpUrl":"http://127.0.0.1:5100/mcp","mcpUrlForDocker":"http://host.docker.internal:5100/mcp","dockerImage":"qqbot-opencode-task:latest","dockerHost":"","remoteSsh":"","remoteSshKey":"","remoteWorkRoot":"/opt/qqbot-users","archiveRetentionDays":5,"storageQuotaMB":500,"artifactBaseUrl":"","artifactToken":"","linkTtlMinutes":10,"dockerEnv":{},"taskTimeoutSec":900,"taskConcurrency":3,"turnTimeoutSec":240,"contextMessageCount":15,"replyDelayMinMs":1200,"replyDelayMaxMs":3000,"maxLinesPerReply":4,"panelEnabled":true,"panelHost":"127.0.0.1","panelPort":5101,"panelToken":"","dreamMemoryEnabled":true,"dreamMemoryHour":4,"dreamMemoryMinute":30,"dreamMaxTranscriptChars":120000,"dreamMemoryMaxChars":8000};
   var FIELDS=[{"key":"botName","label":"botName（机器人自称）","group":"基础","type":"string","help":"写入群/私聊工作区的人设，下一条消息触发时重建 AGENTS.md"},{"key":"hostModel","label":"hostModel（主模型）","group":"模型","type":"string"},{"key":"visionModel","label":"visionModel（识图子代理模型）","group":"模型","type":"string"},{"key":"opencodeUrl","label":"opencodeUrl","group":"连接","type":"string","help":"host opencode V2 地址"},{"key":"opencodePassword","label":"opencodePassword","group":"连接","type":"password","help":"必须与 serve 的 OPENCODE_PASSWORD 一致"},{"key":"onebotUrl","label":"onebotUrl（OneBot WS 地址）","group":"连接","type":"string","help":"SnowLuma/NapCat 等 OneBot v11 网关的 WebSocket 地址，默认 ws://127.0.0.1:3001"},{"key":"onebotToken","label":"onebotToken（独立服务模式）","group":"连接","type":"password"},{"key":"contextMessageCount","label":"contextMessageCount（上下文条数）","group":"消息与回复","type":"number","min":1},{"key":"replyDelayMinMs","label":"replyDelayMinMs（兜底分句最小间隔）","group":"消息与回复","type":"number","min":0},{"key":"replyDelayMaxMs","label":"replyDelayMaxMs（兜底分句最大间隔）","group":"消息与回复","type":"number","min":0},{"key":"maxLinesPerReply","label":"maxLinesPerReply（兜底最大分句数）","group":"消息与回复","type":"number","min":1},{"key":"turnTimeoutSec","label":"turnTimeoutSec（单轮超时秒数）","group":"消息与回复","type":"number","min":10},{"key":"mcpHost","label":"mcpHost（MCP 绑定地址）","group":"MCP","type":"string"},{"key":"mcpPort","label":"mcpPort","group":"MCP","type":"number","min":1,"max":65535},{"key":"mcpToken","label":"mcpToken","group":"MCP","type":"password"},{"key":"mcpUrl","label":"mcpUrl（host 侧工作区注入）","group":"MCP","type":"string"},{"key":"mcpUrlForDocker","label":"mcpUrlForDocker（容器内地址）","group":"MCP","type":"string"},{"key":"taskConcurrency","label":"taskConcurrency（任务并发）","group":"任务沙箱","type":"number","min":1},{"key":"taskTimeoutSec","label":"taskTimeoutSec（任务超时秒数）","group":"任务沙箱","type":"number","min":30},{"key":"dockerImage","label":"dockerImage","group":"任务沙箱","type":"string"},{"key":"dockerHost","label":"dockerHost（远程 docker 主机）","group":"任务沙箱","type":"string"},{"key":"dockerEnv","label":"dockerEnv（容器环境变量 JSON）","group":"任务沙箱","type":"json","help":"给容器注入的 API key 等，形如 {\"KEY\":\"value\"}"},{"key":"remoteSsh","label":"remoteSsh（远程文件操作 SSH）","group":"任务沙箱","type":"string"},{"key":"remoteSshKey","label":"remoteSshKey（SSH 私钥路径）","group":"任务沙箱","type":"string"},{"key":"remoteWorkRoot","label":"remoteWorkRoot","group":"任务沙箱","type":"string"},{"key":"archiveRetentionDays","label":"archiveRetentionDays（产物留存天数）","group":"任务沙箱","type":"number","min":1},{"key":"storageQuotaMB","label":"storageQuotaMB（每 QQ 配额 MB）","group":"任务沙箱","type":"number","min":10},{"key":"artifactBaseUrl","label":"artifactBaseUrl（产物下载服务）","group":"产物下载","type":"string"},{"key":"artifactToken","label":"artifactToken","group":"产物下载","type":"password"},{"key":"linkTtlMinutes","label":"linkTtlMinutes（下载链接有效期）","group":"产物下载","type":"number","min":1},{"key":"panelEnabled","label":"panelEnabled（启用控制面板）","group":"控制面板","type":"boolean"},{"key":"panelHost","label":"panelHost（绑定地址）","group":"控制面板","type":"string","help":"默认 127.0.0.1，只允许本机访问"},{"key":"panelPort","label":"panelPort","group":"控制面板","type":"number","min":1,"max":65535},{"key":"panelToken","label":"panelToken（访问 Token）","group":"控制面板","type":"password","help":"非空时 API 需要 Authorization: Bearer <token> 或 URL ?token="},{"key":"dreamMemoryEnabled","label":"dreamMemoryEnabled（启用梦境记忆）","group":"梦境记忆","type":"boolean","help":"每天凌晨 fork 会话更新 MEMORY.md，然后压缩原 session"},{"key":"dreamMemoryHour","label":"dreamMemoryHour（整理开始小时）","group":"梦境记忆","type":"number","min":0,"max":23},{"key":"dreamMemoryMinute","label":"dreamMemoryMinute（整理开始分钟）","group":"梦境记忆","type":"number","min":0,"max":59},{"key":"dreamMaxTranscriptChars","label":"dreamMaxTranscriptChars（喂给梦境的聊天记录上限字符数）","group":"梦境记忆","type":"number","min":1000},{"key":"dreamMemoryMaxChars","label":"dreamMemoryMaxChars（MEMORY.md 建议上限字符数）","group":"梦境记忆","type":"number","min":500}];
   var RESTART=["opencodeUrl","opencodePassword","onebotUrl","onebotToken","mcpHost","mcpPort","panelEnabled","panelHost","panelPort"];
-  var mkSticker=function(id,label,tags,enabled,desc,color){
+  var mkSticker=function(id,label,tags,enabled,desc,color,collection){
     var svg='<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" rx="20" fill="'+color+'"/><circle cx="34" cy="40" r="6" fill="#fff"/><circle cx="62" cy="40" r="6" fill="#fff"/><path d="M30 62q18 14 36 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/></svg>';
-    return {id:id,md5:'',url:'data:image/svg+xml,'+encodeURIComponent(svg),desc:desc,label:label,tags:tags,enabled:enabled,syncedAt:NOW,updatedAt:NOW};
+    return {id:id,md5:'',url:'data:image/svg+xml,'+encodeURIComponent(svg),desc:desc,label:label,collection:collection||'',tags:tags,enabled:enabled,syncedAt:NOW,updatedAt:NOW};
   };
   var stickers=[
-    mkSticker('demo-face-001','猫猫点赞',['日常','可爱'],true,'猫猫点赞','#eab308'),
-    mkSticker('demo-face-002','无语',['嘲讽'],true,'','#62666d'),
+    mkSticker('demo-face-001','猫猫点赞',['日常','可爱'],true,'猫猫点赞','#eab308','猫猫虫咖波'),
+    mkSticker('demo-face-002','无语',['嘲讽'],true,'','#62666d','猫猫虫咖波'),
     mkSticker('demo-face-003','',[],false,'不确定是什么','#5e6ad2')
   ];
   function stickerStats(){
@@ -1696,16 +1709,38 @@ function buildMock(){
     },
     stickers:function(){ return deepCopy(stickers); },
     stickerStats:stickerStats,
+    listCollections:function(){
+      var map={};
+      stickers.forEach(function(s){ if(!s.collection) return; (map[s.collection]=map[s.collection]||[]).push(s); });
+      return Object.keys(map).map(function(name){
+        var arr=map[name], labeled=arr.filter(function(s){return String(s.label||'').trim();}).length, enabled=arr.filter(function(s){return s.enabled;}).length;
+        return {name:name,total:arr.length,labeled:labeled,enabled:enabled,allEnabled:labeled>0&&enabled===labeled&&arr.every(function(s){return String(s.label||'').trim();})};
+      });
+    },
+    setCollectionEnabled:function(name,enabled){
+      var changed=0;
+      stickers.forEach(function(s){
+        if(s.collection!==name) return;
+        if(enabled&&!String(s.label||'').trim()) return;
+        if(!!s.enabled!==!!enabled){ s.enabled=!!enabled; s.updatedAt=NOW; changed++; }
+      });
+      return {ok:true,changed:changed,stats:stickerStats(),collections:this.listCollections()};
+    },
+    renameCollection:function(from,to){
+      var changed=0; stickers.forEach(function(s){ if(s.collection===from){ s.collection=String(to||'').trim(); s.updatedAt=NOW; changed++; } });
+      return {ok:true,changed:changed,stats:stickerStats(),collections:this.listCollections()};
+    },
     syncStickers:function(){ return {ok:true,added:0,updated:stickers.length,total:stickers.length,stats:stickerStats()}; },
     saveSticker:function(id,body){
       var s=null; stickers.forEach(function(x){ if(x.id===id) s=x; });
       if(!s){ var e=new Error('表情不存在'); e.status=404; throw e; }
       if(body.label!==undefined) s.label=String(body.label||'').trim();
       if(body.tags!==undefined) s.tags=(Array.isArray(body.tags)?body.tags:String(body.tags||'').split(/[,，]/)).map(String).filter(Boolean);
+      if(body.collection!==undefined) s.collection=String(body.collection||'').trim();
       if(body.enabled!==undefined) s.enabled=body.enabled===true||body.enabled==='true';
-      if(s.enabled&&!s.label) s.enabled=false;
+      if(s.enabled&&!String(s.label||'').trim()) s.enabled=false;
       s.updatedAt=NOW;
-      return {ok:true,item:deepCopy(s),stats:stickerStats()};
+      return {ok:true,item:deepCopy(s),stats:stickerStats(),collections:this.listCollections()};
     },
     config:function(){
       return {config:deepCopy(cfg), fields:FIELDS, restartKeys:RESTART.slice(), file:'config.json', version:12};
@@ -1734,6 +1769,12 @@ function mockApi(path, opts){
     if(m) return MOCK.action(decodeURIComponent(m[1]), opts&&opts.body||{});
     if(path==='/stickers') return {items:MOCK.stickers(),stats:MOCK.stickerStats()};
     if(path==='/stickers/sync') return MOCK.syncStickers();
+    m=path.match(/^\/stickers\/collections\/([^/]+)$/);
+    if(m && method==='PUT'){
+      var kb=opts&&opts.body||{};
+      if(kb.rename) return MOCK.renameCollection(decodeURIComponent(m[1]),kb.rename);
+      return MOCK.setCollectionEnabled(decodeURIComponent(m[1]),kb.enabled===true);
+    }
     m=path.match(/^\/stickers\/([^/]+)$/);
     if(m && method==='PUT') return MOCK.saveSticker(decodeURIComponent(m[1]), opts&&opts.body||{});
     if(path==='/config'){
@@ -2809,6 +2850,8 @@ function stickerStatsHTML(){
 function stickerCardHTML(it){
   var labeled=!!(it.label&&it.label.trim());
   var enabled=!!it.enabled;
+  var collection=it.collection||'';
+  var display='['+(collection||'收藏')+':'+(it.label||'未打标')+']';
   var img=it.url
     ? '<img class="st-img" src="'+esc(it.url)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=\'none\';this.parentNode.classList.add(\'broken\')">'
     : '<span class="st-img-ph">?</span>';
@@ -2817,27 +2860,45 @@ function stickerCardHTML(it){
     +'<div class="st-body">'
     +'<div class="st-head"><span class="mono st-id" title="'+esc(it.id)+'">'+esc(shortId(it.id))+'</span>'
       +'<label class="st-toggle" title="启用后 Agent 才能使用这个表情"><input type="checkbox" data-st-toggle="'+esc(it.id)+'" '+(enabled?'checked':'')+'><span></span></label></div>'
+    +'<label class="st-field"><span>合集（表情包）</span><input class="input st-collection" data-st-collection="'+esc(it.id)+'" value="'+esc(collection)+'" placeholder="例如：猫猫虫咖波；空=未分组"></label>'
     +'<label class="st-field"><span>标签（Agent 看到的描述）</span><input class="input st-label" data-st-label="'+esc(it.id)+'" value="'+esc(it.label||'')+'" placeholder="例如：猫猫点赞 / 无语 / 狗头"></label>'
     +'<label class="st-field"><span>分类（逗号分隔）</span><input class="input st-tags" data-st-tags="'+esc(it.id)+'" value="'+esc((it.tags||[]).join(', '))+'" placeholder="日常, 嘲讽"></label>'
     +(it.desc?'<div class="st-orig">QQ 原描述：'+esc(it.desc)+'</div>':'')
     +'<div class="st-foot"><button class="btn btn-sm" type="button" data-action="st-save" data-id="'+esc(it.id)+'">保存</button>'
-      +'<span class="st-note">'+(labeled?(enabled?'Agent 现在可以用它':'已打标，启用后可用'):'未打标（不会暴露给 Agent）')+'</span></div>'
+      +'<span class="st-note mono">'+esc(display)+'</span></div>'
     +'</div></div>';
+}
+function stickerGroupHTML(name,items,ungrouped){
+  var coll=(S.stickers.collections||[]).filter(function(c){return c.name===name;})[0];
+  if(!coll) coll={name:name,total:items.length,labeled:items.filter(function(s){return !!(s.label||'').trim();}).length,enabled:items.filter(function(s){return !!s.enabled;}).length,allEnabled:false};
+  var head='<div class="st-group-head">'
+    +'<div class="st-group-title">'+icon('file')+'<span>'+esc(ungrouped?'未分组收藏':name)+'</span><span class="count-badge">'+items.length+'</span>'
+      +(ungrouped?'<span class="st-group-sub">没有合集的散装收藏</span>':'<span class="st-group-sub">'+coll.enabled+'/'+coll.total+' 已启用</span>')+'</div>'
+    +(ungrouped?'':'<label class="st-coll-toggle" title="一次开关整个合集（只启用已打标的）"><input type="checkbox" data-st-coll-toggle="'+esc(name)+'" '+(coll.allEnabled?'checked':'')+'><span></span><em>合集开关</em></label>')
+    +'</div>';
+  return '<section class="st-group" data-st-group="'+esc(name||'')+'">'+head+'<div class="st-grid">'+items.map(stickerCardHTML).join('')+'</div></section>';
 }
 function renderStickers(){
   var v=$('#view-stickers');
   if(!v) return;
   var items=S.stickers.items;
   var head='<div class="view-head"><div><h1 class="view-title" id="st-title">表情</h1>'
-    +'<p class="view-sub"><span>QQ 收藏表情</span><span class="sep">/</span><span>同步后先打标签再启用，Agent 只会看到已启用的</span></p></div>'
+    +'<p class="view-sub"><span>QQ 收藏表情</span><span class="sep">/</span><span>按合集归组，先打标签再启用，Agent 只会看到已启用的</span></p></div>'
     +'<div class="st-actions"><button class="btn btn-sm btn-icon" type="button" data-action="st-refresh" title="刷新" aria-label="刷新">'+icon('refresh')+'</button>'
     +'<button class="btn btn-sm btn-primary" type="button" data-action="st-sync" '+(S.stickers.syncing?'disabled':'')+'>'+(S.stickers.syncing?'同步中…':'同步收藏表情')+'</button></div></div>';
   var body='';
   if(S.stickers.loading&&!items){ body=stickerStatsHTML()+'<div class="panel"><div class="panel-body"><div class="sk" style="height:14px;width:40%"></div><div class="sk" style="height:90px;margin-top:14px"></div></div></div>'; }
   else if(S.stickers.error){ body=stickerStatsHTML()+'<div class="panel"><div class="panel-body"><div class="cfg-error">'+icon('warn','empty-ic')+'<div><div class="empty-title">表情列表加载失败</div><div class="empty-text">'+esc(S.stickers.error)+'</div></div></div><button class="btn btn-sm" type="button" data-action="st-refresh">重试</button></div></div>'; }
-  else if(!items||items.length===0){ body=stickerStatsHTML()+'<div class="panel"><div class="panel-body"><div class="empty-title">还没有同步过收藏表情</div><div class="empty-text">点右上角「同步收藏表情」从当前 QQ 号拉取收藏夹里的自定义表情；同步后逐个打标签并启用，Agent 才能用。</div></div></div>'; }
+  else if(!items||items.length===0){ body=stickerStatsHTML()+'<div class="panel"><div class="panel-body"><div class="empty-title">还没有同步过收藏表情</div><div class="empty-text">点右上角「同步收藏表情」从当前 QQ 号拉取收藏夹里的自定义表情；同步后先归组、打标签并启用，Agent 才能用。</div></div></div>'; }
   else {
-    body=stickerStatsHTML()+'<div class="st-grid">'+items.map(stickerCardHTML).join('')+'</div>';
+    var byName={};
+    items.forEach(function(it){ var n=it.collection||''; (byName[n]=byName[n]||[]).push(it); });
+    var order=(S.stickers.collections||[]).map(function(c){return c.name;});
+    Object.keys(byName).forEach(function(n){ if(n && order.indexOf(n)<0) order.push(n); });
+    var groups='';
+    order.forEach(function(n){ groups+=stickerGroupHTML(n,byName[n]||[],false); });
+    if(byName['']&&byName[''].length) groups+=stickerGroupHTML('',byName[''],true);
+    body=stickerStatsHTML()+groups;
   }
   v.innerHTML=head+body;
 }
@@ -2882,11 +2943,19 @@ function stickerInputs(id){
   var tags=$('[data-st-tags="'+id+'"]');
   return { label:label?label.value:'', tags:tags?tags.value:'' };
 }
+function stickerInputs(id){
+  var collection=$('[data-st-collection="'+id+'"]');
+  var label=$('[data-st-label="'+id+'"]');
+  var tags=$('[data-st-tags="'+id+'"]');
+  return { collection:collection?collection.value:'', label:label?label.value:'', tags:tags?tags.value:'' };
+}
+function stickerTags(value){
+  return String(value||'').split(/[,，]/).map(function(x){return x.trim();}).filter(Boolean);
+}
 async function saveSticker(id){
   var input=stickerInputs(id);
-  var tags=String(input.tags||'').split(/[,，]/).map(function(x){return x.trim();}).filter(Boolean);
   try{
-    await api('/stickers/'+encodeURIComponent(id),{method:'PUT',body:{label:input.label,tags:tags}});
+    await api('/stickers/'+encodeURIComponent(id),{method:'PUT',body:{collection:input.collection,label:input.label,tags:stickerTags(input.tags)}});
     toast('已保存','success',1800);
     await refreshStickers(false);
   }catch(err){ toast(friendlyError(err),'error',4200); }
@@ -2894,8 +2963,15 @@ async function saveSticker(id){
 async function toggleSticker(id,enabled){
   var input=stickerInputs(id);
   try{
-    var out=await api('/stickers/'+encodeURIComponent(id),{method:'PUT',body:{label:input.label,tags:String(input.tags||'').split(/[,，]/).map(function(x){return x.trim();}).filter(Boolean),enabled:enabled}});
-    if(out&&out.enabled===false&&enabled){ toast('先填写标签再启用','warn',3200); }
+    var out=await api('/stickers/'+encodeURIComponent(id),{method:'PUT',body:{collection:input.collection,label:input.label,tags:stickerTags(input.tags),enabled:enabled}});
+    if(out&&out.item&&out.item.enabled===false&&enabled){ toast('先填写标签再启用','warn',3200); }
+    await refreshStickers(false);
+  }catch(err){ toast(friendlyError(err),'error',4200); }
+}
+async function toggleCollection(name,enabled){
+  try{
+    var out=await api('/stickers/collections/'+encodeURIComponent(name),{method:'PUT',body:{enabled:enabled}});
+    toast((enabled?'已启用':'已停用')+'合集「'+name+'」'+(out&&out.changed?('（'+out.changed+' 个）'):''),'success',2400);
     await refreshStickers(false);
   }catch(err){ toast(friendlyError(err),'error',4200); }
 }
@@ -3469,6 +3545,8 @@ document.addEventListener('change', function(e){
   var t=e.target;
   if(t&&t.matches&&t.matches('[data-st-toggle]')){
     toggleSticker(t.getAttribute('data-st-toggle'), t.checked);
+  }else if(t&&t.matches&&t.matches('[data-st-coll-toggle]')){
+    toggleCollection(t.getAttribute('data-st-coll-toggle'), t.checked);
   }
 });
 document.addEventListener('keydown', function(e){

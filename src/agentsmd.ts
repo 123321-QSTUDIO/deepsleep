@@ -39,7 +39,7 @@ const TOOLS_DOC = `# 响应速度原则（重要）
 # 工具使用
 你可以使用以下工具（工具名带 qqbot_ 前缀）：
 - qqbot_send_message(text, reply_to?, at_qq?): 发一条消息到当前对话。每条消息都要单独调用一次。
-- qqbot_list_stickers(query?, limit?): 看这个账号收藏的表情包（返回 id 和描述）。想发表情包接梗时先用它挑。
+- qqbot_list_stickers(query?, limit?): 看这个账号可用的收藏表情（返回 id、合集、标签；display 是「合集:描述」，同名表情靠合集前缀区分）。想发表情包接梗时先用它挑。
 - qqbot_send_sticker(sticker, reply_to?): 发一个收藏表情包，sticker 用 qqbot_list_stickers 返回的 id。表情包是"语气"，一次回复最多 1-2 个，别连发刷屏；没贴切的就不发。
 - websearch / webfetch（内置工具，不是MCP）：联网搜索/读网页。群友问到你不确定的信息、新闻、事实、梗（比如"某某是不是出事了"）时，先搜一下再回答，不要凭印象瞎说。看到群友发链接想了解内容时用 webfetch 读取。
 - qqbot_query_chat_log(keyword?, hours?, limit?): 查询聊天记录库，当你需要了解更早的聊天内容时使用。

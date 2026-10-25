@@ -19,6 +19,8 @@ export interface StickerRecord {
   desc: string
   /** 人工/AI 打的标签，Agent 实际使用的语义描述 */
   label: string
+  /** 所属合集（表情商店下载的包/自建分组）；空=未分组收藏 */
+  collection: string
   tags: string[]
   enabled: boolean
   syncedAt: number
@@ -92,7 +94,10 @@ export class StickerStore {
         old.syncedAt = now
         updated++
       } else {
-        this.items.set(id, normalize({ id, md5: d.md5, url: d.url, desc: d.desc, syncedAt: now }))
+        // 商店来源的表情一般带描述：先当作初始标签（仍不自动启用，由合集/单卡开关决定）
+        const desc = String(d.desc ?? '').trim()
+        const autoLabel = isMeaningfulDesc(desc) ? desc.slice(0, 80) : ''
+        this.items.set(id, normalize({ id, md5: d.md5, url: d.url, desc, label: autoLabel, syncedAt: now }))
         added++
       }
     }
@@ -101,7 +106,7 @@ export class StickerStore {
     return { added, updated, total: this.items.size }
   }
 
-  update(id: string, patch: { label?: unknown; tags?: unknown; enabled?: unknown }): StickerRecord | null {
+  update(id: string, patch: { label?: unknown; tags?: unknown; enabled?: unknown; collection?: unknown }): StickerRecord | null {
     const item = this.items.get(id)
     if (!item) return null
     if (patch.label !== undefined) item.label = String(patch.label ?? '').trim().slice(0, 80)
@@ -109,6 +114,7 @@ export class StickerStore {
       const tags = Array.isArray(patch.tags) ? patch.tags : String(patch.tags ?? '').split(/[,，\s]+/)
       item.tags = [...new Set(tags.map((t) => String(t).trim()).filter(Boolean))].slice(0, 12)
     }
+    if (patch.collection !== undefined) item.collection = String(patch.collection ?? '').trim().slice(0, 40)
     if (patch.enabled !== undefined) item.enabled = patch.enabled === true || patch.enabled === 'true'
     // 没有标签的表情不允许启用（Agent 无法判断语义）
     if (item.enabled && item.label.length === 0) item.enabled = false
@@ -117,14 +123,66 @@ export class StickerStore {
     return item
   }
 
-  /** Agent 可见表情：已打标 + 已启用 */
-  listForAgent(query?: string): { id: string; label: string; tags: string[] }[] {
+  /** 合集（表情包）列表：用于面板合集级总开关 */
+  listCollections(): { name: string; total: number; labeled: number; enabled: number; allEnabled: boolean }[] {
+    const map = new Map<string, StickerRecord[]>()
+    for (const item of this.items.values()) {
+      const name = item.collection || ''
+      if (!name) continue
+      const arr = map.get(name) ?? []
+      arr.push(item)
+      map.set(name, arr)
+    }
+    return [...map.entries()]
+      .map(([name, arr]) => {
+        const labeled = arr.filter((s) => s.label.trim().length > 0).length
+        const enabled = arr.filter((s) => s.enabled).length
+        return { name, total: arr.length, labeled, enabled, allEnabled: labeled > 0 && enabled === labeled && arr.every((s) => s.label.trim().length > 0) }
+      })
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
+  }
+
+  /** 合集级总开关：启用时跳过未打标的（它们仍需单独补标签） */
+  renameCollection(from: string, to: string): number {
+    const next = to.trim().slice(0, 40)
+    if (!next) return 0
+    let changed = 0
+    for (const item of this.items.values()) {
+      if (item.collection !== from) continue
+      item.collection = next
+      item.updatedAt = Math.floor(Date.now() / 1000)
+      changed++
+    }
+    if (changed > 0) this.save()
+    return changed
+  }
+
+  setCollectionEnabled(name: string, enabled: boolean): number {
+    let changed = 0
+    for (const item of this.items.values()) {
+      if (item.collection !== name) continue
+      if (enabled && item.label.trim().length === 0) continue
+      if (item.enabled !== enabled) {
+        item.enabled = enabled
+        item.updatedAt = Math.floor(Date.now() / 1000)
+        changed++
+      }
+    }
+    if (changed > 0) this.save()
+    return changed
+  }
+
+  /** Agent 可见表情：已打标 + 已启用；display 用"合集名:标签"区分不同合集的同名表情 */
+  listForAgent(query?: string): { id: string; collection: string; label: string; display: string; tags: string[] }[] {
     const kw = (query ?? '').trim().toLowerCase()
     return this.list()
       .filter((s) => s.enabled && s.label.trim().length > 0)
-      .filter((s) => !kw || (s.label + ' ' + s.tags.join(' ') + ' ' + s.desc).toLowerCase().includes(kw))
+      .filter((s) => !kw || ((s.collection || '') + ' ' + s.label + ' ' + s.tags.join(' ') + ' ' + s.desc).toLowerCase().includes(kw))
       .slice(0, 100)
-      .map((s) => ({ id: s.id, label: s.label, tags: s.tags }))
+      .map((s) => {
+        const collection = s.collection || '收藏'
+        return { id: s.id, collection, label: s.label, display: collection + ':' + s.label, tags: s.tags }
+      })
   }
 
   findEnabled(id: string): StickerRecord | undefined {
@@ -141,9 +199,16 @@ function normalize(raw: Partial<StickerRecord> & { id: string }): StickerRecord 
     url: String(raw.url ?? ''),
     desc: String(raw.desc ?? ''),
     label: String(raw.label ?? '').trim(),
+    collection: String(raw.collection ?? '').trim(),
     tags: Array.isArray(raw.tags) ? raw.tags.map(String) : [],
     enabled: raw.enabled === true && String(raw.label ?? '').trim().length > 0,
     syncedAt: Number(raw.syncedAt ?? now),
     updatedAt: Number(raw.updatedAt ?? now),
   }
+}
+
+/** QQ 给的表情描述可能是占位文字，不能当标签 */
+function isMeaningfulDesc(desc: string): boolean {
+  if (!desc) return false
+  return !/^\[(动画)?表情\]$|^\[图片\]$|^\[表情\]$/.test(desc.trim()) && desc.trim().length >= 2
 }

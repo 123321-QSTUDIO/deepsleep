@@ -239,6 +239,25 @@ export class ControlPanel {
       }
       return
     }
+    const collectionMatch = /^\/api\/stickers\/collections\/([^/]+)$/.exec(pathname)
+    if (method === 'PUT' && collectionMatch) {
+      const name = decodeURIComponent(collectionMatch[1])
+      const body = await this.readBody(req)
+      let changed = 0
+      if (typeof body.rename === 'string' && body.rename.trim()) {
+        changed = this.deps.stickers.renameCollection(name, body.rename)
+      }
+      if (body.enabled !== undefined) {
+        changed += this.deps.stickers.setCollectionEnabled(name, body.enabled === true || body.enabled === 'true')
+      }
+      this.sendJson(res, 200, {
+        ok: true,
+        changed,
+        stats: this.deps.stickers.stats(),
+        collections: this.deps.stickers.listCollections(),
+      })
+      return
+    }
     const stickerMatch = /^\/api\/stickers\/([^/]+)$/.exec(pathname)
     if (method === 'PUT' && stickerMatch) {
       const id = decodeURIComponent(stickerMatch[1])
@@ -258,6 +277,7 @@ export class ControlPanel {
     return {
       items: this.deps.stickers.list(),
       stats: this.deps.stickers.stats(),
+      collections: this.deps.stickers.listCollections(),
     }
   }
 

@@ -93,7 +93,7 @@ export class QqMcpServer {
     mcp.registerTool(
       'list_stickers',
       {
-        description: '列出当前 QQ 账号收藏的表情包（带描述），想发表情包时先调它挑一个。',
+        description: '列出当前 QQ 账号可用的收藏表情（已打标+启用）。返回 {id, collection, label, display}；display 是「合集:描述」，同名表情靠合集区分；发送时用 id。',
         inputSchema: {
           query: z.string().optional().describe('按描述关键词筛选，可不传'),
           limit: z.number().optional().describe('最多返回多少个，默认 30，最多 100'),
@@ -115,7 +115,7 @@ export class QqMcpServer {
     mcp.registerTool(
       'send_sticker',
       {
-        description: '发送当前 QQ 账号收藏的表情包（比普通表情更生动）。先用 qqbot_list_stickers 找 id；一次回复最多发 1-2 个，别刷屏。',
+        description: '发送当前 QQ 账号收藏的表情包（比普通表情更生动）。先用 qqbot_list_stickers 找 id（同名表情看 display 的合集名前缀）；一次回复最多发 1-2 个，别刷屏。',
         inputSchema: {
           sticker: z.string().describe('收藏表情的 emoji_id（来自 qqbot_list_stickers）或 32 位 MD5'),
           reply_to: z.string().optional().describe('要引用的消息ID，可选'),
