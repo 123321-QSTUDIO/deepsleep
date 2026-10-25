@@ -106,10 +106,11 @@ ssh -N -L 5100:127.0.0.1:5100 user@<Windows服务器IP> \
 插件配置相应字段（见第 8 节）：
 - `dockerHost`: `ssh://user@<远程主机IP>`（留空则读本机）
 - 远程模式下的任务生命周期（每 QQ 一个可休眠会话）：
-  1. 首个复杂任务：在远程主机为该 QQ 创建容器 `qqbot-user-<QQ>`（挂载 `/opt/qqbot-users/<QQ>/home` 和 `workspace`），`opencode run` 建立 session
+  1. 首个复杂任务：在远程主机为该 QQ 创建容器 `qqbot-user-<QQ>`（挂载 `/opt/qqbot-users/<QQ>/home` 和 `workspace`），用 `opencode run --standalone --format json --model ...` 建立 session
   2. 任务完成：`docker stop` 容器（不再占用 CPU/内存）→ workspace 产物压缩到 `archive/workspace-<时间>.tar.gz` → 清空 workspace
-  3. 同 QQ 再次提交任务：唤醒同一容器、解压最近归档、`opencode run --continue` 延续之前的 session（上下文不断）
-  4. 归档保留 `archiveRetentionDays`（默认 5）天，超期自动清理
+  3. 同 QQ 再次提交任务：唤醒同一容器、解压最近归档，在上述命令后保留 `--continue` 延续之前的 session（上下文不断）
+  4. 执行器从 NDJSON 输出中取最后一条 assistant 文本作为结果
+  5. 归档保留 `archiveRetentionDays`（默认 5）天，超期自动清理
   - `home/` 持久保存该 QQ 的 opencode 数据（含 session 数据库）和个人 token/key（.env 等可手放这里）
   - 同一 QQ 的任务串行执行（一个容器不能同时跑两个任务），不同 QQ 之间受 `taskConcurrency` 限制
 
@@ -123,37 +124,39 @@ $env:DOCKER_HOST='ssh://user@<远程主机IP>'; docker run --rm hello-world   # 
 
 ## 2. host opencode（上层，常驻）
 
+必须使用 **OpenCode 2.1.4**，安装包为 `@opencode/cli`：
+
 ```powershell
-npm i -g opencode-ai
-opencode --version
+npm i -g @opencode/cli@2.1.4
+opencode --version   # 必须为 2.1.4
 ```
 
-**模型**：默认用 OpenCode Zen 的免费模型 `opencode/deepseek-v4-flash-free`，**无需任何登录/密钥**
-（opencode 对 zen 免费模型内置 `apiKey: "public"`，开箱即用）。插件会给每个工作区自动写入该默认模型。
+**模型**：默认 host 模型为 OpenCode Zen 免费模型 `opencode/deepseek-v4.1-flash-free`，vision 模型为 `opencode/mimo-v2.6-flash-free`，**无需任何登录/密钥**
+（opencode 对 zen 免费模型内置 `apiKey: "public"`，开箱即用）。插件会给每个工作区自动写入默认模型；配置加载会自动迁移已知旧模型 ID，旧 session 若仍存弃用模型则执行 `/reset` 重建。
 想换更强的付费模型才需要 `opencode auth login`（选 OpenCode Zen 或其他 provider）。
 
 先验证免费模型可用：
 
 ```powershell
-opencode run --model opencode/deepseek-v4-flash-free "只回复两个字：你好"
+opencode run --model opencode/deepseek-v4.1-flash-free "只回复两个字：你好"
 # 期望输出"你好"。失败说明网络到不了 opencode.ai，先解决网络。
 ```
 
-用计划任务常驻（密码换成强密码）：
+用计划任务常驻（密码换成强密码）。**必须显式设置密码并同步第 8 节的 `opencodePassword`**：2.1.4 前台 serve 未设密码会随机生成，导致机器人无法连接。优先使用 `OPENCODE_PASSWORD`；旧 `OPENCODE_SERVER_PASSWORD` 仍兼容，但新部署不要再用。
 
 ```powershell
-$env:OPENCODE_SERVER_PASSWORD = 'CHANGE_ME_STRONG_PASSWORD'
-Start-Process -WindowStyle Hidden -FilePath "cmd.exe" -ArgumentList '/c "set OPENCODE_SERVER_PASSWORD=CHANGE_ME_STRONG_PASSWORD&& opencode serve --hostname 127.0.0.1 --port 4096 > C:\qqbot\opencode-serve.log 2>&1"'
+$env:OPENCODE_PASSWORD = 'CHANGE_ME_STRONG_PASSWORD'
+Start-Process -WindowStyle Hidden -FilePath "cmd.exe" -ArgumentList '/c "set OPENCODE_PASSWORD=CHANGE_ME_STRONG_PASSWORD&& opencode serve --hostname 127.0.0.1 --port 4096 > C:\qqbot\opencode-serve.log 2>&1"'
 
 # 开机自启
 schtasks /create /tn "opencode-serve" /sc onlogon /rl highest /f `
-  /tr "cmd /c set OPENCODE_SERVER_PASSWORD=CHANGE_ME_STRONG_PASSWORD&& opencode serve --hostname 127.0.0.1 --port 4096 > C:\qqbot\opencode-serve.log 2>&1"
+  /tr "cmd /c set OPENCODE_PASSWORD=CHANGE_ME_STRONG_PASSWORD&& opencode serve --hostname 127.0.0.1 --port 4096 > C:\qqbot\opencode-serve.log 2>&1"
 ```
 
 【验证】
 ```powershell
-curl.exe -s -u opencode:CHANGE_ME_STRONG_PASSWORD http://127.0.0.1:4096/session/status
-# 期望返回 JSON。401=密码不对；连不上=服务没起，看 C:\qqbot\opencode-serve.log
+curl.exe -s -u opencode:CHANGE_ME_STRONG_PASSWORD http://127.0.0.1:4096/api/info
+# 也可检查 /api/session/active；期望返回 JSON。401=密码不对；连不上=服务没起，看 C:\qqbot\opencode-serve.log
 ```
 
 ## 3. 构建本插件
@@ -337,7 +340,8 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 ```json
 {
   "botName": "DeepSleep",
-  "hostModel": "opencode/deepseek-v4-flash-free",
+  "hostModel": "opencode/deepseek-v4.1-flash-free",
+  "visionModel": "opencode/mimo-v2.6-flash-free",
   "opencodeUrl": "http://127.0.0.1:4096",
   "opencodePassword": "CHANGE_ME_STRONG_PASSWORD",
   "mcpPort": 5100,
@@ -358,41 +362,45 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
   "taskTimeoutSec": 900,
   "taskConcurrency": 3,
   "contextMessageCount": 15,
-  "replyDelayMinMs": 300,
-  "replyDelayMaxMs": 800
+  "replyDelayMinMs": 1200,
+  "replyDelayMaxMs": 3000,
+  "maxLinesPerReply": 4
 }
 ```
 
-- `hostModel`：host 层每个工作区的默认模型，默认 zen 免费模型（`opencode/deepseek-v4-flash-free`）
-- `visionModel`：视觉桥接子代理（vision-bridge）用的识图模型，默认 `opencode/mimo-v2.5-free`（zen 免费，支持图/音/视频）。图片消息会下载到工作目录 `inbox/`，由纯文本主模型通过 Task 工具调桥接子代理读图，**不是**直接切换主模型（deepseek 免费版是纯文本模型）
+- `hostModel`：host 层每个工作区的默认模型，默认 `opencode/deepseek-v4.1-flash-free`；已知旧模型 ID 会在配置加载时自动迁移，旧 session 存了弃用模型则 `/reset`
+- `visionModel`：视觉桥接 subagent（vision-bridge）用的识图模型，默认 `opencode/mimo-v2.6-flash-free`。图片消息会下载到工作目录 `inbox/`，由纯文本主模型通过 **subagent** 工具调桥接代理读图，**不是**直接切换主模型
+- 工作区 opencode.json 使用 `agents` + `system`、`mcp.servers` 和 `codemode: false`。MCP 共 8 个工具，模型可见名带 `qqbot_` 前缀（如 `qqbot_send_message`、`qqbot_query_chat_log`、`qqbot_submit_task`），MCP 服务注册名不变
 - `mcpHost`：MCP 服务绑定地址，默认 `127.0.0.1`（回环）。**服务器有公网 IP 直绑网卡时切勿改成 0.0.0.0**；方式 B（WSL2 docker）确需容器访问时才改为 `0.0.0.0` 并配合防火墙只放行容器网段
-- `opencodePassword` 必须等于第 2 步的 `OPENCODE_SERVER_PASSWORD`
+- `opencodePassword` 必须等于第 2 步显式设置的 `OPENCODE_PASSWORD`，不能为空或写成可选项
 - `dockerHost`：留空 = 本机 docker；方式 C 填 `tcp://127.0.0.1:2375`（走持久 SSH 隧道，见方式 C-1）
 - `remoteSsh`：方式 C 必填，`<HK用户>@<HK_IP>`，远程文件操作（建目录/解压/归档）走这条 SSH
 - `remoteSshKey`：可选，私钥绝对路径（如 `C:\\napcat-data\\hk_key`）。**NapCat 进程若非交互式用户启动（计划任务/服务），ssh 可能找不到 `~/.ssh` 里的密钥导致 BatchMode 失败——此时务必显式配置此项**，密钥用 `ssh-keygen -t ed25519 -f C:\napcat-data\hk_key -N '""'` 生成，公钥加到 HK 的 authorized_keys
 - `storageQuotaMB`：每个 QQ 的持久目录（home+workspace+archive）总配额，默认 500MB，超了从最旧归档开始删
 - `artifactBaseUrl` / `artifactToken` / `linkTtlMinutes`：产物下载服务（见 9.1 节）；链接为 HMAC 签名临时链接，默认 10 分钟有效，有效期内重复索要返回同一链接（不重复生成），失效后才能生成新链接
 - `archiveRetentionDays`：产物归档留存天数（默认 5），**每次该 QQ 的 session 被激活会自动刷新最近归档的过期时间**
-- `dockerEnv`：**用免费模型时留空 `{}` 即可**；要给容器换付费模型时才填 key（如 `ANTHROPIC_API_KEY`），同时改 `docker/opencode.json` 里的 `model` 并重新 build 镜像
+- `replyDelayMinMs` / `replyDelayMaxMs` 默认 `1200` / `3000` 毫秒，`maxLinesPerReply` 默认 `4`
+- `dockerEnv`：**用免费模型时留空 `{}` 即可**；要给容器换付费模型时才填 key（如 `ANTHROPIC_API_KEY`），同时调整 qqbot-hk-runner 的模型配置并重新 build 镜像
 - 方式 B（WSL2 docker）时 `mcpUrlForDocker` 改为 `http://<Windows主机IP>:5100/mcp`；方式 C 改为 `http://<本机IP>:5100/mcp`
-- 改完重启 NapCat 生效
+- 改完重启机器人服务（旧插件模式则重启 NapCat）生效
 
 ## 9. 构建任务沙箱镜像
 
-镜像构建文件（Dockerfile + 容器内 opencode.json）在远程执行层仓库 [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner) 的 `docker/` 目录。
+镜像构建文件（Dockerfile + 容器内 opencode.json）在远程执行层仓库 [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner) 的 `docker/` 目录。**远程 qqbot-hk-runner 镜像必须升级到 OpenCode 2.1.4，旧镜像不可继续用于新任务协议。**
 
 - 方式 A/B（本机 docker）：clone qqbot-hk-runner 后 `docker build -t qqbot-opencode-task:latest docker/`
-- 方式 C（远程主机）：HK 主机跑 `setup-hk.sh` 时已自动完成此步，无需手动
+- 方式 C（远程主机）：HK 主机跑 `setup-hk.sh` 时构建镜像；升级后必须重新构建并确认版本，不能沿用旧镜像
+- 任务统一使用 `opencode run --standalone --format json --model ...`，远程续跑保留 `--continue`；执行器读取 NDJSON 最后一条 assistant 文本
 
 【验证】
 ```powershell
-docker run --rm --entrypoint opencode qqbot-opencode-task:latest --version
+docker run --rm --entrypoint opencode qqbot-opencode-task:latest --version   # 必须为 2.1.4
 docker run --rm `
   -e QQBOT_MCP_URL=http://host.docker.internal:5100/mcp `
   -e MCP_TOKEN=CHANGE_ME_MCP_TOKEN `
   -e QQBOT_SCOPE=group-0 `
-  qqbot-opencode-task:latest run "回复两个字：你好"
-# 期望输出包含"你好"（容器里同样走 zen 免费模型，无需 key）
+  qqbot-opencode-task:latest run --standalone --format json --model opencode/deepseek-v4.1-flash-free "回复两个字：你好"
+# 期望 NDJSON 最后的 assistant 文本包含"你好"（容器里同样走 zen 免费模型，无需 key）
 ```
 
 ## 9.1 产物下载服务（远程模式 + 域名，可选但推荐）
@@ -412,7 +420,8 @@ sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
 
 ## 10. 部署完成检查单
 
-- [ ] `curl.exe -u opencode:PASS http://127.0.0.1:4096/session/status` 返回 200
+- [ ] `opencode --version` 与任务镜像内版本均为 2.1.4
+- [ ] `curl.exe -u opencode:PASS http://127.0.0.1:4096/api/info` 返回 200（也可用 `/api/session/active`）
 - [ ] `curl.exe -s -X POST -H "authorization: Bearer MCP_TOKEN" -H "content-type: application/json" -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"c\",\"version\":\"1\"}}}' http://127.0.0.1:5100/mcp` 返回 JSON（不是 401/404）
 - [ ] QQ 在线，机器人在测试群里
 - [ ] 日志有 `[qqbot] 初始化完成`
@@ -496,7 +505,7 @@ shell 模式被踢的核心嫌疑是"无窗口 headless 客户端"这个行为�
 | 插件列表没有本插件 / 提示 not in whitelist | 白名单补丁没打上或没重新 build:shell；确认 start.bat 加载的是自编译的 `C:\napcat\napcat.mjs`（对比构建产物 MD5） |
 | launcher 报 "provided QQ path is invalid" | QQ 未安装或装在非默认路径，改 start.bat 里 QQ.exe 路径 |
 | 插件初始化报 MCP 端口占用 | 5100 被占：三处配置（mcpPort/mcpUrl/mcpUrlForDocker）一起改 |
-| @机器人没反应 | 看日志 opencode 请求报错：401=密码不对；ECONNREFUSED=serve 没起；没报错但没回复=模型问题，手动跑 `opencode run --model opencode/deepseek-v4-flash-free "hi"` 排查 |
+| @机器人没反应 | 看日志 opencode 请求报错：401=密码不对；ECONNREFUSED=serve 没起；没报错但没回复=模型问题，手动跑 `opencode run --model opencode/deepseek-v4.1-flash-free "hi"` 排查 |
 | zen 免费模型报 "usage limit reached" | 免费模型有额度限制（几小时重置），密集测试时悠着点；或 `opencode auth login` 登录 zen 账号提额/换付费模型 |
 | 任务 error "沙箱环境不可用" | NapCat 进程里调不到 docker：确认 Docker Desktop 在跑；QQ 进程环境与当前用户一致（docker CLI 在 PATH 里） |
 | 容器连不上 MCP | Docker Desktop 自带 host.docker.internal；方式 B 见第 8 节说明；Windows 防火墙放行 5100 |

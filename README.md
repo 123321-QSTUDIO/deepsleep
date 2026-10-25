@@ -6,14 +6,16 @@ QQ 群 AI 机器人（DeepSleep）：双形态——**独立服务（推荐，On
 
 ## 架构
 
+要求 **OpenCode 2.1.4**，使用 V2 API（`/api/session`、`/api/session/active`、`/api/event`、`/api/info`）。创建 session 的 `directory` 放在 POST body；新 session 未显式传模型时不再一概在创建时锁死。
+
 ```
 QQ群/私聊 ⇄ NapCat (自编译, 白名单放行本插件)
              └─ napcat-plugin-qqbot（本插件，系统中枢）
                 ├─ 消息收发（plugin_onmessage / send_msg）
                 ├─ 消息库：每群/每人每天一个 SQLite（sql.js WASM）
                 ├─ Session 控制器 → 本机 opencode serve（每群/每人一个持久 session）
-                ├─ MCP Server（HTTP+Bearer）：send_message / query_chat_log /
-                │   submit_task / list_tasks / get_task_detail
+                ├─ MCP Server（HTTP+Bearer，共 8 个工具）
+                │   模型可见名带 qqbot_ 前缀，MCP 服务注册名不变
                 ├─ 任务注册表：task_id ↔ 属主QQ/群号/消息ID（持久化，重启恢复）
                 └─ 任务执行器：本地 docker 一次性容器；或远程 docker 主机（ssh://）——
                     每 QQ 一个可休眠容器（qqbot-user-<QQ>），任务完成 stop + 产物压缩归档
@@ -28,10 +30,10 @@ Docker opencode（下层）：一次性容器跑重活；结果 → 私聊全文
 
 1. 群消息全部写入消息库（不触发的也写，供 Agent 检索上下文）
 2. @机器人 / 回复机器人消息 → 组装 prompt（最近 N 条上下文 + 引用还原）→ 群 session
-3. Agent 用 `send_message` 分句回复（每条一次调用，像真人打字）；忘了调则兜底按行拆发
-4. 复杂请求 → Agent 调 `submit_task` → 自己回一句"处理完回复你" → 插件排队起容器
+3. Agent 用 `qqbot_send_message` 分句回复（每条一次调用，像真人打字）；忘了调则兜底按行拆发
+4. 复杂请求 → Agent 调 `qqbot_submit_task` → 自己回一句"处理完回复你" → 插件排队起容器
 5. 容器完成 → 群里 reply 原提问 + @发起人 + 一句话结论（Agent 措辞）；全文私聊属主并注入私聊上下文
-6. 属主私聊问"我的任务怎么样了" → 私聊 session 用 `list_tasks`/`get_task_detail` 查（越权只给状态不给内容）
+6. 属主私聊问"我的任务怎么样了" → 私聊 session 用 `qqbot_list_tasks`/`qqbot_get_task_detail` 查（越权只给状态不给内容）
 
 ## 目录
 
@@ -40,21 +42,21 @@ src/
 ├── index.ts      插件入口（plugin_init / plugin_onmessage / plugin_cleanup，旧模式）
 ├── main.ts       独立服务入口（OneBot WS 连接 NapCat，推荐模式）
 ├── onebot.ts     OneBot v11 WebSocket 客户端（自动重连、action/echo 往返）
-├── config.ts     配置（config.json 首次运行自动生成）
+├── config.ts     配置（config.json 首次运行自动生成，已知旧模型 ID 自动迁移）
 ├── msgdb.ts      消息库：sql.js(WASM SQLite)，按 scope+天 分文件
 ├── format.ts     消息段提取（文本/引用/@/图片/CQ 码清洗）
-├── opencode.ts   opencode HTTP 客户端 + SSE 事件订阅（自动重连）
+├── opencode.ts   OpenCode V2 HTTP 客户端 + SSE 事件订阅（自动重连）
 ├── sessions.ts   Session 控制器：映射持久化、工作区、触发判定、prompt 组装、回复路由、
-│                 串行发送队列、watchdog 兜底（轮询 status，idle 时拆句补发）
+│                 串行发送队列、watchdog 兜底（轮询 /api/session/active，running 即忙碌）
 ├── agentsmd.ts   各群/私聊工作区 AGENTS.md 生成器（人设+分句规则+表情表+工具说明）
 ├── tasks.ts      任务注册表（tasks.json 持久化）
 ├── executor.ts   任务执行器（远程 docker：每 QQ 可休眠容器、归档、配额、过期提醒）
-└── mcp.ts        MCP Server（6 工具，scope 头路由，沙箱模式，属主权限校验）
-smoke*.mjs        冒烟测试（消息库 / session / MCP 六工具 / 视觉桥接 / watchdog / 服务模式）
+└── mcp.ts        MCP Server（8 工具，scope 头路由，沙箱模式，属主权限校验）
+smoke*.mjs        冒烟测试（消息库 / V2 session / MCP 八工具 / 图片与视觉 / watchdog / 服务模式）
 ```
 
 > 任务沙箱镜像、HK 部署脚本、产物下载服务在独立的执行层仓库
-> [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner)（HK 服务器由单独的 Agent 部署）。
+> [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner)（HK 服务器由单独的 Agent 部署，镜像须使用 OpenCode 2.1.4）。
 
 ## 构建
 
@@ -63,9 +65,13 @@ npm install
 npm run typecheck
 npm run build        # 产出 dist/（NapCat 插件）+ dist-service/（独立服务，推荐）
 node smoke.mjs           # 冒烟：消息库
-node smoke2.mjs          # 冒烟：session 创建（需本地 opencode serve）
-node smoke3.mjs          # 冒烟：MCP 六工具
+node smoke2.mjs          # 冒烟：V2 session 创建（需本地 OpenCode 2.1.4 serve）
+node smoke3.mjs          # 冒烟：MCP 八工具
+node smoke4.mjs          # 冒烟：离线图片下载/prompt
+node smoke5.mjs <图片路径>  # 冒烟：视觉；也可设 QQBOT_TEST_IMAGE
 node smoke6.mjs          # 冒烟：watchdog 兜底（需本地 opencode serve）
+node smoke9.mjs          # 冒烟：离线 V2 生命周期
+node smoke10.mjs         # 冒烟：配置模型 ID 自动迁移（离线）
 node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 ```
 
@@ -77,37 +83,39 @@ node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 
 1. **NapCat**：官方发行版即可（不再需要自编译白名单），WebUI 开 WebSocket 服务器（127.0.0.1:3001 + token）
 2. **机器人服务**：拷贝 `dist-service/` 到 `C:\qqbot-svc`，`node index.mjs` 或计划任务常驻——**更新只重启这个进程，不动 QQ/NapCat**
-3. **host opencode**：`opencode serve --hostname 127.0.0.1 --port 4096`
-   （设 `OPENCODE_SERVER_PASSWORD` 则同步填到配置 `opencodePassword`）
-4. **任务沙箱镜像**：在远程执行层仓库 [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner) 构建（HK 主机跑其 `script/setup-hk.sh` 一键完成）。
-5. **模型**：默认全部走 OpenCode Zen 免费模型 `opencode/deepseek-v4-flash-free`（免登录）；换付费模型才需要 `opencode auth login` 或配置 `dockerEnv`。
+3. **host opencode**：安装 `@opencode/cli` 并确认版本为 2.1.4，再运行 `opencode serve --hostname 127.0.0.1 --port 4096`。
+   **必须显式设置 `OPENCODE_PASSWORD` 并同步配置 `opencodePassword`**；旧 `OPENCODE_SERVER_PASSWORD` 仅作兼容。2.1.4 未设密码会随机生成，不能省略。
+4. **任务沙箱镜像**：在远程执行层仓库 [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner) 构建（HK 主机跑其 `script/setup-hk.sh` 一键完成），镜像必须升级到 OpenCode 2.1.4。
+5. **模型**：默认 host/vision 分别走 OpenCode Zen 免费模型 `opencode/deepseek-v4.1-flash-free`、`opencode/mimo-v2.6-flash-free`（免登录）；配置加载会迁移已知旧模型 ID。换付费模型才需要 `opencode auth login` 或配置 `dockerEnv`。
 6. 群里 @机器人 即可。
 
 **测试**：验收用例见 [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md)；测完按
-[`docs/TEST_REPORT.template.md`](docs/TEST_REPORT.template.md) 填写为根目录 `TEST_REPORT.md` 并 push。
+[`docs/TEST_REPORT.template.md`](docs/TEST_REPORT.template.md) 填写为根目录 `TEST_REPORT.md` 并 push。历史报告不代表当前结果。
 
 ## 配置（config.json）
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
 | `botName` | `DeepSleep` | 机器人自称（写入 AGENTS.md 人设） |
-| `hostModel` | `opencode/deepseek-v4-flash-free` | host 层默认模型（OpenCode Zen 免费模型，免登录） |
-| `visionModel` | `opencode/mimo-v2.5-free` | vision-bridge 桥接子代理的识图模型（免费 MiMo V2.5；图片下载到 inbox/ 由子代理读图） |
-| `opencodeUrl` / `opencodePassword` | `http://127.0.0.1:4096` | host opencode 地址与密码 |
+| `hostModel` | `opencode/deepseek-v4.1-flash-free` | host 层默认模型（OpenCode Zen 免费模型，免登录） |
+| `visionModel` | `opencode/mimo-v2.6-flash-free` | vision-bridge 桥接 subagent 的识图模型（免费 MiMo V2.6；图片下载到 inbox/ 由 subagent 读图） |
+| `opencodeUrl` | `http://127.0.0.1:4096` | host opencode V2 地址 |
+| `opencodePassword` | 空（部署必填） | 必须与 serve 的 `OPENCODE_PASSWORD` 一致 |
 | `mcpPort` / `mcpToken` / `mcpUrl` | `5100` | 插件 MCP Server 监听与鉴权 |
 | `mcpUrlForDocker` | `http://host.docker.internal:5100/mcp` | 容器访问 MCP 的地址 |
-| `dockerImage` / `dockerEnv` | `qqbot-opencode-task:latest` | 任务镜像与注入容器的环境变量（API key） |
+| `dockerImage` / `dockerEnv` | `qqbot-opencode-task:latest` | 任务镜像与注入容器的环境变量（API key），镜像须为 OpenCode 2.1.4 |
 | `dockerHost` | 空（本机） | 远程 docker 主机（如 `ssh://user@x.x.x.x`），本机无法虚拟化时用 |
 | `remoteWorkRoot` / `archiveRetentionDays` | `/opt/qqbot-users` / `5` | 远程模式每 QQ 持久目录根路径与产物归档留存天数（激活 session 自动续期） |
 | `storageQuotaMB` | `500` | 每 QQ 持久目录总配额，超出从最旧归档开始清理 |
 | `artifactBaseUrl` / `artifactToken` / `linkTtlMinutes` | 空 / 空 / 10 | 产物下载服务地址、签名密钥、链接有效期（分钟）。有效期内重复索要返回同一链接，失效后可再生成；产物到期前一天主动私聊提醒 |
-| `taskConcurrency` / `taskTimeoutSec` | `2` / `900` | 任务并发上限与超时 |
+| `taskConcurrency` / `taskTimeoutSec` | `3` / `900` | 任务并发上限与超时 |
 | `contextMessageCount` | `15` | 触发时携带的最近上下文条数 |
-| `replyDelayMinMs` / `replyDelayMaxMs` | `300` / `800` | 兜底分句发送的随机间隔 |
+| `replyDelayMinMs` / `replyDelayMaxMs` | `1200` / `3000` | 兜底分句发送的随机间隔 |
+| `maxLinesPerReply` | `4` | 兜底回复最大分句数，超出自动合并 |
 
 ## 群命令
 
-- `/reset`：清空当前对话的记忆（删除 opencode session）
+- `/reset`：清空当前对话的记忆（删除并重建 opencode session）；旧 session 存了弃用模型时也可用它恢复
 - `/abort`：打断正在生成的回复
 
 ## 注意
