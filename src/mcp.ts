@@ -89,6 +89,53 @@ export class QqMcpServer {
     )
 
     mcp.registerTool(
+      'list_stickers',
+      {
+        description: '列出当前 QQ 账号收藏的表情包（带描述），想发表情包时先调它挑一个。',
+        inputSchema: {
+          query: z.string().optional().describe('按描述关键词筛选，可不传'),
+          limit: z.number().optional().describe('最多返回多少个，默认 30，最多 100'),
+        },
+      },
+      async ({ query, limit }) => {
+        if (!scope) return text('错误: 未知对话上下文')
+        try {
+          const list = await sessions.listStickers(Math.min(Math.max(limit ?? 30, 1), 100))
+          const kw = (query ?? '').trim().toLowerCase()
+          const filtered = kw
+            ? list.filter((s) => (s.desc + ' ' + s.md5 + ' ' + s.id).toLowerCase().includes(kw))
+            : list
+          if (filtered.length === 0) return text(kw ? '没有找到匹配的收藏表情' : '这个账号没有收藏表情')
+          return text(JSON.stringify(filtered.slice(0, 50).map((s) => ({ id: s.id, desc: s.desc || '(无描述)' }))))
+        } catch (e) {
+          return text('读取收藏表情失败: ' + String((e as Error)?.message ?? e))
+        }
+      }
+    )
+
+    mcp.registerTool(
+      'send_sticker',
+      {
+        description: '发送当前 QQ 账号收藏的表情包（比普通表情更生动）。先用 qqbot_list_stickers 找 id；一次回复最多发 1-2 个，别刷屏。',
+        inputSchema: {
+          sticker: z.string().describe('收藏表情的 emoji_id（来自 qqbot_list_stickers）或 32 位 MD5'),
+          reply_to: z.string().optional().describe('要引用的消息ID，可选'),
+        },
+      },
+      async ({ sticker, reply_to }) => {
+        if (!scope) return text('错误: 未知对话上下文')
+        if (taskMode) return text('错误: 沙箱任务中不能发消息')
+        try {
+          await sessions.sendStickerToScope(scope, sticker, { replyTo: reply_to })
+          sessions.markSentByScope(scope)
+          return text('已发送收藏表情')
+        } catch (e) {
+          return text('发送收藏表情失败: ' + String((e as Error)?.message ?? e))
+        }
+      }
+    )
+
+    mcp.registerTool(
       'query_chat_log',
       {
         description: '查询当前对话的聊天记录库',

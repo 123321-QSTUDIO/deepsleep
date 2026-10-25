@@ -13,10 +13,15 @@ export function extractText(segments: MsgSegment[]): string {
         case 'at':
           return `[@${d.qq}]`
         case 'face':
-        case 'mface':
           return `[表情]`
-        case 'image':
+        case 'mface':
+          return `[表情包${d.name ? ':' + String(d.name) : ''}]`
+        case 'image': {
+          const emojiId = String(d.emoji_id ?? '')
+          const summary = String(d.summary ?? '')
+          if (emojiId || summary) return `[表情包${summary ? ':' + summary : ''}]`
           return '[图片]'
+        }
         case 'record':
           return '[语音]'
         case 'video':

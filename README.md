@@ -4,7 +4,7 @@
 
 **基于 OpenCode 的开源智能群聊 Agent** —— 主动参与群聊 · 持久会话 · MCP 工具 · Docker 沙箱
 
-> 独立服务形态：OneBot v11 WS 连 NapCat 作为 QQ 网关，本机 OpenCode 作为对话/调度层（NapCat 进程内插件形态已停止维护）。
+> 独立服务形态：OneBot v11 WS 连 **SnowLuma**（或任意 OneBot v11 实现）作为 QQ 网关，本机 OpenCode 作为对话/调度层（NapCat 进程内插件形态已停止维护）。
 
 群友在 QQ 群里 @机器人 聊天，机器人把消息交给本机的 opencode（每群一个持久会话，拟人化分句回复）；遇到复杂任务（探索代码、跑命令、查资料），opencode 通过 MCP 把任务提交出来，机器人在**远程 Docker 沙箱**（HK 主机，每 QQ 一个可休眠容器）里执行，完成后**群里回复原消息发一句话结论、完整结果私聊发给提问的人**。
 
@@ -15,12 +15,12 @@
 要求 **OpenCode 2.1.4**，使用 V2 API（`/api/session`、`/api/session/active`、`/api/event`、`/api/info`）。创建 session 的 `directory` 放在 POST body；新 session 未显式传模型时不再一概在创建时锁死。
 
 ```
-QQ群/私聊 ⇄ NapCat（官方发行版，仅作 QQ 网关；OneBot v11 WS）
+QQ群/私聊 ⇄ SnowLuma（QQ 网关；OneBot v11 WS）
              └─ DeepSleep 服务（本仓库，系统中枢）
                 ├─ 消息收发（OneBot WS 事件 / send_msg）
                 ├─ 消息库：每群/每人每天一个 SQLite（sql.js WASM）
                 ├─ Session 控制器 → 本机 opencode serve（每群/每人一个持久 session）
-                ├─ MCP Server（HTTP+Bearer，共 8 个工具）
+                ├─ MCP Server（HTTP+Bearer，共 10 个工具，含收藏表情包）
                 │   模型可见名带 qqbot_ 前缀，MCP 服务注册名不变
                 ├─ 控制面板（WebUI）：改配置 / 看会话 / 操作 Session，与服务同进程
                 ├─ 梦境记忆：每晚 fork 会话整理 MEMORY.md（instructions 注入）→ 原子替换
@@ -40,6 +40,7 @@ Docker opencode（下层）：一次性容器跑重活；结果 → 私聊全文
 1. 群消息全部写入消息库（不触发的也写，供 Agent 检索上下文）
 2. @机器人 / 回复机器人消息 → 组装 prompt（最近 N 条上下文 + 引用还原）→ 群 session
 3. Agent 用 `qqbot_send_message` 分句回复（每条一次调用，像真人打字）；忘了调则兜底按行拆发
+3b. 想让聊天更生动时，Agent 用 `qqbot_list_stickers` 挑账号收藏的表情包、`qqbot_send_sticker` 发出去（SnowLuma 的收藏表情接口）
 4. 复杂请求 → Agent 调 `qqbot_submit_task` → 自己回一句"处理完回复你" → 服务排队起容器
 5. 容器完成 → 群里 reply 原提问 + @发起人 + 一句话结论（Agent 措辞）；全文私聊属主并注入私聊上下文
 6. 属主私聊问"我的任务怎么样了" → 私聊 session 用 `qqbot_list_tasks`/`qqbot_get_task_detail` 查（越权只给状态不给内容）
@@ -49,7 +50,7 @@ Docker opencode（下层）：一次性容器跑重活；结果 → 私聊全文
 ```
 src/
 ├── app.ts        服务组装层（配置/消息库/Session/MCP/面板/梦境 + 生命周期，测试也复用）
-├── main.ts       独立服务入口（OneBot WS 连接 NapCat + 进程生命周期）
+├── main.ts       独立服务入口（OneBot WS 连接网关 + 进程生命周期）
 ├── onebot.ts     OneBot v11 WebSocket 客户端（自动重连、action/echo 往返）
 ├── config.ts     配置（config.json 首次运行自动生成，已知旧模型 ID 自动迁移）
 ├── msgdb.ts      消息库：sql.js(WASM SQLite)，按 scope+天 分文件
@@ -64,7 +65,7 @@ src/
 ├── dream.ts      梦境记忆：每晚 fork 会话用当天群聊更新 MEMORY.md，再 compact 原 session
 ├── panel.ts      控制面板 HTTP 服务（配置读写/校验、会话快照、Session 操作 API）
 └── panel.html    控制面板前端（单文件，构建时内联进 dist）
-smoke*.mjs        冒烟测试（消息库 / V2 session / MCP 八工具 / 图片与视觉 / watchdog / 服务模式 / 控制面板）
+smoke*.mjs        冒烟测试（消息库 / V2 session / MCP 十工具（含收藏表情） / 图片与视觉 / watchdog / 服务模式 / 控制面板）
 ```
 
 > 任务沙箱镜像、HK 部署脚本、产物下载服务在独立的执行层仓库
@@ -78,7 +79,7 @@ npm run typecheck
 npm run build        # 产出 dist-service/（独立服务）
 node smoke.mjs           # 冒烟：消息库
 node smoke2.mjs          # 冒烟：V2 session 创建（需本地 OpenCode 2.1.4 serve）
-node smoke3.mjs          # 冒烟：MCP 八工具
+node smoke3.mjs          # 冒烟：MCP 十工具（含收藏表情包）
 node smoke4.mjs          # 冒烟：离线图片下载/prompt
 node smoke5.mjs <图片路径>  # 冒烟：视觉；也可设 QQBOT_TEST_IMAGE
 node smoke6.mjs          # 冒烟：watchdog 兜底（需本地 opencode serve）
@@ -95,8 +96,8 @@ node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 
 概要（独立服务模式）：
 
-1. **NapCat**：官方发行版即可（不再需要自编译白名单），WebUI 开 WebSocket 服务器（127.0.0.1:3001 + token）
-2. **机器人服务**：拷贝 `dist-service/` 到 `C:\qqbot-svc`，`node index.mjs` 或计划任务常驻——**更新只重启这个进程，不动 QQ/NapCat**
+1. **QQ 网关**：推荐 [SnowLuma](https://github.com/SnowLuma/SnowLuma)（OneBot v11，默认 WS `127.0.0.1:3001`）；NapCat 等其它 OneBot v11 实现也可用
+2. **机器人服务**：拷贝 `dist-service/` 到 `C:\qqbot-svc`，`node index.mjs` 或计划任务常驻——**更新只重启这个进程，不动 QQ/网关**
 3. **host opencode**：安装 `@opencode/cli` 并确认版本为 2.1.4，再运行 `opencode serve --hostname 127.0.0.1 --port 4096`。
    **必须显式设置 `OPENCODE_PASSWORD` 并同步配置 `opencodePassword`**；旧 `OPENCODE_SERVER_PASSWORD` 仅作兼容。2.1.4 未设密码会随机生成，不能省略。
 4. **任务沙箱镜像**：在远程执行层仓库 [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner) 构建（HK 主机跑其 `script/setup-hk.sh` 一键完成），镜像必须升级到 OpenCode 2.1.4。
@@ -177,5 +178,5 @@ ssh -N -L 5101:127.0.0.1:5101 <用户>@<服务器IP>   # 然后本机打开 http
 
 ## 注意
 
-- 服务与 NapCat 分离部署（OneBot WS 连接）：业务进程崩溃不影响 QQ，NapCat 重启后服务会自动重连。
+- 服务与 QQ 网关分离部署（OneBot WS 连接）：业务进程崩溃不影响 QQ，网关重启后服务会自动重连。
 - 消息库存于服务数据目录 `messages/<group|private>-<id>/msg_<YYYY-MM-DD>.db`，只增不删，注意定期清理。

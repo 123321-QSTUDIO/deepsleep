@@ -1,7 +1,7 @@
 # 部署手册（Windows Server 版）
 
-> **只部署独立服务形态**：机器人是独立 Node 进程，通过 OneBot v11 WebSocket 连接 NapCat（NapCat 仅作 QQ 网关，官方发行版即可，无需自编译白名单）。
-> 更新只需重启 bot 进程，不动 QQ/NapCat。NapCat 进程内插件形态已停止维护。
+> **只部署独立服务形态**：机器人是独立 Node 进程，通过 OneBot v11 WebSocket 连接 QQ 网关（推荐 SnowLuma，兼容 NapCat 等 OneBot v11 实现）。
+> 更新只需重启 bot 进程，不动 QQ/网关进程。旧的 NapCat 进程内插件形态已停止维护。
 
 ## 0. 前置检查
 
@@ -174,86 +174,58 @@ node smoke.mjs     # 期望输出 SMOKE TEST 1 PASS
 
 【验证】`ls dist-service` 有 `index.mjs`、`app.mjs`、`sql-wasm.wasm`。
 
-## 4. NapCat 用官方发行版（无需自编译）
+## 4. QQ 网关：SnowLuma（替代 NapCat）
 
-> NapCat 进程内插件形态已停止维护，**本节不再需要**：直接用官方发行版 NapCat，按第 5、6 节部署即可，无需自编译、无需白名单补丁。
-> 旧插件模式部署的用户请改为第 7 节的独立服务形态（迁移见 7b 节）。
+SnowLuma 是第三方 OneBot v11 协议端：把桌面 QQ 的原生会话桥接成 OneBot v11（动作 + 事件），多个 QQ 号可并行。本服务只通过 OneBot 协议对接，**不包含也不分发其代码**。
 
-## 5. 安装 QQ + 部署 NapCat 运行目录
+> **许可注意**：SnowLuma 是**源码可见、非 OSI 开源**项目（学习/非商业自托管可用；商业使用、公开发布修改版或衍生版需其书面授权）。使用前请阅读其 `LICENSE` / `EULA.md`。
 
-> **QQ 版本要求**：NapCat 当前最高支持到 **QQ NT 9.9.32-50969**（见其 `napcat-core/external/packet.json` 版本表与 CI 固定版本）。
-> 腾讯会强制下线过旧的 QQ 版本（提示"存在安全隐患"并退出登录），请务必装新版本：
->
-> ```powershell
-> # NapCat CI 同款安装包（Windows x64, 9.9.32.50969）：
-> curl.exe -L -o C:\qqbot\QQ9.9.32.exe "https://qqdl.gtimg.cn/qqfile/QQNT/9.9.32/beta/a33ab721/QQ9.9.32.50969_x64.exe"
-> # 运行安装，默认装到 C:\Program Files\Tencent\QQNT
-> ```
-> 不要用 https://im.qq.com/pcqq 首页的最新版（可能超过 NapCat 支持范围）。
+- 项目与 Releases：https://github.com/SnowLuma/SnowLuma （下载 `win-x64` 包；完整版自带 Node，Lite 版需 Node.js ≥22）
+- 默认端口：**WebUI 5099** / OneBot HTTP 3000 / **OneBot WebSocket 3001**
+- 官方部署文档：https://snowluma.github.io/zh/docs/guide/deploy
+- 与 NapCat 的关系：两者都输出 OneBot v11，本服务的 `onebotUrl`/`onebotToken` 配置方式不变；迁移见 7b 节
 
-```powershell
-# 部署 NapCat 运行目录（dist 即运行目录，launcher 就在里面）
-xcopy /E /I C:\qqbot\NapCatQQ\packages\napcat-shell\dist C:\napcat
+## 5. 安装 QQ 桌面版
 
-# 【必须】napcat.mjs 将 express/ws 留作外部依赖，运行目录必须有 node_modules：
-cd C:\napcat
-npm install --omit=dev
-# （或在 monorepo 里 pnpm deploy，或从同版本官方 Shell 包复制 node_modules）
+- 安装官方 Windows 桌面版 QQ（NT 架构），能正常打开 `QQ.exe`
+- 机器人建议用**小号**；`QQ 版本 - SnowLuma hook` 需要版本匹配，QQ 自动升级后若 hook 失效，等 SnowLuma 更新或回退 QQ 版本（见其 README/WebUI 版本说明）
+- **SnowLuma 必须与 QQ 用同一个 Windows 用户运行、权限保持一致**，否则 hook 注入失败
 
-# 数据目录
-mkdir C:\napcat-data
-```
-
-做一个带 NAPCAT_WORKDIR 的启动脚本 `C:\napcat\start.bat`：
-
-```bat
-@echo off
-chcp 65001 >nul
-set NAPCAT_WORKDIR=C:\napcat-data
-set NAPCAT_PATCH_PACKAGE=C:\napcat\qqnt.json
-set NAPCAT_LOAD_PATH=C:\napcat\loadNapCat.js
-set NAPCAT_INJECT_PATH=C:\napcat\NapCatWinBootHook.dll
-set NAPCAT_LAUNCHER_PATH=C:\napcat\NapCatWinBootMain.exe
-set NAPCAT_MAIN_PATH=C:/napcat/napcat.mjs
-echo (async () =^> {await import("file:///%NAPCAT_MAIN_PATH%")})() > "%NAPCAT_LOAD_PATH%"
-"%NAPCAT_LAUNCHER_PATH%" "C:\Program Files\Tencent\QQNT\QQ.exe" "%NAPCAT_INJECT_PATH%" %*
-```
-
-> QQ 装在其他路径就改最后一行的 QQ.exe 路径。想快速登录可在末尾加 `-q <机器人QQ号>`。
-
-启动 + 开机自启：
+## 6. 部署并登录 SnowLuma
 
 ```powershell
-Start-Process -FilePath "C:\napcat\start.bat" -Verb RunAs
-schtasks /create /tn "napcat" /sc onlogon /rl highest /f /tr "C:\napcat\start.bat"
+# 1) 下载 win-x64 发行包（完整版或 Lite 版）并解压到固定目录
+mkdir C:\SnowLuma
+# 把 SnowLuma-<TAG>-win-x64.zip 解压到 C:\SnowLuma（或 tar -xzf *.tar.gz -C C:\SnowLuma）
+
+# 2) 启动 QQ（先开 QQ 或先开 SnowLuma 都行，它会自动探测并注入 QQ.exe）
+# 3) 启动 SnowLuma
+cd C:\SnowLuma
+.\launcher.bat
 ```
 
-【验证】
-```powershell
-Start-Sleep 15
-curl.exe -s http://127.0.0.1:6099/ | Select-Object -First 1   # WebUI 有响应
-Get-ChildItem C:\napcat-data\logs   # 有滚动日志
-Get-Content C:\napcat-data\logs\*.log -Tail 30 | Select-String -Pattern 'webui|WebUI|6099'
-```
+- 首次启动（全新数据目录）控制台会输出**一次性管理员密码**，用它登录 http://127.0.0.1:5099/
+- 登录**只支持扫码**：在 QQ 窗口用手机 QQ 扫码登录机器人小号
+- 数据目录下的配置：`config/onebot.json`（全局默认）、`config/onebot_<uin>.json`（每账号）、`config/runtime.json`（WebUI 端口/hookAutoLoad 等）
+- 常驻：用计划任务/服务把 `launcher.bat`（或 `node index.mjs`）设为开机自启，与 QQ 同用户运行
 
-## 6. 登录 QQ
+【验证】WebUI 显示账号在线；控制台无 hook 注入错误；`127.0.0.1:3001` 有 WS 监听。
 
-1. 日志或 `C:\napcat-data\config\webui.json` 里找 WebUI token
-2. 浏览器打开 `http://服务器IP:6099/webui?token=<token>`（没开公网就 RDP 进服务器开，或 SSH 转发）
-3. 扫码登录机器人 QQ 号
-4. 【验证】WebUI 显示在线；把机器人拉进测试群
+## 7. 配置 OneBot 并部署机器人服务
 
-## 7. 部署机器人服务
+**SnowLuma 侧**（WebUI → OneBot 配置，或直接改 `config/onebot_<uin>.json`）：
+- 正向 **WebSocket 服务器**：`127.0.0.1:3001`，`accessToken` 设一个强随机串
+- 鉴权：`Authorization: Bearer <token>`（也支持 `?access_token=`）；HTTP 与 WS 可能是不同 token
+- 只在本机访问时保持回环；不要把 5099/3000/3001 裸暴露公网
 
 ```powershell
 mkdir C:\qqbot-svc
 xcopy /E /I C:\qqbot\deepsleep\dist-service C:\qqbot-svc
 ```
 
-**NapCat 侧**：WebUI → 网络配置 → 新建 **WebSocket 服务器**：`127.0.0.1:3001`，token 设一个强随机串。
-（官方发行版 NapCat 即可）
-
-**启动服务**：
+**服务侧**（`C:\qqbot-svc\data\config.json`，首次运行自动生成）：
+- `onebotUrl`：`ws://127.0.0.1:3001`
+- `onebotToken`：上一步 SnowLuma 里设的 WS token
 
 ```powershell
 # 前台测试一次（Ctrl+C 退出）
@@ -264,23 +236,12 @@ schtasks /create /tn "qqbot-svc" /sc onlogon /rl highest /f `
   /tr "cmd /c cd /d C:\qqbot-svc && node index.mjs > C:\qqbot-svc\svc.log 2>&1"
 ```
 
-【验证】
-```powershell
-Get-Content C:\qqbot-svc\svc.log -Tail 5
-# 期望: 启动完成 botName=DeepSleep onebot=ws://127.0.0.1:3001 opencode=... (在线) MCP ...
-# 且有 "OneBot WS 已连接"
-```
+【验证】`Get-Content C:\qqbot-svc\svc.log -Tail 5` 看到 `启动完成 ... (在线)` 与 `OneBot WS 已连接`；群里 @机器人 有回复。
 
-**配置文件**：`C:\qqbot-svc\data\config.json`（首次运行自动生成），在默认配置基础上多了：
-- `onebotUrl`：NapCat WS 地址（默认 `ws://127.0.0.1:3001`）
-- `onebotToken`：上一步在 NapCat 设的 WS token
+## 7b. 从旧部署迁移
 
-
-## 7b. 旧插件模式（已停止维护）
-
-NapCat 进程内插件形态已移除（`src/index.ts` 删除，不再构建 `dist/`），请使用第 7 节的独立服务形态。
-
-**从旧插件模式迁移**：把旧插件数据目录（`C:\napcat-data\config\plugins\deepsleep\`）下的 `messages`、`sessions.json`、`tasks.json`、`users.json`、`workspaces` 拷到 `C:\qqbot-svc\data\`，配置按第 8 节合并；消息库、会话映射、任务记录全部继承。
+- **从 NapCat 网关迁移**：SnowLuma 和 NapCat 都是 OneBot v11，默认 WS 端口都是 3001。装好 SnowLuma、配好同端口和 token 后，服务配置 `onebotUrl`/`onebotToken` 可以不变；消息库、会话、任务数据都在服务自己的数据目录里，无需迁移。
+- **从旧的 NapCat 进程内插件模式迁移**：插件形态已停止维护（`src/index.ts` 已删除）。把旧插件数据目录（`C:\napcat-data\config\plugins\deepsleep\`）下的 `messages`、`sessions.json`、`tasks.json`、`users.json`、`workspaces` 拷到 `C:\qqbot-svc\data\`，配置按第 8 节合并即可。
 
 ## 8. 配置服务
 
@@ -328,12 +289,12 @@ NapCat 进程内插件形态已移除（`src/index.ts` 删除，不再构建 `di
 
 - `hostModel`：host 层每个工作区的默认模型，默认 `opencode/deepseek-v4.1-flash-free`；已知旧模型 ID 会在配置加载时自动迁移，旧 session 存了弃用模型则 `/reset`
 - `visionModel`：视觉桥接 subagent（vision-bridge）用的识图模型，默认 `opencode/mimo-v2.6-flash-free`。图片消息会下载到工作目录 `inbox/`，由纯文本主模型通过 **subagent** 工具调桥接代理读图，**不是**直接切换主模型
-- 工作区 opencode.json 使用 `agents` + `system`、`mcp.servers` 和 `codemode: false`。MCP 共 8 个工具，模型可见名带 `qqbot_` 前缀（如 `qqbot_send_message`、`qqbot_query_chat_log`、`qqbot_submit_task`），MCP 服务注册名不变
+- 工作区 opencode.json 使用 `agents` + `system`、`mcp.servers` 和 `codemode: false`。MCP 共 10 个工具，模型可见名带 `qqbot_` 前缀（如 `qqbot_send_message`、`qqbot_list_stickers`/`qqbot_send_sticker`（收藏表情包）、`qqbot_query_chat_log`、`qqbot_submit_task`），MCP 服务注册名不变
 - `mcpHost`：MCP 服务绑定地址，默认 `127.0.0.1`（回环）。**服务器有公网 IP 直绑网卡时切勿改成 0.0.0.0**；方式 B（WSL2 docker）确需容器访问时才改为 `0.0.0.0` 并配合防火墙只放行容器网段
 - `opencodePassword` 必须等于第 2 步显式设置的 `OPENCODE_PASSWORD`，不能为空或写成可选项
 - `dockerHost`：留空 = 本机 docker；方式 C 填 `tcp://127.0.0.1:2375`（走持久 SSH 隧道，见方式 C-1）
 - `remoteSsh`：方式 C 必填，`<HK用户>@<HK_IP>`，远程文件操作（建目录/解压/归档）走这条 SSH
-- `remoteSshKey`：可选，私钥绝对路径（如 `C:\\napcat-data\\hk_key`）。**NapCat 进程若非交互式用户启动（计划任务/服务），ssh 可能找不到 `~/.ssh` 里的密钥导致 BatchMode 失败——此时务必显式配置此项**，密钥用 `ssh-keygen -t ed25519 -f C:\napcat-data\hk_key -N '""'` 生成，公钥加到 HK 的 authorized_keys
+- `remoteSshKey`：可选，私钥绝对路径（如 `C:\qqbot-svc\hk_key`）。**服务进程若以非交互式用户启动（计划任务/服务），ssh 可能找不到 `~/.ssh` 里的密钥导致 BatchMode 失败——此时务必显式配置此项**，密钥用 `ssh-keygen -t ed25519 -f C:\qqbot-svc\hk_key -N '""'` 生成，公钥加到 HK 的 authorized_keys
 - `storageQuotaMB`：每个 QQ 的持久目录（home+workspace+archive）总配额，默认 500MB，超了从最旧归档开始删
 - `artifactBaseUrl` / `artifactToken` / `linkTtlMinutes`：产物下载服务（见 9.1 节）；链接为 HMAC 签名临时链接，默认 10 分钟有效，有效期内重复索要返回同一链接（不重复生成），失效后才能生成新链接
 - `archiveRetentionDays`：产物归档留存天数（默认 5），**每次该 QQ 的 session 被激活会自动刷新最近归档的过期时间**
@@ -404,7 +365,7 @@ sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
 - **域名走 Cloudflare 代理（橙云，推荐）**：TLS 在 CF 边缘终结，源站 Caddy 只开 80（脚本已按此配置），CF 面板 SSL/TLS 模式选 Full。CF 免费版 100MB 限制只管**上传**方向，产物下载不受影响，还能隐藏源站 IP
 - **灰云直连**：把 Caddyfile 的 `http://` 前缀去掉（Caddy 自动签 TLS）。源站 IP 会随域名解析暴露，脚本已自动配 ufw 只放行 22/80/443；建议再给 sshd 关密码登录（`PasswordAuthentication no`，前提是密钥已配好）
 - 链接机制：服务按需 HMAC 签名生成（`?exp=&sig=`），默认 24 小时有效（`linkTtlHours`），**机器人不主动发链接，用户私聊索要时才生成**；产物到期前一天机器人会主动私聊提醒用户留存
-- 服务配置填 `artifactBaseUrl: "https://<域名>"` 和 `artifactToken`（与脚本参数一致），重启 NapCat 生效
+- 服务配置填 `artifactBaseUrl: "https://<域名>"` 和 `artifactToken`（与脚本参数一致），重启服务生效
 
 ## 10. 部署完成检查单
 
@@ -423,80 +384,23 @@ sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
 
 ### 风控与下线（必读）
 
-实测规律：**只在主动发消息后被检测下线**，纯接收相对安全。出站行为已做拟人化限速：
+SnowLuma 采用 hook 注入桌面 QQ 的方式，客户端行为与正常 QQ 一致，风险面通常比 headless shell 小，但仍受腾讯风控约束：
 
-- 每对 scope 的消息严格串行 + 随机间隔 `replyDelayMinMs~MaxMs`（默认 1.2~3 秒，像真人打字）
-- 兜底回复超过 `maxLinesPerReply`（默认 4）条时自动合并，防止刷屏式分句
-- 私聊任务结果最多 4 段、每段 1200 字，长结果引导走下载链接
-
-**开启 NapCat 内置反检测（默认是关的！）**：NapCat 发行默认配置把所有 bypass 关了。两种开法（二选一，Linux/Windows 通用）：
-- WebUI → 反检测开关配置页：Hook / Window / Module / Process / Container / JS 全部打开，保存后重启
-- 或编辑 NapCat 数据目录 `config/napcat.json`：
-
-```json
-{
-  "bypass": {
-    "hook": true,
-    "window": true,
-    "module": true,
-    "process": true,
-    "container": true,
-    "js": true
-  }
-}
-```
-
-作用：隐藏注入模块（module）、伪装进程路径（process）、伪造 QQ 期望的窗口（window）、内存扫描欺骗（hook）等。重启 NapCat 生效。
-
-运营侧建议：用**小号**跑、QQ 客户端保持新版、群里少发链接（链接是重点审查对象）、高频群适当调大间隔。被踢下线后重新扫码登录即可，会话与任务状态都在服务端持久化，不受影响。
-
-补充：shell 模式是 headless（QQ 无窗口），这本身是个行为异常特征。如果开了 bypass 仍频繁被踢，可考虑 NapCat framework 模式（挂进正常带 UI 的 QQ 客户端，客户端行为与真人一致），需要时找我出迁移步骤。
-
-### 方案 C：NapCat 移到国内 Linux 机器（官方 Docker，NAT 机即可）
-
-Windows Server 无嵌套虚拟化、shell/framework 都被踢时的终选方案——把 NapCat 整个搬到一台**国内 Linux 机器**（Docker 在 Linux 上是原生的，与嵌套虚拟化无关），也是 NapCat 官方群主流形态：
-
-1. **机器要求**：能跑 Docker 的 Linux 即可，**便宜的 NAT 机（共享 IP + 端口映射）或公网 IPv6 机都够用**——QQ 是出站连接不需要独立公网 IPv4；SSH 走 NAT 映射端口或 IPv6 地址。优先选内地机房（登录 IP 画像比境外好）。IP 类型二选一原则：Windows 服务器有 IPv6 出口（`ping -6 ipv6.baidu.com` 测）就选**公网 IPv6**（独立地址声誉好）；没有就只能 IPv4 NAT（注意共享段声誉）。选 IPv6 时隧道目标写 `[v6地址]` 格式并自己配 ip6tables 只放 SSH
-2. **跑 NapCat（两种安装方式，优先 Launcher）**：
-   - **优先：NapCat.Linux.Launcher（非入侵式）**——`LD_PRELOAD` 动态劫持文件访问，磁盘上 QQ 文件零修改（少一个完整性校验检测面）：
-     ```bash
-     # 下载 libnapcat_launcher_amd64.so 后
-     Xvfb :1 -screen 0 1x1x8 +extension GLX +render > /dev/null 2>&1 &
-     export DISPLAY=:1
-     LD_PRELOAD=./libnapcat_launcher_amd64.so qq
-     ```
-   - **备选：官方 Docker（Installer 路线打包）**：`mkdir -p /opt/napcat-docker && cd /opt/napcat-docker`，按官方 compose 起
-   - 两者**互斥**，别混用；WebUI（6099）和 WS（3001）都只绑 127.0.0.1，扫码登录走 `ssh -L 6099:127.0.0.1:6099 -p <NAT映射端口> <用户>@<NAT_IP>`
-3. **OneBot WS 走 SSH 隧道回 Windows**：容器里 WS server 配 `127.0.0.1:3001`，Windows 加一条持久隧道（与 docker 隧道并列）：
-   ```powershell
-   schtasks /create /tn "qqbot-onebot-tunnel" /sc onlogon /rl highest /f `
-     /tr "ssh -N -L 3001:127.0.0.1:3001 -p <NAT映射端口> -o ServerAliveInterval=15 -o ServerAliveCountMax=3 <用户>@<NAT_IP>"
-   ```
-   bot 服务配置完全不用改（`onebotUrl: ws://127.0.0.1:3001`，指向本地隧道入口）
-4. **Windows 上只剩**：QQ 客户端卸载都行，只剩 `qqbot-svc` + `opencode serve` + 两条隧道
-5. 注意：Linux QQ 同样在腾讯风控体系内（只是形态不同、官方群反馈存活率更好）；**境外数据中心 IP 登录是更高危信号**（所以选内地机器）；小号、限速原则照旧
-
-### 方案 B：framework 模式（带 UI 的正常客户端，抗行为检测）
-
-### 方案 B：framework 模式（带 UI 的正常客户端，抗行为检测）
-shell 模式被踢的核心嫌疑是"无窗口 headless 客户端"这个行为特征。framework 模式让 NapCat 住进**正常运行的 QQ**（有窗口、有托盘、行为与真人客户端一致）：
-
-1. **装 LiteLoaderQQNT**（QQ NT 插件加载器，按它仓库 README 操作；会改 QQ 的 `resources/app/package.json` 入口指向 LiteLoader，这是磁盘修改，与 shell 模式二选一）
-   - ⚠️ 先确认 LiteLoader 支持你装的 QQ 版本（9.9.32），不支持就按其支持列表选 QQ 版本
-2. **放 NapCat framework 包**：官方 Release 下载 `NapCat.Framework.zip`，解压到 LiteLoader 的 `plugins/napcat/` 目录（入口 `napcat.cjs`）
-3. **正常启动 QQ**：双击 QQ 图标，窗口正常出现，扫码登录机器人小号，**保持 QQ 窗口常驻**（服务器上挂着一个 RDP 会话或用 tscon 保持会话活跃，别最小化到完全无会话）
-4. NapCat WebUI 照常（6099），WS server 配置不变，`qqbot-svc` 服务零改动——OneBot 协议层完全一样
-5. LiteLoader 对 QQ 的磁盘 patch 本身是另一个检测面，但"有 UI 的正常客户端"行为特征收益通常大于这个风险；失效了就两个方案换着试
+- 机器人用**小号**；分句限速（本服务的随机间隔/合并逻辑）仍是第一道防线
+- 群内少发链接（链接是重点审查对象），不要用机器人号加来源不明的群
+- 被踢下线后重新扫码登录即可；本服务的会话/任务状态都在自己数据目录，不受影响
+- SnowLuma hook 与 QQ 版本强相关：QQ 自动升级后 hook 可能失效，等 SnowLuma 更新或回退 QQ 版本
+- 更细的风控/部署说明以 SnowLuma 官方文档与其用户群为准
 
 ### 其他
 
 | 现象 | 排查 |
 |---|---|
-| 服务连不上 NapCat | 检查 NapCat WebUI 的 WebSocket 服务器（127.0.0.1:3001 + token）与 config.json 的 onebotUrl/onebotToken |
-| launcher 报 "provided QQ path is invalid" | QQ 未安装或装在非默认路径，改 start.bat 里 QQ.exe 路径 |
+| 服务连不上网关 | 检查 SnowLuma WebUI 的 OneBot WebSocket 配置（127.0.0.1:3001 + token 与 config.json 一致）；服务日志看 WS 连接错误 |
+| SnowLuma hook 注入失败 | 确认 SnowLuma 与 QQ 同一 Windows 用户/权限；QQ 版本是否在 SnowLuma 支持范围；看 WebUI/控制台日志 |
 | 服务启动报 MCP 端口占用 | 5100 被占：三处配置（mcpPort/mcpUrl/mcpUrlForDocker）一起改 |
 | @机器人没反应 | 看日志 opencode 请求报错：401=密码不对；ECONNREFUSED=serve 没起；没报错但没回复=模型问题，手动跑 `opencode run --model opencode/deepseek-v4.1-flash-free "hi"` 排查 |
 | zen 免费模型报 "usage limit reached" | 免费模型有额度限制（几小时重置），密集测试时悠着点；或 `opencode auth login` 登录 zen 账号提额/换付费模型 |
 | 任务 error "沙箱环境不可用" | 服务进程调不到 docker：确认 Docker Desktop 在跑；QQ 进程环境与当前用户一致（docker CLI 在 PATH 里） |
-| 容器连不上 MCP | Docker Desktop 自带 host.docker.internal；方式 B 见第 8 节说明；Windows 防火墙放行 5100 |
-| 服务器重启后全挂了 | 两个计划任务（opencode-serve / napcat）是否建成 onlogon；服务器需自动登录或改任务为不管登录与否都运行 |
+| 容器连不上 MCP | Docker Desktop 自带 host.docker.internal；WSL2 方式见第 1 节说明；Windows 防火墙放行 5100 |
+| 服务器重启后全挂了 | 计划任务（opencode-serve / SnowLuma / qqbot-svc）是否都建成 onlogon；服务器需自动登录或改任务为不管登录与否都运行 |

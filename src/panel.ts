@@ -44,7 +44,7 @@ const FIELDS: FieldDef[] = [
 
   { key: 'opencodeUrl', label: 'opencodeUrl', group: '连接', type: 'string', help: 'host opencode V2 地址' },
   { key: 'opencodePassword', label: 'opencodePassword', group: '连接', type: 'password', help: '必须与 serve 的 OPENCODE_PASSWORD 一致' },
-  { key: 'onebotUrl', label: 'onebotUrl（独立服务模式）', group: '连接', type: 'string' },
+  { key: 'onebotUrl', label: 'onebotUrl（OneBot WS 地址）', group: '连接', type: 'string', help: 'SnowLuma/NapCat 等 OneBot v11 网关的 WebSocket 地址，默认 ws://127.0.0.1:3001' },
   { key: 'onebotToken', label: 'onebotToken（独立服务模式）', group: '连接', type: 'password' },
 
   { key: 'contextMessageCount', label: 'contextMessageCount（上下文条数）', group: '消息与回复', type: 'number', min: 1 },

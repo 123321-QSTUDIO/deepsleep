@@ -167,6 +167,13 @@ export async function createApp(options: AppOptions): Promise<App> {
 function storeMessage(db: MsgDB, event: OB11MessageEvent): void {
   const segments = (Array.isArray(event.message) ? event.message : []) as MsgSegment[]
   const scope = event.message_type === 'group' ? `group-${event.group_id}` : `private-${event.user_id}`
+  // 入站收藏/商城表情（SnowLuma 会转成带 emoji_id 的 image 段）：给上下文补一句可读描述，
+  // 否则 raw_message 里只是 [CQ:image,...]，Agent 无法接梗
+  const stickerNotes = segments
+    .filter((seg) => seg.type === 'image' && (seg.data?.emoji_id || seg.data?.summary))
+    .map((seg) => `[表情包${seg.data?.summary ? ':' + String(seg.data.summary) : ''}]`)
+  let text = typeof event.raw_message === 'string' && event.raw_message ? event.raw_message : extractText(segments)
+  if (stickerNotes.length > 0) text += ' ' + stickerNotes.join('')
   db.insert(scope, {
     message_id: typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null,
     user_id: event.user_id ?? null,
@@ -174,7 +181,7 @@ function storeMessage(db: MsgDB, event: OB11MessageEvent): void {
     card: event.sender?.card ?? '',
     time: event.time ?? Math.floor(Date.now() / 1000),
     reply_to: extractReplyTo(segments),
-    text: typeof event.raw_message === 'string' && event.raw_message ? event.raw_message : extractText(segments),
+    text,
     segments: JSON.stringify(event.message ?? []),
   })
 }

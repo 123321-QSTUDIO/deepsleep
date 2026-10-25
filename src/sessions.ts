@@ -400,11 +400,18 @@ export class SessionController {
     const prompt = this.buildPrompt(event)
     if (!prompt) return
     const replyTo = extractReplyTo(segments)
+    // 商城/收藏表情在 SnowLuma 里是带 emoji_id 的 image 段：交给视觉模型没意义，
+    // 由上下文文本里的 [表情包: ...] 描述代替（见 app.ts storeMessage）
+    const stickerUrls = new Set(
+      segments
+        .filter((seg) => seg.type === 'image' && seg.data?.emoji_id && typeof seg.data.url === 'string')
+        .map((seg) => String(seg.data.url))
+    )
     const images = dedupeImages([
       ...extractImages(segments),
       ...extractImagesFromRaw(event.raw_message ?? ''),
       ...(replyTo !== null ? this.quotedImages(scope, replyTo) : []),
-    ])
+    ]).filter((img) => !stickerUrls.has(img.url))
     const imageNote = await this.downloadImages(entry.directory, images)
     await this.prompt(entry.sessionId, imageNote ? prompt + imageNote : prompt)
   }
@@ -644,6 +651,45 @@ export class SessionController {
     }
     await this.runtime.actions.call('send_msg', params)
     this.recordSent(scope, text)
+    await this.delay()
+  }
+
+  // ---- 收藏表情（SnowLuma / NapCat：fetch_custom_face_detail + send_custom_face）----
+
+  async listStickers(limit = 48): Promise<{ id: string; md5: string; desc: string }[]> {
+    const count = Math.min(Math.max(1, Math.floor(limit)), 200)
+    const raw = await this.runtime.actions.call('fetch_custom_face_detail', { count })
+    const data =
+      raw && typeof raw === 'object' && !Array.isArray(raw) && 'data' in raw ? (raw as { data?: unknown }).data : raw
+    const list = Array.isArray(data) ? (data as { emoji_id?: unknown; resId?: unknown; md5?: unknown; desc?: unknown }[]) : []
+    return list
+      .map((d) => ({
+        id: String(d.emoji_id ?? d.resId ?? ''),
+        md5: String(d.md5 ?? ''),
+        desc: String(d.desc ?? ''),
+      }))
+      .filter((d) => d.id.length > 0)
+  }
+
+  async sendStickerToScope(scope: string, sticker: string, opts?: { replyTo?: number | string }): Promise<void> {
+    const prev = this.sendQueues.get(scope) ?? Promise.resolve()
+    const next = prev.then(() => this.doSendSticker(scope, sticker, opts)).catch((e) => {
+      this.log('发表情失败:', e)
+    })
+    this.sendQueues.set(scope, next)
+    return next
+  }
+
+  private async doSendSticker(scope: string, sticker: string, opts?: { replyTo?: number | string }): Promise<void> {
+    const params: Record<string, unknown> = { emoji_id: sticker }
+    if (scope.startsWith('group-')) {
+      params.group_id = scope.slice(6)
+    } else {
+      params.user_id = scope.slice(8)
+    }
+    if (opts?.replyTo) params.reply_to = String(opts.replyTo)
+    await this.runtime.actions.call('send_custom_face', params)
+    this.recordSent(scope, '[表情]')
     await this.delay()
   }
 }
