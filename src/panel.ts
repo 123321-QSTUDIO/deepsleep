@@ -240,6 +240,18 @@ export class ControlPanel {
       return
     }
     const collectionMatch = /^\/api\/stickers\/collections\/([^/]+)$/.exec(pathname)
+    if (method === 'DELETE' && collectionMatch) {
+      const name = decodeURIComponent(collectionMatch[1])
+      const changed = this.deps.stickers.deleteCollection(name)
+      this.sendJson(res, 200, {
+        ok: true,
+        changed,
+        stats: this.deps.stickers.stats(),
+        collections: this.deps.stickers.listCollections(),
+        items: this.deps.stickers.list(),
+      })
+      return
+    }
     if (method === 'PUT' && collectionMatch) {
       const name = decodeURIComponent(collectionMatch[1])
       const body = await this.readBody(req)

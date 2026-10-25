@@ -142,6 +142,19 @@ export class StickerStore {
     return changed
   }
 
+  /** 删除/解散合集：成员回到未分组，描述/启用状态保留（不删表情） */
+  deleteCollection(name: string): number {
+    let changed = 0
+    for (const item of this.items.values()) {
+      if (item.collection !== name) continue
+      item.collection = ''
+      item.updatedAt = Math.floor(Date.now() / 1000)
+      changed++
+    }
+    if (changed > 0) this.save()
+    return changed
+  }
+
   /** 合集（表情包）列表：用于面板合集级总开关 */
   listCollections(): { name: string; total: number; labeled: number; enabled: number; allEnabled: boolean }[] {
     const map = new Map<string, StickerRecord[]>()
