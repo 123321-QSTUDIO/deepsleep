@@ -1,6 +1,10 @@
 # DeepSleep
 
-QQ 群 AI 机器人（DeepSleep）：**独立服务形态**——OneBot v11 WS 连 NapCat 作为 QQ 网关，本机 OpenCode 作为对话/调度层（NapCat 进程内插件形态已停止维护）。
+**一个会聊天、会接梗、还能帮你干活的 AI 群友。**
+
+**基于 OpenCode 的开源智能群聊 Agent** —— 主动参与群聊 · 持久会话 · MCP 工具 · Docker 沙箱
+
+> 独立服务形态：OneBot v11 WS 连 NapCat 作为 QQ 网关，本机 OpenCode 作为对话/调度层（NapCat 进程内插件形态已停止维护）。
 
 群友在 QQ 群里 @机器人 聊天，机器人把消息交给本机的 opencode（每群一个持久会话，拟人化分句回复）；遇到复杂任务（探索代码、跑命令、查资料），opencode 通过 MCP 把任务提交出来，机器人在**远程 Docker 沙箱**（HK 主机，每 QQ 一个可休眠容器）里执行，完成后**群里回复原消息发一句话结论、完整结果私聊发给提问的人**。
 
