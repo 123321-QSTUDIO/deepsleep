@@ -1,8 +1,10 @@
-# napcat-plugin-qqbot
+# DeepSleep
 
 QQ 群 AI 机器人（DeepSleep）：双形态——**独立服务（推荐，OneBot v11 WS 连 NapCat）** 或 NapCat 插件 + opencode 双层架构。
 
 群友在 QQ 群里 @机器人 聊天，机器人把消息交给本机的 opencode（每群一个持久会话，拟人化分句回复）；遇到复杂任务（探索代码、跑命令、查资料），opencode 通过 MCP 把任务提交出来，机器人在**远程 Docker 沙箱**（HK 主机，每 QQ 一个可休眠容器）里执行，完成后**群里回复原消息发一句话结论、完整结果私聊发给提问的人**。
+
+> **仓库已改名**：本仓库原名 `napcat-plugin-qqbot`，现更名为 **DeepSleep**（GitHub 旧链接会自动跳转）。npm 包名、插件目录与部署示例同步改为 `deepsleep`；服务模式数据目录与 `dist-service` 目录契约不变，已有部署只需替换代码目录，无需迁移数据。
 
 ## 架构
 
@@ -10,7 +12,7 @@ QQ 群 AI 机器人（DeepSleep）：双形态——**独立服务（推荐，On
 
 ```
 QQ群/私聊 ⇄ NapCat (官方发行版；仅旧插件模式需自编译加白名单)
-             └─ napcat-plugin-qqbot（本插件，系统中枢）
+             └─ DeepSleep（本插件，系统中枢）
                 ├─ 消息收发（plugin_onmessage / send_msg）
                 ├─ 消息库：每群/每人每天一个 SQLite（sql.js WASM）
                 ├─ Session 控制器 → 本机 opencode serve（每群/每人一个持久 session）

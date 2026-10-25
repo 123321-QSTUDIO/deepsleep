@@ -32,7 +32,7 @@ fs.writeFileSync(
   'dist/package.json',
   JSON.stringify(
     {
-      name: 'napcat-plugin-qqbot',
+      name: 'deepsleep',
       plugin: 'DeepSleep 群机器人',
       version: '0.1.0',
       type: 'module',

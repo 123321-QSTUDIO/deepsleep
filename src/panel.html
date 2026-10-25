@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>QQBot 控制面板</title>
+<title>DeepSleep 控制面板</title>
 <meta name="description" content="QQ 群 AI 机器人本地控制面板：会话、任务、配置与运行状态。">
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2308090a'/%3E%3Crect x='6.5' y='9' width='19' height='15' rx='5' fill='none' stroke='%23f7f8f8' stroke-width='1.5'/%3E%3Cpath d='M11 14.5l2.5 2.2-2.5 2.2M16 18.9h5' fill='none' stroke='%23f7f8f8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='16' cy='9' r='1.6' fill='%235e6ad2'/%3E%3C/svg%3E">
@@ -1250,7 +1250,7 @@ body.modal-open{overflow:hidden}
         </svg>
       </div>
       <div class="brand-copy">
-        <span class="brand-name" data-od-id="brand-name">QQBot</span>
+        <span class="brand-name" data-od-id="brand-name">DeepSleep</span>
         <span class="brand-sub">napcat-plugin</span>
       </div>
     </div>
@@ -1727,7 +1727,7 @@ function setNav(v){
   var names={overview:'概览',sessions:'会话',detail:'会话详情',config:'配置'};
   var crumb=$('#crumb-current');
   if(crumb) crumb.textContent=names[S.view]||'概览';
-  document.title=(names[S.view]||'控制面板')+' · QQBot 控制面板';
+  document.title=(names[S.view]||'控制面板')+' · DeepSleep 控制面板';
 }
 function showOnly(id){
   $$('.view').forEach(function(x){ x.hidden=(x.id!==id); });
@@ -2178,9 +2178,9 @@ function renderOverview(){
       '<section class="panel dash-bot" data-od-id="bot-status-panel" aria-label="机器人与服务状态">'+
         '<div class="bot-ident">'+
           '<div class="bot-avatar" aria-hidden="true">'+icon('bot')+'</div>'+
-          '<div class="bot-copy"><div class="bot-title-row"><h2 class="bot-name">'+esc(st.botName||'QQBot')+'</h2>'+
+          '<div class="bot-copy"><div class="bot-title-row"><h2 class="bot-name">'+esc(st.botName||'DeepSleep')+'</h2>'+
             '<span class="pill s bot-mode"><span class="dot '+(st.mode==='plugin'?'dim':'ok')+'"></span>'+(st.mode==='plugin'?'插件模式':'独立服务')+'</span></div>'+
-            '<div class="bot-product"><span>napcat-plugin-qqbot</span><span class="slash">/</span><span>v'+esc(st.version||'—')+'</span></div>'+
+            '<div class="bot-product"><span>deepsleep</span><span class="slash">/</span><span>v'+esc(st.version||'—')+'</span></div>'+
           '</div>'+
           '<div class="bot-uptime"><span>运行时长</span><strong>'+esc(fmtUptime(st.uptime))+'</strong></div>'+
         '</div>'+
@@ -2361,7 +2361,7 @@ function scopeMetaHTML(scope){
 function renderDetailData(){
   var d=S.detail.data, scope=S.detail.scope;
   if(!d){
-    document.title='会话详情 · QQBot 控制面板';
+    document.title='会话详情 · DeepSleep 控制面板';
     $('#dt-title').textContent=S.detail.error?'无法加载会话':scope;
     $('#dt-busy').innerHTML='<span class="dot '+(S.detail.error?'err':'dim')+'"></span>'+(S.detail.error?'加载失败':'读取中');
     $('#dt-abort').disabled=true;
@@ -2381,7 +2381,7 @@ function renderDetailData(){
   var muteList=Array.isArray(d.mutes)?d.mutes:[];
   var titleEl=$('#dt-title');
   titleEl.textContent=d.title||scope;
-  document.title=(d.title||scope)+' · QQBot 控制面板';
+  document.title=(d.title||scope)+' · DeepSleep 控制面板';
   $('#dt-busy').innerHTML='<span class="dot '+(busy?'live':'dim')+'"></span>'+(busy?'生成中':'空闲');
   var abort=$('#dt-abort');
   abort.disabled=!busy;

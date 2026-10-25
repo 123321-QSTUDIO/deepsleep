@@ -163,8 +163,10 @@ curl.exe -s -u opencode:CHANGE_ME_STRONG_PASSWORD http://127.0.0.1:4096/api/info
 
 ```powershell
 mkdir C:\qqbot; cd C:\qqbot
-git clone https://github.com/123321-QSTUDIO/napcat-plugin-qqbot.git
-cd napcat-plugin-qqbot
+git clone https://github.com/123321-QSTUDIO/deepsleep.git
+cd deepsleep
+# 旧仓库名 napcat-plugin-qqbot 已改为 deepsleep（GitHub 旧链接自动跳转）；
+# 已有部署把代码目录换成 deepsleep 即可，dist-service 与数据目录契约不变
 npm ci
 npm run typecheck
 npm run build
@@ -185,8 +187,8 @@ cd NapCatQQ
 
 # 4.1 白名单补丁（OFFICIAL_PLUGIN_IDS 数组加一行）
 $f = 'packages\napcat-onebot\network\plugin\loader.ts'
-(Get-Content $f -Raw) -replace "'napcat-plugin-qce',", "'napcat-plugin-qce',`r`n  'napcat-plugin-qqbot'," | Set-Content $f -NoNewline
-Select-String -Path $f -Pattern 'napcat-plugin-qqbot'   # 期望有输出，否则补丁没打上
+(Get-Content $f -Raw) -replace "'napcat-plugin-qce',", "'napcat-plugin-qce',`r`n  'deepsleep'," | Set-Content $f -NoNewline
+Select-String -Path $f -Pattern 'deepsleep'   # 期望有输出，否则补丁没打上
 
 # 4.2 pnpm-workspace.yaml 的 allowBuilds 占位符必须改成 true
 @'
@@ -208,7 +210,7 @@ pnpm build:webui
 pnpm build:shell
 
 # 【验证】白名单已编入产物
-Select-String -Path packages\napcat-shell\dist\napcat.mjs -Pattern 'napcat-plugin-qqbot' -SimpleMatch | Select-Object -First 1
+Select-String -Path packages\napcat-shell\dist\napcat.mjs -Pattern 'deepsleep' -SimpleMatch | Select-Object -First 1
 ```
 
 > **pnpm install 失败规避**：`@homebridge/node-pty-prebuilt-multiarch` 的 install 脚本在部分 Windows 机器报 `spawn EINVAL`（仅影响 webui 终端功能，shell 运行不需要）。改用：
@@ -286,7 +288,7 @@ Get-Content C:\napcat-data\logs\*.log -Tail 30 | Select-String -Pattern 'webui|W
 
 ```powershell
 mkdir C:\qqbot-svc
-xcopy /E /I C:\qqbot\napcat-plugin-qqbot\dist-service C:\qqbot-svc
+xcopy /E /I C:\qqbot\deepsleep\dist-service C:\qqbot-svc
 ```
 
 **NapCat 侧**：WebUI → 网络配置 → 新建 **WebSocket 服务器**：`127.0.0.1:3001`，token 设一个强随机串。
@@ -314,13 +316,13 @@ Get-Content C:\qqbot-svc\svc.log -Tail 5
 - `onebotUrl`：NapCat WS 地址（默认 `ws://127.0.0.1:3001`）
 - `onebotToken`：上一步在 NapCat 设的 WS token
 
-**从插件模式迁移**：把 `C:\napcat-data\config\plugins\napcat-plugin-qqbot\` 下的 `messages`、`sessions.json`、`tasks.json`、`users.json`、`workspaces` 拷到 `C:\qqbot-svc\data\`，配置合并进新 config.json，WebUI 里**停用插件**，启动服务。消息库、会话映射、任务记录全部继承。
+**从插件模式迁移**：把 `C:\napcat-data\config\plugins\deepsleep\` 下的 `messages`、`sessions.json`、`tasks.json`、`users.json`、`workspaces` 拷到 `C:\qqbot-svc\data\`，配置合并进新 config.json，WebUI 里**停用插件**，启动服务。消息库、会话映射、任务记录全部继承。
 
 ## 7b. 插件模式（旧，不推荐）
 
 ```powershell
-mkdir C:\napcat-data\plugins\napcat-plugin-qqbot
-xcopy /E /I C:\qqbot\napcat-plugin-qqbot\dist C:\napcat-data\plugins\napcat-plugin-qqbot
+mkdir C:\napcat-data\plugins\deepsleep
+xcopy /E /I C:\qqbot\deepsleep\dist C:\napcat-data\plugins\deepsleep
 
 # 重启 NapCat（杀掉 QQ 进程重跑 start.bat，或在 WebUI 插件页重载）
 Get-Process QQ -ErrorAction SilentlyContinue | Stop-Process -Force
@@ -333,12 +335,12 @@ Get-Content C:\napcat-data\logs\*.log -Tail 50 | Select-String '\[qqbot\]'
 # 期望: [qqbot] 初始化完成, botName=DeepSleep, opencode=... (在线), MCP :5100
 ```
 
-没初始化：查 `C:\napcat-data\config\plugins.json` 是否有 `"napcat-plugin-qqbot": true`，没有就在 WebUI 启用或手动写入后重启。
+没初始化：查 `C:\napcat-data\config\plugins.json` 是否有 `"deepsleep": true`，没有就在 WebUI 启用或手动写入后重启。
 提示 "not in official plugin whitelist"：QQ 加载的还是旧 napcat.mjs，确认 `C:\napcat\start.bat` 指向的是自编译产物。
 
 ## 8. 配置插件
 
-编辑 `C:\napcat-data\config\plugins\napcat-plugin-qqbot\config.json`（首次运行自动生成）：
+编辑 `C:\napcat-data\config\plugins\deepsleep\config.json`（首次运行自动生成）：
 
 ```json
 {
