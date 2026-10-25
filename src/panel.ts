@@ -258,6 +258,23 @@ export class ControlPanel {
       })
       return
     }
+    if (method === 'PUT' && pathname === '/api/stickers/batch') {
+      const body = await this.readBody(req)
+      const ids = Array.isArray(body.ids) ? body.ids.map(String) : []
+      if (ids.length === 0) {
+        this.sendJson(res, 400, { error: 'ids 不能为空' })
+        return
+      }
+      const changed = this.deps.stickers.batchUpdate(ids, { collection: body.collection, enabled: body.enabled })
+      this.sendJson(res, 200, {
+        ok: true,
+        changed,
+        items: this.deps.stickers.list(),
+        stats: this.deps.stickers.stats(),
+        collections: this.deps.stickers.listCollections(),
+      })
+      return
+    }
     const stickerMatch = /^\/api\/stickers\/([^/]+)$/.exec(pathname)
     if (method === 'PUT' && stickerMatch) {
       const id = decodeURIComponent(stickerMatch[1])

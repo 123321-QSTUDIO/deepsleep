@@ -1233,7 +1233,7 @@ body.modal-open{overflow:hidden}
   .input{min-height:44px}
 }
 
-/* ═══════════════════════ 表情页 ═══════════════════════ */
+/* ═══════════════════════ 表情页（QQ 风格表情墙） ═══════════════════════ */
 .st-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .st-stats{display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin:0 0 16px}
 .st-stat{display:flex;align-items:baseline;gap:6px}
@@ -1241,35 +1241,10 @@ body.modal-open{overflow:hidden}
 .st-stat-n.ok{color:var(--success)}
 .st-stat-n.warn{color:var(--warn)}
 .st-stat-l{font-size:12px;color:var(--muted)}
-.st-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
-.st-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s ease,box-shadow .15s ease}
-.st-card:hover{border-color:rgba(255,255,255,.14)}
-.st-card.on{border-color:rgba(39,166,68,.38)}
-.st-thumb{position:relative;height:132px;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.01));border-bottom:1px solid var(--border-soft)}
-.st-img{max-width:104px;max-height:104px;object-fit:contain;border-radius:10px}
-.st-img-ph{font-size:26px;color:var(--meta)}
-.st-thumb.broken .st-img{display:none}
-.st-badge{position:absolute;top:10px;right:10px;font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--muted);border:1px solid var(--border)}
-.st-badge.warn{color:var(--warn);border-color:rgba(234,179,8,.35);background:rgba(234,179,8,.08)}
-.st-badge.ok{color:var(--success);border-color:rgba(39,166,68,.35);background:rgba(39,166,68,.08)}
-.st-body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:9px}
-.st-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.st-id{font-size:10px;color:var(--meta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px}
-.st-toggle{position:relative;display:inline-flex;width:34px;height:19px;cursor:pointer;flex:none}
-.st-toggle input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
-.st-toggle span{position:absolute;inset:0;background:rgba(255,255,255,.12);border-radius:999px;transition:background .15s ease}
-.st-toggle span::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;transition:transform .15s ease}
-.st-toggle input:checked+span{background:var(--accent)}
-.st-toggle input:checked+span::after{transform:translateX(15px)}
-.st-toggle input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
-.st-field{display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--muted)}
-.st-field .input{height:30px;font-size:12px}
-.st-orig{font-size:11px;color:var(--meta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.st-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px}
-.st-note{font-size:11px;color:var(--meta)}
-@media (max-width:640px){.st-grid{grid-template-columns:1fr}}
-
-.st-group{margin:0 0 18px}
+.st-selbar{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;margin:0 0 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.st-selbar b{color:var(--fg);font-variant-numeric:tabular-nums}
+.st-selbar .spacer{flex:1;min-width:8px}
+.st-group{margin:0 0 20px}
 .st-group-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 2px 10px;border-bottom:1px solid var(--border-soft);margin-bottom:12px}
 .st-group-title{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--fg);font-weight:560}
 .st-group-title .count-badge{font-weight:400}
@@ -1281,6 +1256,26 @@ body.modal-open{overflow:hidden}
 .st-coll-toggle input:checked+span{background:var(--accent)}
 .st-coll-toggle input:checked+span::after{transform:translateX(14px)}
 .st-coll-toggle input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.st-wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:12px}
+.st-tile{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:border-color .15s ease,box-shadow .15s ease,transform .12s ease;min-height:134px;outline:none}
+.st-tile:hover{border-color:rgba(255,255,255,.16);transform:translateY(-1px)}
+.st-tile:focus-visible{border-color:var(--accent);box-shadow:0 0 0 2px rgba(94,106,210,.35)}
+.st-tile.on{border-color:rgba(39,166,68,.38)}
+.st-tile.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.st-tile-img{width:78px;height:78px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.03);border-radius:8px;overflow:hidden;flex:none}
+.st-tile-img img{max-width:72px;max-height:72px;object-fit:contain}
+.st-img-ph{font-size:24px;color:var(--meta)}
+.st-tile-label{font-size:11px;line-height:1.35;color:var(--fg-2);text-align:center;max-width:100px;word-break:break-all;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.7em}
+.st-tile-label .ph{color:var(--meta)}
+.st-tile-meta{font-size:9px;color:var(--meta);margin-top:auto}
+.st-tile .st-pick{position:absolute;top:6px;left:6px;width:17px;height:17px;border-radius:50%;border:1px solid rgba(255,255,255,.3);display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);color:#fff;z-index:2}
+.st-tile .st-pick svg{width:10px;height:10px}
+.st-wall.selecting .st-tile .st-pick{display:flex}
+.st-tile.selected .st-pick{background:var(--accent);border-color:var(--accent)}
+.st-edit-preview{display:flex;justify-content:center;margin:6px 0 16px}
+.st-edit-preview img{max-width:140px;max-height:140px;border-radius:12px;background:rgba(255,255,255,.04);padding:8px}
+.st-edit-enable{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--fg-2);margin:12px 0 4px;cursor:pointer}
+@media (max-width:640px){.st-wall{grid-template-columns:repeat(auto-fill,minmax(92px,1fr))}.st-tile-img{width:68px;height:68px}}
 </style>
 </head>
 <body>
@@ -1527,7 +1522,7 @@ var S={
   detail:{ scope:null, data:null, tab:'agent', target:'qq', error:null, returnView:'overview', loadedAt:0, sending:false },
   cfg:{ fields:null, config:null, edit:null, restartKeys:[], dirty:false, advanced:false, file:'', version:null, savedAt:null, loadError:null, activeGroup:0, saving:false },
   lastRefreshOk:null, refreshStreak:0, lastSync:null, scroll:{}, refreshing:false,
-  stickers:{ items:null, stats:null, loading:false, error:null, syncing:false, syncResult:null }
+  stickers:{ items:null, stats:null, collections:null, loading:false, error:null, syncing:false, syncResult:null, selectMode:false, selected:{} }
 };
 var draftT=null;
 var modalFocus=[];
@@ -1742,6 +1737,17 @@ function buildMock(){
       s.updatedAt=NOW;
       return {ok:true,item:deepCopy(s),stats:stickerStats(),collections:this.listCollections()};
     },
+    batchStickers:function(ids,body){
+      var changed=0;
+      (ids||[]).forEach(function(id){
+        var s=null; stickers.forEach(function(x){ if(x.id===id) s=x; });
+        if(!s) return;
+        if(body.collection!==undefined) s.collection=String(body.collection||'').trim();
+        if(body.enabled!==undefined){ s.enabled=body.enabled===true; if(s.enabled&&!String(s.label||'').trim()) s.enabled=false; }
+        s.updatedAt=NOW; changed++;
+      });
+      return {ok:true,changed:changed,items:deepCopy(stickers),stats:stickerStats(),collections:this.listCollections()};
+    },
     config:function(){
       return {config:deepCopy(cfg), fields:FIELDS, restartKeys:RESTART.slice(), file:'config.json', version:12};
     },
@@ -1769,6 +1775,7 @@ function mockApi(path, opts){
     if(m) return MOCK.action(decodeURIComponent(m[1]), opts&&opts.body||{});
     if(path==='/stickers') return {items:MOCK.stickers(),stats:MOCK.stickerStats()};
     if(path==='/stickers/sync') return MOCK.syncStickers();
+    if(path==='/stickers/batch' && method==='PUT') return MOCK.batchStickers((opts&&opts.body||{}).ids||[], opts&&opts.body||{});
     m=path.match(/^\/stickers\/collections\/([^/]+)$/);
     if(m && method==='PUT'){
       var kb=opts&&opts.body||{};
@@ -2836,7 +2843,7 @@ async function sendAction(action){
   }
 }
 
-/* ═══════════════════════ 表情（收藏表情同步 + 打标） ═══════════════════════ */
+/* ═══════════════════════ 表情（收藏表情墙：多选归组 + 点开编辑） ═══════════════════════ */
 function stickerStatsHTML(){
   var st=S.stickers.stats||{};
   var last=st.lastSyncAt?fmtTime(st.lastSyncAt):'尚未同步';
@@ -2847,49 +2854,46 @@ function stickerStatsHTML(){
     +'<div class="st-stat"><span class="st-stat-l">最近同步：'+esc(last)+'</span></div>'
     +'</div>';
 }
-function stickerCardHTML(it){
+function stickerById(id){
+  var list=S.stickers.items||[];
+  for(var i=0;i<list.length;i++){ if(list[i].id===id) return list[i]; }
+  return null;
+}
+function stickerTileHTML(it){
+  var selected=!!(S.stickers.selected||{})[it.id];
   var labeled=!!(it.label&&it.label.trim());
-  var enabled=!!it.enabled;
-  var collection=it.collection||'';
-  var display='['+(collection||'收藏')+':'+(it.label||'未打标')+']';
-  var img=it.url
-    ? '<img class="st-img" src="'+esc(it.url)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=\'none\';this.parentNode.classList.add(\'broken\')">'
-    : '<span class="st-img-ph">?</span>';
-  return '<div class="st-card'+(enabled?' on':'')+'" data-st-id="'+esc(it.id)+'">'
-    +'<div class="st-thumb">'+img+(labeled?'<span class="st-badge'+(enabled?' ok':'')+'">'+(enabled?'可用':'已打标')+'</span>':'<span class="st-badge warn">待打标</span>')+'</div>'
-    +'<div class="st-body">'
-    +'<div class="st-head"><span class="mono st-id" title="'+esc(it.id)+'">'+esc(shortId(it.id))+'</span>'
-      +'<label class="st-toggle" title="启用后 Agent 才能使用这个表情"><input type="checkbox" data-st-toggle="'+esc(it.id)+'" '+(enabled?'checked':'')+'><span></span></label></div>'
-    +'<label class="st-field"><span>合集（表情包）</span><input class="input st-collection" data-st-collection="'+esc(it.id)+'" value="'+esc(collection)+'" placeholder="例如：猫猫虫咖波；空=未分组"></label>'
-    +'<label class="st-field"><span>标签（Agent 看到的描述）</span><input class="input st-label" data-st-label="'+esc(it.id)+'" value="'+esc(it.label||'')+'" placeholder="例如：猫猫点赞 / 无语 / 狗头"></label>'
-    +'<label class="st-field"><span>分类（逗号分隔）</span><input class="input st-tags" data-st-tags="'+esc(it.id)+'" value="'+esc((it.tags||[]).join(', '))+'" placeholder="日常, 嘲讽"></label>'
-    +(it.desc?'<div class="st-orig">QQ 原描述：'+esc(it.desc)+'</div>':'')
-    +'<div class="st-foot"><button class="btn btn-sm" type="button" data-action="st-save" data-id="'+esc(it.id)+'">保存</button>'
-      +'<span class="st-note mono">'+esc(display)+'</span></div>'
-    +'</div></div>';
+  var meta=it.enabled?'可用':(labeled?'已打标':'待打标');
+  return '<div class="st-tile'+(it.enabled?' on':'')+(selected?' selected':'')+'" data-action="st-tile" data-id="'+esc(it.id)+'" role="button" tabindex="0" title="查看/编辑">'
+    +'<span class="st-pick">'+icon('check')+'</span>'
+    +'<div class="st-tile-img">'+(it.url?'<img src="'+esc(it.url)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=\'none\'">':'<span class="st-img-ph">?</span>')+'</div>'
+    +'<div class="st-tile-label">'+(labeled?esc(it.label):'<span class="ph">未命名</span>')+'</div>'
+    +'<div class="st-tile-meta">'+esc(meta)+'</div>'
+    +'</div>';
 }
 function stickerGroupHTML(name,items,ungrouped){
   var coll=(S.stickers.collections||[]).filter(function(c){return c.name===name;})[0];
   if(!coll) coll={name:name,total:items.length,labeled:items.filter(function(s){return !!(s.label||'').trim();}).length,enabled:items.filter(function(s){return !!s.enabled;}).length,allEnabled:false};
   var head='<div class="st-group-head">'
     +'<div class="st-group-title">'+icon('file')+'<span>'+esc(ungrouped?'未分组收藏':name)+'</span><span class="count-badge">'+items.length+'</span>'
-      +(ungrouped?'<span class="st-group-sub">没有合集的散装收藏</span>':'<span class="st-group-sub">'+coll.enabled+'/'+coll.total+' 已启用</span>')+'</div>'
+      +(ungrouped?'<span class="st-group-sub">还没有归入合集的表情</span>':'<span class="st-group-sub">'+coll.enabled+'/'+coll.total+' 已启用</span>')+'</div>'
     +(ungrouped?'':'<label class="st-coll-toggle" title="一次开关整个合集（只启用已打标的）"><input type="checkbox" data-st-coll-toggle="'+esc(name)+'" '+(coll.allEnabled?'checked':'')+'><span></span><em>合集开关</em></label>')
     +'</div>';
-  return '<section class="st-group" data-st-group="'+esc(name||'')+'">'+head+'<div class="st-grid">'+items.map(stickerCardHTML).join('')+'</div></section>';
+  return '<section class="st-group" data-st-group="'+esc(name||'')+'">'+head+'<div class="st-wall'+(S.stickers.selectMode?' selecting':'')+'">'+items.map(stickerTileHTML).join('')+'</div></section>';
 }
 function renderStickers(){
   var v=$('#view-stickers');
   if(!v) return;
   var items=S.stickers.items;
+  var selectedCount=Object.keys(S.stickers.selected||{}).filter(function(k){return S.stickers.selected[k];}).length;
   var head='<div class="view-head"><div><h1 class="view-title" id="st-title">表情</h1>'
-    +'<p class="view-sub"><span>QQ 收藏表情</span><span class="sep">/</span><span>按合集归组，先打标签再启用，Agent 只会看到已启用的</span></p></div>'
+    +'<p class="view-sub"><span>QQ 收藏表情</span><span class="sep">/</span><span>点表情编辑组别和描述；多选后可以一次建组/加组</span></p></div>'
     +'<div class="st-actions"><button class="btn btn-sm btn-icon" type="button" data-action="st-refresh" title="刷新" aria-label="刷新">'+icon('refresh')+'</button>'
+    +'<button class="btn btn-sm'+(S.stickers.selectMode?' btn-primary':'')+'" type="button" data-action="st-select-toggle">'+(S.stickers.selectMode?'退出多选':'多选')+'</button>'
     +'<button class="btn btn-sm btn-primary" type="button" data-action="st-sync" '+(S.stickers.syncing?'disabled':'')+'>'+(S.stickers.syncing?'同步中…':'同步收藏表情')+'</button></div></div>';
   var body='';
   if(S.stickers.loading&&!items){ body=stickerStatsHTML()+'<div class="panel"><div class="panel-body"><div class="sk" style="height:14px;width:40%"></div><div class="sk" style="height:90px;margin-top:14px"></div></div></div>'; }
   else if(S.stickers.error){ body=stickerStatsHTML()+'<div class="panel"><div class="panel-body"><div class="cfg-error">'+icon('warn','empty-ic')+'<div><div class="empty-title">表情列表加载失败</div><div class="empty-text">'+esc(S.stickers.error)+'</div></div></div><button class="btn btn-sm" type="button" data-action="st-refresh">重试</button></div></div>'; }
-  else if(!items||items.length===0){ body=stickerStatsHTML()+'<div class="panel"><div class="panel-body"><div class="empty-title">还没有同步过收藏表情</div><div class="empty-text">点右上角「同步收藏表情」从当前 QQ 号拉取收藏夹里的自定义表情；同步后先归组、打标签并启用，Agent 才能用。</div></div></div>'; }
+  else if(!items||items.length===0){ body=stickerStatsHTML()+'<div class="panel"><div class="panel-body"><div class="empty-title">还没有同步过收藏表情</div><div class="empty-text">点右上角「同步收藏表情」从当前 QQ 号拉取收藏夹里的自定义表情；同步后点表情填组别/描述，或框选多个一次建组。</div></div></div>'; }
   else {
     var byName={};
     items.forEach(function(it){ var n=it.collection||''; (byName[n]=byName[n]||[]).push(it); });
@@ -2898,7 +2902,14 @@ function renderStickers(){
     var groups='';
     order.forEach(function(n){ groups+=stickerGroupHTML(n,byName[n]||[],false); });
     if(byName['']&&byName[''].length) groups+=stickerGroupHTML('',byName[''],true);
-    body=stickerStatsHTML()+groups;
+    var selbar=S.stickers.selectMode
+      ? '<div class="st-selbar"><span>已选 <b>'+selectedCount+'</b> 个</span><span class="spacer"></span>'
+        +'<button class="btn btn-sm" type="button" data-action="st-batch-collection">新建合集 / 归入合集</button>'
+        +'<button class="btn btn-sm" type="button" data-action="st-batch-enable">启用所选</button>'
+        +'<button class="btn btn-sm" type="button" data-action="st-batch-disable">停用所选</button>'
+        +'<button class="btn btn-sm btn-icon" type="button" data-action="st-batch-clear" title="清空选择" aria-label="清空选择">'+icon('x')+'</button></div>'
+      : '';
+    body=stickerStatsHTML()+selbar+groups;
   }
   v.innerHTML=head+body;
 }
@@ -2906,12 +2917,16 @@ async function refreshStickers(manual){
   var btn=$('#view-stickers [data-action="st-refresh"]');
   if(btn&&manual){ btn.classList.add('spin'); btn.setAttribute('aria-busy','true'); }
   S.stickers.loading=true;
-  if(!$('#view-stickers .st-grid')&&S.view==='stickers') renderStickers();
+  if(!$('#view-stickers .st-wall')&&S.view==='stickers') renderStickers();
   try{
     var out=await api('/stickers');
     S.stickers.items=Array.isArray(out&&out.items)?out.items:[];
     S.stickers.stats=out&&out.stats?out.stats:null;
+    S.stickers.collections=out&&Array.isArray(out.collections)?out.collections:null;
     S.stickers.error=null;
+    var sel=S.stickers.selected||{}; var ids={}; (S.stickers.items||[]).forEach(function(s){ids[s.id]=1;});
+    Object.keys(sel).forEach(function(k){ if(!ids[k]) delete sel[k]; });
+    S.stickers.selected=sel;
     if(manual) toast('表情列表已刷新','success',1800);
   }catch(err){
     S.stickers.error=friendlyError(err);
@@ -2938,33 +2953,86 @@ async function syncStickers(){
     if(S.view==='stickers') renderStickers();
   }
 }
-function stickerInputs(id){
-  var label=$('[data-st-label="'+id+'"]');
-  var tags=$('[data-st-tags="'+id+'"]');
-  return { label:label?label.value:'', tags:tags?tags.value:'' };
+function toggleStickerSelectMode(){
+  S.stickers.selectMode=!S.stickers.selectMode;
+  if(!S.stickers.selectMode) S.stickers.selected={};
+  renderStickers();
 }
-function stickerInputs(id){
-  var collection=$('[data-st-collection="'+id+'"]');
-  var label=$('[data-st-label="'+id+'"]');
-  var tags=$('[data-st-tags="'+id+'"]');
-  return { collection:collection?collection.value:'', label:label?label.value:'', tags:tags?tags.value:'' };
+function handleStickerTile(id){
+  if(S.stickers.selectMode){
+    var sel=S.stickers.selected||{};
+    if(sel[id]) delete sel[id]; else sel[id]=true;
+    S.stickers.selected=sel;
+    renderStickers();
+    return;
+  }
+  openStickerEditor(id);
 }
-function stickerTags(value){
-  return String(value||'').split(/[,，]/).map(function(x){return x.trim();}).filter(Boolean);
+function clearStickerSelection(){
+  S.stickers.selected={};
+  renderStickers();
 }
-async function saveSticker(id){
-  var input=stickerInputs(id);
+async function batchStickers(patch,message){
+  var ids=Object.keys(S.stickers.selected||{}).filter(function(k){return S.stickers.selected[k];});
+  if(ids.length===0){ toast('先选择表情','warn',2400); return; }
   try{
-    await api('/stickers/'+encodeURIComponent(id),{method:'PUT',body:{collection:input.collection,label:input.label,tags:stickerTags(input.tags)}});
-    toast('已保存','success',1800);
+    var out=await api('/stickers/batch',{method:'PUT',body:Object.assign({ids:ids},patch)});
+    toast(message||('已更新 '+(out&&out.changed||ids.length)+' 个'),'success',2600);
+    S.stickers.selected={};
     await refreshStickers(false);
   }catch(err){ toast(friendlyError(err),'error',4200); }
 }
-async function toggleSticker(id,enabled){
-  var input=stickerInputs(id);
+function collectionOptionsHTML(){
+  return (S.stickers.collections||[]).map(function(c){
+    return '<option value="'+esc(c.name)+'">'+esc(c.name)+'（'+c.total+'）</option>';
+  }).join('');
+}
+function openBatchCollectionModal(){
+  var selectedCount=Object.keys(S.stickers.selected||{}).length;
+  if(selectedCount===0){ toast('先选择表情','warn',2400); return; }
+  openOverlay('<div class="modal" role="dialog" aria-modal="true" aria-labelledby="st-batch-title" tabindex="-1">'
+    +'<button class="modal-x" type="button" data-action="st-batch-coll-cancel" aria-label="关闭">'+icon('x')+'</button>'
+    +'<h2 class="modal-title" id="st-batch-title">新建合集 / 归入合集</h2>'
+    +'<p class="modal-text">把选中的 '+selectedCount+' 个表情归入同一个合集。填已有合集名就是加组，填新名字就是新建合集。</p>'
+    +'<div class="field"><label for="st-batch-coll">合集名</label><input id="st-batch-coll" class="input" list="st-batch-coll-list" placeholder="例如：猫猫虫咖波" autocomplete="off"><datalist id="st-batch-coll-list">'+collectionOptionsHTML()+'</datalist><span class="field-help">合集开关可以一次启停整组。</span></div>'
+    +'<div class="modal-actions"><button class="btn" type="button" data-action="st-batch-coll-cancel">取消</button><button class="btn btn-primary" type="button" data-action="st-batch-coll-save">确定归组</button></div>'
+    +'</div>','#st-batch-coll');
+}
+async function saveBatchCollection(){
+  var input=$('#st-batch-coll');
+  var name=String(input?input.value:'').trim();
+  if(!name){ toast('合集名不能为空','warn',2600); return; }
+  await batchStickers({collection:name},'已归入合集「'+name+'」');
+  closeModal();
+}
+function openStickerEditor(id){
+  var it=stickerById(id);
+  if(!it) return;
+  var img=it.url?'<img src="'+esc(it.url)+'" alt="" referrerpolicy="no-referrer">':'<span class="st-img-ph">?</span>';
+  openOverlay('<div class="modal" role="dialog" aria-modal="true" aria-labelledby="st-edit-title" tabindex="-1">'
+    +'<button class="modal-x" type="button" data-action="st-edit-cancel" aria-label="关闭">'+icon('x')+'</button>'
+    +'<h2 class="modal-title" id="st-edit-title">编辑表情</h2>'
+    +'<div class="st-edit-preview">'+img+'</div>'
+    +'<div class="field"><label for="st-edit-label">描述（Agent 看到的标签）</label><input id="st-edit-label" class="input" value="'+esc(it.label||'')+'" placeholder="例如：猫猫点赞 / 无语 / 狗头"></div>'
+    +'<div class="field"><label for="st-edit-collection">合集（表情包）</label><input id="st-edit-collection" class="input" list="st-edit-coll-list" value="'+esc(it.collection||'')+'" placeholder="例如：猫猫虫咖波；留空=未分组"><datalist id="st-edit-coll-list">'+collectionOptionsHTML()+'</datalist></div>'
+    +'<div class="field"><label for="st-edit-tags">分类（逗号分隔）</label><input id="st-edit-tags" class="input" value="'+esc((it.tags||[]).join(', '))+'" placeholder="日常, 嘲讽"></div>'
+    +'<label class="st-edit-enable"><input type="checkbox" id="st-edit-enabled" '+(it.enabled?'checked':'')+'> 启用（Agent 可用；没有描述不会启用）</label>'
+    +(it.desc?'<div class="modal-meta"><span>QQ 原描述</span><span>'+esc(it.desc)+'</span></div>':'')
+    +'<div class="modal-actions"><button class="btn" type="button" data-action="st-edit-cancel">取消</button><button class="btn btn-primary" type="button" data-action="st-edit-save" data-id="'+esc(it.id)+'">保存</button></div>'
+    +'</div>','#st-edit-label');
+}
+async function saveStickerEditor(id){
+  var label=$('#st-edit-label'), collection=$('#st-edit-collection'), tags=$('#st-edit-tags'), enabled=$('#st-edit-enabled');
   try{
-    var out=await api('/stickers/'+encodeURIComponent(id),{method:'PUT',body:{collection:input.collection,label:input.label,tags:stickerTags(input.tags),enabled:enabled}});
-    if(out&&out.item&&out.item.enabled===false&&enabled){ toast('先填写标签再启用','warn',3200); }
+    var out=await api('/stickers/'+encodeURIComponent(id),{method:'PUT',body:{
+      label:label?label.value:'',
+      collection:collection?collection.value:'',
+      tags:String(tags?tags.value:'').split(/[,，]/).map(function(x){return x.trim();}).filter(Boolean),
+      enabled:!!(enabled&&enabled.checked)
+    }});
+    if(out&&out.item&&out.item.enabled===false&&enabled&&enabled.checked){ toast('没有描述时不会启用，请先填描述','warn',3200); }
+    else toast('已保存','success',1800);
+    closeModal();
     await refreshStickers(false);
   }catch(err){ toast(friendlyError(err),'error',4200); }
 }
@@ -3511,7 +3579,16 @@ document.addEventListener('click', async function(e){
   if(a==='dt-dream'){ confirmDream(); return; }
   if(a==='st-refresh'){ refreshStickers(true); return; }
   if(a==='st-sync'){ syncStickers(); return; }
-  if(a==='st-save'){ saveSticker(el.dataset.id); return; }
+  if(a==='st-select-toggle'){ toggleStickerSelectMode(); return; }
+  if(a==='st-tile'){ handleStickerTile(el.dataset.id); return; }
+  if(a==='st-batch-clear'){ clearStickerSelection(); return; }
+  if(a==='st-batch-enable'){ batchStickers({enabled:true},'已启用所选'); return; }
+  if(a==='st-batch-disable'){ batchStickers({enabled:false},'已停用所选'); return; }
+  if(a==='st-batch-collection'){ openBatchCollectionModal(); return; }
+  if(a==='st-batch-coll-save'){ saveBatchCollection(); return; }
+  if(a==='st-batch-coll-cancel'){ closeModal(); return; }
+  if(a==='st-edit-cancel'){ closeModal(); return; }
+  if(a==='st-edit-save'){ saveStickerEditor(el.dataset.id); return; }
   if(a==='toggle-pass'){ togglePass(el.dataset.for); return; }
   if(a==='cfg-save'){ saveConfig(); return; }
   if(a==='cfg-format'){ formatJson(); return; }
@@ -3543,9 +3620,7 @@ function trapModalFocus(e){
 }
 document.addEventListener('change', function(e){
   var t=e.target;
-  if(t&&t.matches&&t.matches('[data-st-toggle]')){
-    toggleSticker(t.getAttribute('data-st-toggle'), t.checked);
-  }else if(t&&t.matches&&t.matches('[data-st-coll-toggle]')){
+  if(t&&t.matches&&t.matches('[data-st-coll-toggle]')){
     toggleCollection(t.getAttribute('data-st-coll-toggle'), t.checked);
   }
 });

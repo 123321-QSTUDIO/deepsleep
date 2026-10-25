@@ -123,6 +123,25 @@ export class StickerStore {
     return item
   }
 
+  /** 批量更新：多选后统一归入合集 / 启停 */
+  batchUpdate(ids: string[], patch: { collection?: unknown; enabled?: unknown }): number {
+    let changed = 0
+    const now = Math.floor(Date.now() / 1000)
+    for (const id of ids) {
+      const item = this.items.get(String(id))
+      if (!item) continue
+      if (patch.collection !== undefined) item.collection = String(patch.collection ?? '').trim().slice(0, 40)
+      if (patch.enabled !== undefined) {
+        item.enabled = patch.enabled === true || patch.enabled === 'true'
+        if (item.enabled && item.label.trim().length === 0) item.enabled = false
+      }
+      item.updatedAt = now
+      changed++
+    }
+    if (changed > 0) this.save()
+    return changed
+  }
+
   /** 合集（表情包）列表：用于面板合集级总开关 */
   listCollections(): { name: string; total: number; labeled: number; enabled: number; allEnabled: boolean }[] {
     const map = new Map<string, StickerRecord[]>()
