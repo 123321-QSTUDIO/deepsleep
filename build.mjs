@@ -13,6 +13,7 @@ await build({
   outfile: 'dist/index.mjs',
   sourcemap: false,
   minify: false,
+  loader: { '.html': 'text' },
   banner: {
     js: [
       "import { createRequire as __qqbotCreateRequire } from 'module';",
@@ -54,6 +55,7 @@ await build({
   outfile: 'dist-service/index.mjs',
   sourcemap: false,
   minify: false,
+  loader: { '.html': 'text' },
   banner: {
     js: [
       "import { createRequire as __qqbotCreateRequire } from 'module';",

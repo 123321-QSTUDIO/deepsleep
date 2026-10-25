@@ -1,0 +1,602 @@
+import fs from 'node:fs'
+import http from 'node:http'
+import path from 'node:path'
+import { defaultConfig, PluginConfig, resolveConfigFile, saveConfig } from './config'
+import { dayKey, MsgDB } from './msgdb'
+import { OcMessage, OpencodeClient } from './opencode'
+import { SessionController } from './sessions'
+import { TaskRegistry } from './tasks'
+import panelHtml from './panel.html'
+
+const PANEL_VERSION = '0.1.0'
+const BODY_LIMIT = 1024 * 1024
+const MAX_TEXT = 5000
+
+export interface PanelDeps {
+  config: PluginConfig
+  configPath: string
+  dataPath: string
+  mode: 'plugin' | 'service'
+  sessions: SessionController
+  db: MsgDB
+  oc: OpencodeClient
+  tasks: TaskRegistry
+  log: (msg: string, ...args: unknown[]) => void
+  onebotConnected?: () => boolean
+}
+
+interface FieldDef {
+  key: keyof PluginConfig
+  label: string
+  group: string
+  type: 'string' | 'number' | 'boolean' | 'json' | 'password'
+  help?: string
+  min?: number
+  max?: number
+}
+
+const FIELDS: FieldDef[] = [
+  { key: 'botName', label: 'botName（机器人自称）', group: '基础', type: 'string', help: '写入群/私聊工作区的人设，下一条消息触发时重建 AGENTS.md' },
+  { key: 'hostModel', label: 'hostModel（主模型）', group: '模型', type: 'string' },
+  { key: 'visionModel', label: 'visionModel（识图子代理模型）', group: '模型', type: 'string' },
+
+  { key: 'opencodeUrl', label: 'opencodeUrl', group: '连接', type: 'string', help: 'host opencode V2 地址' },
+  { key: 'opencodePassword', label: 'opencodePassword', group: '连接', type: 'password', help: '必须与 serve 的 OPENCODE_PASSWORD 一致' },
+  { key: 'onebotUrl', label: 'onebotUrl（独立服务模式）', group: '连接', type: 'string' },
+  { key: 'onebotToken', label: 'onebotToken（独立服务模式）', group: '连接', type: 'password' },
+
+  { key: 'contextMessageCount', label: 'contextMessageCount（上下文条数）', group: '消息与回复', type: 'number', min: 1 },
+  { key: 'replyDelayMinMs', label: 'replyDelayMinMs（兜底分句最小间隔）', group: '消息与回复', type: 'number', min: 0 },
+  { key: 'replyDelayMaxMs', label: 'replyDelayMaxMs（兜底分句最大间隔）', group: '消息与回复', type: 'number', min: 0 },
+  { key: 'maxLinesPerReply', label: 'maxLinesPerReply（兜底最大分句数）', group: '消息与回复', type: 'number', min: 1 },
+  { key: 'turnTimeoutSec', label: 'turnTimeoutSec（单轮超时秒数）', group: '消息与回复', type: 'number', min: 10 },
+
+  { key: 'mcpHost', label: 'mcpHost（MCP 绑定地址）', group: 'MCP', type: 'string' },
+  { key: 'mcpPort', label: 'mcpPort', group: 'MCP', type: 'number', min: 1, max: 65535 },
+  { key: 'mcpToken', label: 'mcpToken', group: 'MCP', type: 'password' },
+  { key: 'mcpUrl', label: 'mcpUrl（host 侧工作区注入）', group: 'MCP', type: 'string' },
+  { key: 'mcpUrlForDocker', label: 'mcpUrlForDocker（容器内地址）', group: 'MCP', type: 'string' },
+
+  { key: 'taskConcurrency', label: 'taskConcurrency（任务并发）', group: '任务沙箱', type: 'number', min: 1 },
+  { key: 'taskTimeoutSec', label: 'taskTimeoutSec（任务超时秒数）', group: '任务沙箱', type: 'number', min: 30 },
+  { key: 'dockerImage', label: 'dockerImage', group: '任务沙箱', type: 'string' },
+  { key: 'dockerHost', label: 'dockerHost（远程 docker 主机）', group: '任务沙箱', type: 'string' },
+  { key: 'dockerEnv', label: 'dockerEnv（容器环境变量 JSON）', group: '任务沙箱', type: 'json', help: '给容器注入的 API key 等，形如 {"KEY":"value"}' },
+  { key: 'remoteSsh', label: 'remoteSsh（远程文件操作 SSH）', group: '任务沙箱', type: 'string' },
+  { key: 'remoteSshKey', label: 'remoteSshKey（SSH 私钥路径）', group: '任务沙箱', type: 'string' },
+  { key: 'remoteWorkRoot', label: 'remoteWorkRoot', group: '任务沙箱', type: 'string' },
+  { key: 'archiveRetentionDays', label: 'archiveRetentionDays（产物留存天数）', group: '任务沙箱', type: 'number', min: 1 },
+  { key: 'storageQuotaMB', label: 'storageQuotaMB（每 QQ 配额 MB）', group: '任务沙箱', type: 'number', min: 10 },
+
+  { key: 'artifactBaseUrl', label: 'artifactBaseUrl（产物下载服务）', group: '产物下载', type: 'string' },
+  { key: 'artifactToken', label: 'artifactToken', group: '产物下载', type: 'password' },
+  { key: 'linkTtlMinutes', label: 'linkTtlMinutes（下载链接有效期）', group: '产物下载', type: 'number', min: 1 },
+
+  { key: 'panelEnabled', label: 'panelEnabled（启用控制面板）', group: '控制面板', type: 'boolean' },
+  { key: 'panelHost', label: 'panelHost（绑定地址）', group: '控制面板', type: 'string', help: '默认 127.0.0.1，只允许本机访问' },
+  { key: 'panelPort', label: 'panelPort', group: '控制面板', type: 'number', min: 1, max: 65535 },
+  { key: 'panelToken', label: 'panelToken（访问 Token）', group: '控制面板', type: 'password', help: '非空时 API 需要 Authorization: Bearer <token> 或 URL ?token=' },
+]
+
+const RESTART_KEYS = new Set<keyof PluginConfig>([
+  'opencodeUrl',
+  'opencodePassword',
+  'onebotUrl',
+  'onebotToken',
+  'mcpHost',
+  'mcpPort',
+  'panelEnabled',
+  'panelHost',
+  'panelPort',
+])
+
+export class ControlPanel {
+  private server: http.Server | null = null
+
+  constructor(private deps: PanelDeps) {}
+
+  async start(): Promise<void> {
+    const { config, log } = this.deps
+    if (!config.panelEnabled) {
+      log('控制面板未启用 (panelEnabled=false)')
+      return
+    }
+    const host = config.panelHost || '127.0.0.1'
+    const port = Number(config.panelPort) || 5101
+    const srv = http.createServer((req, res) => {
+      void this.handle(req, res).catch((e: unknown) => {
+        log('控制面板请求失败:', e)
+        try {
+          this.sendJson(res, 500, { error: String((e as Error)?.message ?? e) })
+        } catch {
+          // response already sent
+        }
+      })
+    })
+    this.server = srv
+    await new Promise<void>((resolve) => {
+      const onError = (e: Error) => {
+        log(`控制面板监听失败 ${host}:${port}:`, e)
+        srv.off('error', onError)
+        this.server = null
+        resolve()
+      }
+      srv.once('error', onError)
+      srv.listen(port, host, () => {
+        srv.off('error', onError)
+        log(`控制面板已启动: http://${host}:${port}/`)
+        if (!config.panelToken && host !== '127.0.0.1' && host !== 'localhost' && host !== '::1') {
+          log('警告: 控制面板绑定了非回环地址但没有设置 panelToken，任何人都能改配置，请尽快设置 panelToken')
+        }
+        resolve()
+      })
+    })
+  }
+
+  stop() {
+    this.server?.close()
+    this.server = null
+  }
+
+  // ---- HTTP ----
+
+  private async handle(req: http.IncomingMessage, res: http.ServerResponse) {
+    const url = new URL(req.url ?? '/', 'http://localhost')
+    const pathname = url.pathname
+    const method = (req.method ?? 'GET').toUpperCase()
+
+    if (method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
+      res.writeHead(200, {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-cache',
+        'x-content-type-options': 'nosniff',
+        'referrer-policy': 'no-referrer',
+      })
+      res.end(panelHtml)
+      return
+    }
+    if (!pathname.startsWith('/api/')) {
+      this.sendJson(res, 404, { error: 'not found' })
+      return
+    }
+    if (!this.authOk(req, url)) {
+      this.sendJson(res, 401, { error: 'unauthorized: 需要 panelToken' })
+      return
+    }
+
+    if (method === 'GET' && pathname === '/api/status') {
+      this.sendJson(res, 200, await this.statusPayload())
+      return
+    }
+    if (method === 'GET' && pathname === '/api/config') {
+      this.sendJson(res, 200, this.configPayload())
+      return
+    }
+    if (method === 'PUT' && pathname === '/api/config') {
+      const body = await this.readBody(req)
+      const result = this.updateConfig(body)
+      if ('error' in result) {
+        this.sendJson(res, 400, result)
+        return
+      }
+      this.sendJson(res, 200, result)
+      return
+    }
+    if (method === 'GET' && pathname === '/api/sessions') {
+      this.sendJson(res, 200, await this.sessionsPayload())
+      return
+    }
+    const detailMatch = /^\/api\/sessions\/([^/]+)$/.exec(pathname)
+    if (method === 'GET' && detailMatch) {
+      const scope = decodeURIComponent(detailMatch[1])
+      if (!this.validScope(scope)) {
+        this.sendJson(res, 400, { error: '非法 scope' })
+        return
+      }
+      const detail = await this.sessionDetail(scope)
+      if (!detail) {
+        this.sendJson(res, 404, { error: '会话不存在' })
+        return
+      }
+      this.sendJson(res, 200, detail)
+      return
+    }
+    const actionMatch = /^\/api\/sessions\/([^/]+)\/action$/.exec(pathname)
+    if (method === 'POST' && actionMatch) {
+      const scope = decodeURIComponent(actionMatch[1])
+      if (!this.validScope(scope)) {
+        this.sendJson(res, 400, { error: '非法 scope' })
+        return
+      }
+      const body = await this.readBody(req)
+      const result = await this.sessionAction(scope, body)
+      this.sendJson(res, 'error' in result ? 400 : 200, result)
+      return
+    }
+    this.sendJson(res, 404, { error: 'not found' })
+  }
+
+  private authOk(req: http.IncomingMessage, url: URL): boolean {
+    const token = this.deps.config.panelToken
+    if (!token) return true
+    if (url.searchParams.get('token') === token) return true
+    const auth = req.headers.authorization ?? ''
+    if (auth === `Bearer ${token}`) return true
+    const cookie = req.headers.cookie ?? ''
+    if (cookie.split(';').some((c) => c.trim() === `qqbot_panel=${token}`)) return true
+    return false
+  }
+
+  private sendJson(res: http.ServerResponse, status: number, body: unknown) {
+    if (res.headersSent) return
+    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+    res.end(JSON.stringify(body))
+  }
+
+  private async readBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
+    let size = 0
+    const chunks: Buffer[] = []
+    for await (const chunk of req) {
+      const buf = chunk as Buffer
+      size += buf.length
+      if (size > BODY_LIMIT) throw new Error('请求体过大')
+      chunks.push(buf)
+    }
+    const text = Buffer.concat(chunks).toString('utf-8').trim()
+    if (!text) return {}
+    try {
+      const parsed = JSON.parse(text) as unknown
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('需要 JSON 对象')
+      return parsed as Record<string, unknown>
+    } catch {
+      throw new Error('请求体不是合法 JSON')
+    }
+  }
+
+  private validScope(scope: string): boolean {
+    return /^(group|private)-\d{3,12}$/.test(scope)
+  }
+
+  // ---- 状态 / 会话 ----
+
+  private async statusPayload() {
+    const { config, sessions, tasks, mode, dataPath, oc } = this.deps
+    const queued = tasks.pending().length
+    const all = tasks.all()
+    const count = (status: string) => all.filter((t) => t.status === status).length
+    return {
+      version: PANEL_VERSION,
+      mode,
+      botName: config.botName,
+      uptime: process.uptime(),
+      dataPath,
+      opencode: { url: config.opencodeUrl, healthy: await oc.health() },
+      onebot: this.deps.onebotConnected ? { connected: this.deps.onebotConnected() } : null,
+      mcp: { host: config.mcpHost, port: config.mcpPort, tokenSet: !!config.mcpToken },
+      panel: { host: config.panelHost, port: config.panelPort, tokenSet: !!config.panelToken },
+      tasks: { queued, running: count('running'), done: count('done'), error: count('error'), total: all.length },
+      sessions: { total: sessions.listScopes().length },
+    }
+  }
+
+  private async sessionsPayload() {
+    const { sessions, db, oc, config } = this.deps
+    const entries = sessions.listScopes()
+    const byScope = new Map(entries.map((e) => [e.scope, e]))
+    // 合并消息库里出现过、但当前没有映射的 scope
+    const scopes = new Set<string>(entries.map((e) => e.scope))
+    try {
+      const dir = path.join(this.deps.dataPath, 'messages')
+      if (fs.existsSync(dir)) {
+        for (const name of fs.readdirSync(dir)) if (this.validScope(name)) scopes.add(name)
+      }
+    } catch {
+      // 忽略消息目录读取失败
+    }
+    let active: Record<string, unknown> = {}
+    try {
+      active = await oc.getStatus()
+    } catch {
+      // opencode 离线时列表仍然可用
+    }
+    const today = dayKey(Math.floor(Date.now() / 1000))
+    const list = await Promise.all(
+      [...scopes].map(async (scope) => {
+        const entry = byScope.get(scope)
+        const sessionId = entry?.sessionId
+        const [info, recent, count] = await Promise.all([
+          sessionId ? oc.getSessionInfo(sessionId).catch(() => null) : Promise.resolve(null),
+          Promise.resolve(this.recentDbMessages(scope, 1)),
+          Promise.resolve(this.countToday(scope, today)),
+        ])
+        return {
+          scope,
+          sessionId: sessionId ?? null,
+          title: info?.title ?? null,
+          busy: sessionId ? active[sessionId] !== undefined : false,
+          pending: sessions.pendingOf(scope).length,
+          todayCount: count,
+          lastMessage: recent[0]
+            ? { time: Number(recent[0].time), nickname: String(recent[0].nickname ?? ''), user_id: recent[0].user_id, text: cleanText(String(recent[0].text ?? '')) }
+            : null,
+          workspace: entry?.directory ?? path.join(this.deps.dataPath, 'workspaces', scope),
+          botName: config.botName,
+        }
+      })
+    )
+    list.sort((a, b) => Number(b.busy) - Number(a.busy) || (b.lastMessage?.time ?? 0) - (a.lastMessage?.time ?? 0) || a.scope.localeCompare(b.scope))
+    return { sessions: list }
+  }
+
+  private async sessionDetail(scope: string) {
+    const { sessions, db, oc } = this.deps
+    const entry = sessions.listScopes().find((e) => e.scope === scope)
+    const known = !!entry || db.listDays(scope).length > 0
+    if (!known) return null
+    const workspace = entry?.directory ?? path.join(this.deps.dataPath, 'workspaces', scope)
+    const sessionId = entry?.sessionId ?? null
+    const id = sessionId ?? sessions.sessionIdOf(scope) ?? null
+    let info: Awaited<ReturnType<OpencodeClient['getSessionInfo']>> | null = null
+    let busy = false
+    let ocMessages: unknown[] = []
+    if (id) {
+      const [i, status, messages] = await Promise.all([
+        oc.getSessionInfo(id).catch(() => null),
+        oc.getStatus().catch(() => ({}) as Record<string, unknown>),
+        oc.getMessages(id, 60).catch(() => [] as OcMessage[]),
+      ])
+      info = i
+      busy = (status as Record<string, unknown>)[id] !== undefined
+      ocMessages = this.normalizeMessages(messages)
+    }
+    const today = dayKey(Math.floor(Date.now() / 1000))
+    return {
+      scope,
+      sessionId: id,
+      workspace,
+      title: info?.title ?? null,
+      info,
+      busy,
+      pending: sessions.pendingOf(scope),
+      lastTrigger: sessions.triggerOf(scope),
+      selfId: sessions.selfIdOf(),
+      botName: this.deps.config.botName,
+      todayCount: this.countToday(scope, today),
+      days: db.listDays(scope).length,
+      qqMessages: this.recentDbMessages(scope, 80).map((m) => ({
+        time: Number(m.time),
+        nickname: String(m.nickname ?? ''),
+        user_id: m.user_id,
+        text: cleanText(String(m.text ?? '')),
+        isBot: sessions.selfIdOf() > 0 ? Number(m.user_id) === sessions.selfIdOf() : String(m.nickname ?? '') === this.deps.config.botName,
+      })),
+      ocMessages,
+      mutes: sessions.mutes.list(scope),
+      tasks: this.deps.tasks.all().filter((t) => t.scope === scope).slice(0, 20),
+      files: this.readWorkspaceFiles(workspace),
+    }
+  }
+
+  private recentDbMessages(scope: string, limit: number): Record<string, unknown>[] {
+    const { db } = this.deps
+    const days = db.listDays(scope)
+    const rows: Record<string, unknown>[] = []
+    for (const day of [...days].reverse()) {
+      try {
+        const got = db.query(scope, day, 'SELECT message_id, time, nickname, user_id, text, reply_to FROM message ORDER BY msg_pk DESC LIMIT ?', [limit])
+        rows.push(...got)
+      } catch {
+        // 该天文件读不了就跳过
+      }
+      if (rows.length >= limit) break
+    }
+    rows.sort((a, b) => Number(a.time) - Number(b.time))
+    return rows.slice(-limit)
+  }
+
+  private countToday(scope: string, today: string): number {
+    try {
+      const rows = this.deps.db.query(scope, today, 'SELECT COUNT(*) AS c FROM message', [])
+      return Number(rows[0]?.c ?? 0)
+    } catch {
+      return 0
+    }
+  }
+
+  private normalizeMessages(messages: OcMessage[]): unknown[] {
+    const out: Record<string, unknown>[] = []
+    for (const m of [...messages].reverse()) {
+      const time = typeof m.time?.created === 'number' ? Math.floor(m.time.created / 1000) : null
+      if (m.type === 'user') {
+        out.push({ role: 'user', text: m.text ?? joinText(m.content), time })
+        continue
+      }
+      if (m.type === 'assistant') {
+        const content = Array.isArray(m.content) ? m.content : []
+        const text = content.filter((c) => c.type === 'text' && typeof c.text === 'string').map((c) => c.text).join('\n').trim()
+        const reasoning = content.filter((c) => c.type === 'reasoning' && typeof c.text === 'string').map((c) => c.text).join('\n').trim()
+        const tools = content
+          .filter((c) => typeof c.type === 'string' && c.type !== 'text' && c.type !== 'reasoning')
+          .map((c) => ({ type: String(c.type), summary: JSON.stringify(c).slice(0, 400) }))
+        // 只有工具调用、没有可见文本/思考的中间步骤不展示，避免对话被工具轮次淹没
+        if (!text && !reasoning) continue
+        out.push({ role: 'assistant', text, reasoning, tools, model: m.model?.id ?? null, time })
+        continue
+      }
+      if (m.type === 'system') {
+        out.push({ role: 'system', text: m.text ?? m.description ?? '', time })
+        continue
+      }
+      if (m.type === 'synthetic') {
+        out.push({ role: 'system', text: m.payload?.text ?? m.text ?? '', synthetic: true, time })
+        continue
+      }
+      if (m.type === 'idle') continue
+      const text = m.text ?? joinText(m.content)
+      if (text) out.push({ role: m.type ?? 'system', text, time })
+    }
+    return out
+  }
+
+  private readWorkspaceFiles(workspace: string): { agentsMd: string; opencodeJson: string } {
+    const read = (name: string) => {
+      try {
+        const file = path.join(workspace, name)
+        if (!fs.existsSync(file)) return ''
+        return fs.readFileSync(file, 'utf-8').slice(0, 200_000)
+      } catch {
+        return ''
+      }
+    }
+    return { agentsMd: read('AGENTS.md'), opencodeJson: read('opencode.json') }
+  }
+
+  // ---- 配置 ----
+
+  private configPayload() {
+    const config = this.deps.config
+    return {
+      config: { ...config, dockerEnv: { ...config.dockerEnv } },
+      fields: FIELDS,
+      restartKeys: [...RESTART_KEYS],
+      file: resolveConfigFile(this.deps.configPath),
+      version: PANEL_VERSION,
+    }
+  }
+
+  private updateConfig(body: Record<string, unknown>): Record<string, unknown> {
+    const input = (body.config ?? body) as Record<string, unknown>
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return { error: '配置必须是 JSON 对象' }
+    const defaults = defaultConfig as unknown as Record<string, unknown>
+    const patch: Record<string, unknown> = {}
+    const errors: string[] = []
+    const ignored: string[] = []
+    for (const [key, value] of Object.entries(input)) {
+      if (!(key in defaults)) {
+        ignored.push(key)
+        continue
+      }
+      const def = defaults[key]
+      if (key === 'dockerEnv') {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          errors.push('dockerEnv 必须是对象')
+          continue
+        }
+        const env: Record<string, string> = {}
+        for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+          if (typeof v !== 'string') {
+            errors.push(`dockerEnv.${k} 必须是字符串`)
+            continue
+          }
+          env[k] = v
+        }
+        patch[key] = env
+        continue
+      }
+      if (typeof def === 'number') {
+        if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value)) {
+          errors.push(`${key} 必须是整数`)
+          continue
+        }
+        const field = FIELDS.find((f) => f.key === key)
+        if (field?.min != null && value < field.min) {
+          errors.push(`${key} 不能小于 ${field.min}`)
+          continue
+        }
+        if (field?.max != null && value > field.max) {
+          errors.push(`${key} 不能大于 ${field.max}`)
+          continue
+        }
+        patch[key] = value
+        continue
+      }
+      if (typeof def === 'boolean') {
+        if (typeof value !== 'boolean') {
+          errors.push(`${key} 必须是布尔值`)
+          continue
+        }
+        patch[key] = value
+        continue
+      }
+      if (typeof value !== 'string') {
+        errors.push(`${key} 必须是字符串`)
+        continue
+      }
+      if (value.length > 4096) {
+        errors.push(`${key} 过长`)
+        continue
+      }
+      patch[key] = value
+    }
+    if (errors.length > 0) return { error: errors.join('; ') }
+    const keys = Object.keys(patch)
+    if (keys.length === 0) return { error: '没有可保存的配置项', ignored }
+    Object.assign(this.deps.config, patch)
+    let file = ''
+    try {
+      file = saveConfig(this.deps.configPath, this.deps.config)
+    } catch (e) {
+      return { error: `写配置文件失败: ${(e as Error)?.message ?? e}` }
+    }
+    const restartRequired = keys.filter((k) => RESTART_KEYS.has(k as keyof PluginConfig))
+    const applied = keys.filter((k) => !RESTART_KEYS.has(k as keyof PluginConfig))
+    this.deps.log(`控制面板保存配置: applied=[${applied.join(',')}] restart=[${restartRequired.join(',')}]`)
+    return {
+      saved: true,
+      file,
+      applied,
+      restartRequired,
+      ignored,
+      config: { ...this.deps.config, dockerEnv: { ...this.deps.config.dockerEnv } },
+    }
+  }
+
+  // ---- 会话操作 ----
+
+  private async sessionAction(scope: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const { sessions, config } = this.deps
+    const action = String(body.action ?? '')
+    if (!sessions.sessionIdOf(scope) && action !== 'send') {
+      return { error: '该会话还没有 OpenCode session，先去 QQ 里 @机器人 触发一次' }
+    }
+    if (action === 'reset') {
+      const ok = await sessions.resetScope(scope)
+      return ok ? { ok: true, message: '已清空会话记忆，下一条消息会重建 session' } : { error: '会话不存在' }
+    }
+    if (action === 'abort') {
+      const ok = await sessions.abortScope(scope)
+      return ok ? { ok: true, message: '已发送打断' } : { error: '会话不存在' }
+    }
+    if (action === 'send') {
+      const text = String(body.text ?? '').trim()
+      if (!text) return { error: '消息内容为空' }
+      if (text.length > MAX_TEXT) return { error: `消息过长（最多 ${MAX_TEXT} 字）` }
+      const target = String(body.target ?? 'qq')
+      if (target === 'qq') {
+        await sessions.sendTextToScope(scope, text)
+        return { ok: true, message: '已发送到 QQ' }
+      }
+      if (target === 'agent') {
+        const sessionId = sessions.sessionIdOf(scope)
+        if (!sessionId) return { error: '该会话还没有 session' }
+        await sessions.prompt(sessionId, text)
+        return { ok: true, message: `已作为 prompt 发给 Agent（${config.botName} 的回复会正常发到 QQ）` }
+      }
+      return { error: `未知的发送目标: ${target}` }
+    }
+    return { error: `未知操作: ${action}` }
+  }
+}
+
+function joinText(content?: { type?: string; text?: string }[]): string {
+  if (!Array.isArray(content)) return ''
+  return content.filter((c) => c.type === 'text' && typeof c.text === 'string').map((c) => c.text).join('\n')
+}
+
+// 面板展示用：去掉 CQ 码、压缩空白，避免把原始消息段协议直接暴露在 UI 上
+function cleanText(text: string): string {
+  return text
+    .replace(/\[CQ:[^\]]+\]/g, (m) => (m.startsWith('[CQ:image') ? '[图片]' : ''))
+    .replace(/\s+/g, ' ')
+    .trim()
+}

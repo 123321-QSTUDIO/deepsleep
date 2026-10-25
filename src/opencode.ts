@@ -3,10 +3,35 @@ export interface OpencodeEvent {
   data: Record<string, unknown>
 }
 
-interface SessionInfo {
+export interface SessionInfo {
   id: string
   title?: string
   location?: { directory: string }
+  cost?: number
+  tokens?: Record<string, unknown>
+  outcome?: string
+  time?: { created?: number; updated?: number; idle?: number }
+}
+
+export interface OcMessagePart {
+  type?: string
+  text?: string
+  [key: string]: unknown
+}
+
+// OpenCode V2 会话消息：user/assistant/system/synthetic/idle 等类型
+export interface OcMessage {
+  id: string
+  type?: string
+  text?: string
+  content?: OcMessagePart[]
+  payload?: { text?: string } & Record<string, unknown>
+  time?: { created?: number; completed?: number; streamed?: number }
+  model?: { id?: string; providerID?: string; variant?: string }
+  cost?: number
+  finish?: string
+  description?: string
+  metadata?: unknown
 }
 
 interface DataResponse<T> {
@@ -50,6 +75,19 @@ export class OpencodeClient {
 
   findSessionByDirectory(directory: string): Promise<SessionInfo[]> {
     return this.requestData('GET', `/api/session?directory=${encodeURIComponent(directory)}&limit=1&order=desc&parentID=null`)
+  }
+
+  getSessionInfo(sessionId: string): Promise<SessionInfo> {
+    return this.requestData('GET', `/api/session/${sessionId}`)
+  }
+
+  listSessions(limit = 100): Promise<SessionInfo[]> {
+    return this.requestData('GET', `/api/session?limit=${limit}`)
+  }
+
+  // V2 返回按时间倒序（最新在前）的消息列表
+  getMessages(sessionId: string, limit = 50): Promise<OcMessage[]> {
+    return this.requestData('GET', `/api/session/${sessionId}/message?limit=${limit}`)
   }
 
   async promptAsync(sessionId: string, text: string): Promise<void> {

@@ -10,6 +10,7 @@ import { TaskRegistry } from './tasks'
 import { TaskExecutor } from './executor'
 import { QqMcpServer } from './mcp'
 import { OneBotClient } from './onebot'
+import { ControlPanel } from './panel'
 
 const dataDir = process.env.QQBOT_DATA ?? path.join(process.cwd(), 'data')
 fs.mkdirSync(dataDir, { recursive: true })
@@ -61,6 +62,20 @@ const mcp = new QqMcpServer({
 })
 await mcp.start()
 
+const panel = new ControlPanel({
+  config,
+  configPath: path.join(dataDir, 'config.json'),
+  dataPath: dataDir,
+  mode: 'service',
+  sessions,
+  db,
+  oc,
+  tasks,
+  log: (m, ...a) => log(m, ...a),
+  onebotConnected: () => ob.isConnected(),
+})
+await panel.start()
+
 let running = true
 executor.recoverQueued()
 const reminderTimer = setInterval(() => {
@@ -109,6 +124,7 @@ async function shutdown() {
   if (!running) return
   running = false
   clearInterval(reminderTimer)
+  panel.stop()
   mcp.stop()
   ob.close()
   db.close()

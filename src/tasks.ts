@@ -80,6 +80,10 @@ export class TaskRegistry {
     return [...this.tasks.values()].filter((t) => t.status === 'queued')
   }
 
+  all(): TaskRec[] {
+    return [...this.tasks.values()].sort((a, b) => b.created_at - a.created_at)
+  }
+
   allOwners(): string[] {
     return [...new Set([...this.tasks.values()].map((t) => t.owner_qq).filter((q) => q && q !== '0'))]
   }

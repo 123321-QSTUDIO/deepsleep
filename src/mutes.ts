@@ -49,6 +49,17 @@ export class MuteStore {
     return until
   }
 
+  list(scope: string): { qq: string; until: number; reason: string }[] {
+    const prefix = scope + ':'
+    const out: { qq: string; until: number; reason: string }[] = []
+    for (const [k, v] of this.map) {
+      if (!k.startsWith(prefix)) continue
+      if (v.until <= Math.floor(Date.now() / 1000)) continue
+      out.push({ qq: k.slice(prefix.length), until: v.until, reason: v.reason })
+    }
+    return out.sort((a, b) => b.until - a.until)
+  }
+
   unmute(scope: string, qq: string): boolean {
     const existed = this.map.delete(this.key(scope, qq))
     if (existed) this.save()

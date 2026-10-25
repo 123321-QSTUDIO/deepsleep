@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QQBot 控制面板</title>
+<style>
+:root{--bg:#0f1115;--panel:#171a21;--panel2:#1e222b;--border:#2a2f3a;--text:#e6e9ef;--muted:#8b93a3;--accent:#4f8cff;--ok:#37c98b;--warn:#f0b429;--err:#ef5b5b;--radius:10px}
+@media (prefers-color-scheme:light){:root{--bg:#f4f6fa;--panel:#fff;--panel2:#f0f3f8;--border:#dde2ea;--text:#1c2330;--muted:#5c6678}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+button{font:inherit;cursor:pointer}
+header{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:16px;padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.brand{font-weight:600;font-size:16px;display:flex;align-items:center;gap:8px}
+.badge{font-size:11px;padding:1px 8px;border-radius:99px;background:var(--panel2);border:1px solid var(--border);color:var(--muted);font-weight:400}
+nav{display:flex;gap:6px}
+nav button{background:transparent;border:1px solid transparent;color:var(--muted);padding:6px 14px;border-radius:8px}
+nav button.active{background:var(--panel2);color:var(--text);border-color:var(--border)}
+nav button:hover{color:var(--text)}
+.right{margin-left:auto;display:flex;align-items:center;gap:12px;color:var(--muted);font-size:12px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;background:var(--muted);margin-right:6px}
+.dot.ok{background:var(--ok)}.dot.err{background:var(--err)}.dot.warn{background:var(--warn)}
+main{padding:18px;max-width:1180px;margin:0 auto}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+.card h2{font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.kv{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.kv .k{color:var(--muted);font-size:12px;margin-bottom:2px}
+.kv .v{font-weight:600;font-size:15px;word-break:break-all}
+.muted{color:var(--muted)}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:12px}
+tr:hover td{background:var(--panel2)}
+tr.clickable{cursor:pointer}
+.scope{font-family:ui-monospace,Consolas,monospace;font-size:13px}
+.pill{display:inline-block;font-size:11px;padding:1px 8px;border-radius:99px;border:1px solid var(--border);background:var(--panel2);color:var(--muted);margin-right:4px}
+.pill.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,var(--border))}
+.pill.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,var(--border))}
+.pill.err{color:var(--err);border-color:color-mix(in srgb,var(--err) 40%,var(--border))}
+.btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:8px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger:hover{border-color:var(--err);color:var(--err)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.toolbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+textarea,input[type=text],input[type=password],input[type=number],select{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 10px;font:inherit}
+textarea{resize:vertical;min-height:64px;font-family:ui-monospace,Consolas,monospace}
+label.field{display:block;margin-bottom:12px}
+label.field .lbl{display:block;font-size:13px;margin-bottom:4px}
+label.field .help{display:block;color:var(--muted);font-size:12px;margin-top:3px}
+label.field .restart{color:var(--warn);font-size:11px;margin-left:6px}
+fieldset{border:1px solid var(--border);border-radius:var(--radius);margin:0 0 14px;padding:14px}
+legend{padding:0 8px;color:var(--muted);font-size:13px}
+.chat{max-height:520px;overflow:auto;padding:6px 2px}
+.msg{display:flex;margin-bottom:10px;gap:8px}
+.msg .who{font-size:11px;color:var(--muted);margin-bottom:2px}
+.msg .bubble{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:8px 12px;max-width:78%;white-space:pre-wrap;word-break:break-word}
+.msg.bot{flex-direction:row-reverse}
+.msg.bot .bubble{background:color-mix(in srgb,var(--accent) 16%,var(--panel2));border-color:color-mix(in srgb,var(--accent) 35%,var(--border))}
+.msg.sys{justify-content:center}
+.msg.sys .bubble{background:transparent;border-style:dashed;color:var(--muted);font-size:12px;max-width:90%}
+.msg .meta{font-size:11px;color:var(--muted)}
+details.reasoning{margin-top:6px;font-size:12px;color:var(--muted)}
+details.reasoning pre{white-space:pre-wrap;font-size:12px;max-height:220px;overflow:auto;background:var(--panel);padding:8px;border-radius:8px}
+pre{white-space:pre-wrap;word-break:break-word;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:360px;overflow:auto;font-size:12px}
+#toast{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;gap:8px;z-index:50}
+.toast{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent);padding:10px 14px;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.25);max-width:420px;font-size:13px}
+.toast.err{border-left-color:var(--err)}.toast.ok{border-left-color:var(--ok)}
+.empty{color:var(--muted);text-align:center;padding:28px 0}
+code{background:var(--panel2);border:1px solid var(--border);border-radius:5px;padding:1px 5px;font-size:12px}
+.tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.tabs button{border:1px solid var(--border);background:var(--panel2);color:var(--muted);padding:5px 12px;border-radius:99px;font-size:13px}
+.tabs button.active{color:var(--text);border-color:var(--accent)}
+.sec-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.hidden{display:none!important}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">QQBot 控制面板 <span class="badge" id="modeBadge">-</span><span class="badge" id="verBadge"></span></div>
+  <nav>
+    <button data-tab="overview" class="active">概览</button>
+    <button data-tab="sessions">会话</button>
+    <button data-tab="config">配置</button>
+  </nav>
+  <div class="right">
+    <span><span class="dot" id="ocDot"></span>opencode</span>
+    <span><span class="dot" id="obDot"></span>OneBot</span>
+    <span id="clock"></span>
+    <button class="btn" id="tokenBtn" title="设置访问 Token">🔑</button>
+  </div>
+</header>
+<main id="main"><div class="empty">加载中…</div></main>
+<div id="toast"></div>
+<script>
+"use strict";
+const S = { tab: "overview", scope: null, status: null, sessions: [], detail: null, config: null, fields: null, restartKeys: [], configRaw: false, timer: null, draft: "", sendTarget: "qq" };
+const $ = (sel) => document.querySelector(sel);
+const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtTime = (sec) => { if (!sec) return "-"; const d = new Date(sec * 1000); const p = (n) => String(n).padStart(2, "0"); return d.getMonth() + 1 + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()); };
+const fmtAgo = (sec) => { if (!sec) return "无记录"; const d = Math.floor(Date.now() / 1000) - sec; if (d < 60) return "刚刚"; if (d < 3600) return Math.floor(d / 60) + " 分钟前"; if (d < 86400) return Math.floor(d / 3600) + " 小时前"; return Math.floor(d / 86400) + " 天前"; };
+const roleLabel = (m) => m.role === "user" ? "user" : m.role === "assistant" ? "assistant" : m.role === "system" ? "system" : (m.role || "-");
+
+function token() { return localStorage.getItem("qqbot_panel_token") || ""; }
+function setToken(t) { if (t) localStorage.setItem("qqbot_panel_token", t); else localStorage.removeItem("qqbot_panel_token"); }
+function ensureTokenFromUrl() {
+  const u = new URL(location.href);
+  const t = u.searchParams.get("token");
+  if (t) { setToken(t); u.searchParams.delete("token"); history.replaceState(null, "", u.pathname + u.search + u.hash); }
+}
+async function api(path, opts) {
+  opts = opts || {};
+  const headers = Object.assign({}, opts.headers || {});
+  if (opts.body !== undefined && !headers["content-type"]) headers["content-type"] = "application/json";
+  const t = token();
+  if (t) headers["authorization"] = "Bearer " + t;
+  const res = await fetch("/api" + path, Object.assign({}, opts, { headers }));
+  let data = null;
+  try { data = await res.json(); } catch (e) {}
+  if (res.status === 401) {
+    const input = prompt("面板需要访问 Token（配置里的 panelToken）：", "");
+    if (input) { setToken(input.trim()); return api(path, opts); }
+    throw new Error("未授权（缺少 Token）");
+  }
+  if (!res.ok) throw new Error((data && data.error) || ("HTTP " + res.status));
+  return data;
+}
+function toast(msg, kind) {
+  const el = document.createElement("div");
+  el.className = "toast" + (kind ? " " + kind : "");
+  el.textContent = msg;
+  $("#toast").appendChild(el);
+  setTimeout(() => el.remove(), 3800);
+}
+function setHash(tab, scope) {
+  const h = "#/" + tab + (scope ? "/" + encodeURIComponent(scope) : "");
+  if (location.hash !== h) location.hash = h; else route();
+}
+function route() {
+  const parts = (location.hash || "#/overview").replace(/^#\//, "").split("/");
+  S.tab = parts[0] || "overview";
+  S.scope = parts[1] ? decodeURIComponent(parts[1]) : null;
+  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === S.tab));
+  render();
+}
+async function loadStatus() {
+  S.status = await api("/status");
+  $("#modeBadge").textContent = S.status.mode === "service" ? "独立服务" : "NapCat 插件";
+  $("#verBadge").textContent = "v" + S.status.version;
+  $("#ocDot").className = "dot " + (S.status.opencode.healthy ? "ok" : "err");
+  $("#obDot").className = "dot " + (S.status.onebot ? (S.status.onebot.connected ? "ok" : "err") : "warn");
+  $("#botNameEl") && ($("#botNameEl").textContent = S.status.botName);
+}
+async function loadSessions() { S.sessions = (await api("/sessions")).sessions || []; }
+async function loadDetail() { S.detail = await api("/sessions/" + encodeURIComponent(S.scope)); }
+async function loadConfig() { const d = await api("/config"); S.config = d.config; S.fields = d.fields; S.restartKeys = d.restartKeys || []; }
+function captureUiState() {
+  const t = document.getElementById("sendText");
+  if (t) S.draft = t.value;
+  const sel = document.getElementById("sendTarget");
+  if (sel) S.sendTarget = sel.value;
+  const chats = Array.from(document.querySelectorAll(".chat")).map((el) => el.scrollHeight - el.scrollTop - el.clientHeight < 60);
+  return chats;
+}
+function restoreUiState(atBottom) {
+  const chats = Array.from(document.querySelectorAll(".chat"));
+  chats.forEach((el, i) => { if (atBottom[i] !== false) el.scrollTop = el.scrollHeight; });
+}
+async function refresh() {
+  const atBottom = captureUiState();
+  try {
+    await loadStatus();
+    if (S.tab === "overview") await loadSessions();
+    if (S.tab === "sessions" && S.scope) await loadDetail();
+    else if (S.tab === "sessions") await loadSessions();
+    if (S.tab === "config") await loadConfig();
+    render();
+    restoreUiState(atBottom);
+  } catch (e) { toast(e.message, "err"); }
+}
+function render() {
+  if (S.tab === "overview") return renderOverview();
+  if (S.tab === "sessions") return S.scope ? renderDetail() : renderSessions();
+  if (S.tab === "config") return renderConfig();
+  renderOverview();
+}
+
+function renderOverview() {
+  const st = S.status; if (!st) return;
+  const t = st.tasks || {};
+  const sessions = S.sessions || [];
+  const busy = sessions.filter((s) => s.busy).length;
+  $("#main").innerHTML = `
+  <div class="card">
+    <h2>运行状态 <span class="muted" style="font-weight:400;font-size:12px">运行 ${Math.floor(st.uptime)} 秒</span></h2>
+    <div class="grid">
+      <div class="kv"><div class="k">机器人</div><div class="v" id="botNameEl">${esc(st.botName)}</div></div>
+      <div class="kv"><div class="k">opencode</div><div class="v">${st.opencode.healthy ? '<span style="color:var(--ok)">在线</span>' : '<span style="color:var(--err)">离线</span>'}<div class="muted" style="font-size:11px;font-weight:400">${esc(st.opencode.url)}</div></div></div>
+      <div class="kv"><div class="k">OneBot</div><div class="v">${st.onebot ? (st.onebot.connected ? '<span style="color:var(--ok)">已连接</span>' : '<span style="color:var(--err)">未连接</span>') : '<span class="muted">插件模式（由 NapCat 驱动）</span>'}</div></div>
+      <div class="kv"><div class="k">MCP 服务</div><div class="v">${esc(st.mcp.host)}:${st.mcp.port} <span class="muted" style="font-size:11px;font-weight:400">${st.mcp.tokenSet ? "已设 Token" : "无 Token"}</span></div></div>
+      <div class="kv"><div class="k">控制面板</div><div class="v">${esc(st.panel.host)}:${st.panel.port} <span class="muted" style="font-size:11px;font-weight:400">${st.panel.tokenSet ? "已设 Token" : "无 Token"}</span></div></div>
+      <div class="kv"><div class="k">会话 / 忙碌中</div><div class="v">${sessions.length} / ${busy}</div></div>
+      <div class="kv"><div class="k">任务</div><div class="v">排队 ${t.queued || 0} · 执行 ${t.running || 0} · 完成 ${t.done || 0} · 失败 ${t.error || 0}</div></div>
+      <div class="kv"><div class="k">数据目录</div><div class="v" style="font-size:12px">${esc(st.dataPath)}</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>最近的会话</h2>
+    ${sessions.length ? sessionTable(sessions.slice(0, 8)) : '<div class="empty">还没有会话。在 QQ 里 @机器人 或私聊它就会创建。</div>'}
+  </div>`;
+}
+function sessionTable(list) {
+  return `<table><thead><tr><th>会话</th><th>标题</th><th>状态</th><th>最后消息</th><th>待回应</th></tr></thead><tbody>` +
+    list.map((s) => `<tr class="clickable" data-scope="${esc(s.scope)}">
+      <td class="scope">${esc(s.scope)}<div class="muted" style="font-size:11px">${esc(shortId(s.sessionId))}</div></td>
+      <td>${esc(s.title || "-")}</td>
+      <td>${s.busy ? '<span class="pill warn">生成中</span>' : '<span class="pill ok">空闲</span>'}${s.sessionId ? "" : '<span class="pill err">无 Session</span>'}</td>
+      <td>${s.lastMessage ? esc(fmtAgo(s.lastMessage.time)) + '<div class="muted" style="font-size:11px">' + esc((s.lastMessage.nickname || s.lastMessage.user_id) + ": " + trunc(s.lastMessage.text, 36)) + "</div>" : '<span class="muted">-</span>'}</td>
+      <td>${s.pending > 0 ? '<span class="pill warn">' + s.pending + " 条</span>" : '<span class="muted">0</span>'}</td>
+    </tr>`).join("") + `</tbody></table>`;
+}
+function shortId(id) { return id ? String(id).slice(0, 18) + (String(id).length > 18 ? "…" : "") : ""; }
+function trunc(t, n) { t = String(t || "").replace(/\s+/g, " "); return t.length > n ? t.slice(0, n) + "…" : t; }
+
+function renderSessions() {
+  const list = S.sessions || [];
+  $("#main").innerHTML = `<div class="card">
+    <div class="sec-header"><h2>会话列表 <span class="muted" style="font-weight:400;font-size:12px">${list.length} 个</span></h2><button class="btn" data-action="reload">刷新</button></div>
+    ${list.length ? sessionTable(list) : '<div class="empty">还没有会话。在 QQ 里 @机器人 或私聊它就会创建。</div>'}
+  </div>`;
+}
+
+function renderDetail() {
+  const d = S.detail; if (!d) return;
+  const info = d.info || {};
+  const qq = d.qqMessages || [];
+  const oc = d.ocMessages || [];
+  const files = d.files || {};
+  $("#main").innerHTML = `
+  <div class="card">
+    <div class="sec-header">
+      <h2>会话 <span class="scope">${esc(d.scope)}</span></h2>
+      <div class="row"><button class="btn" data-action="back">← 返回</button><button class="btn" data-action="reload">刷新</button></div>
+    </div>
+    <div class="grid">
+      <div class="kv"><div class="k">OpenCode Session</div><div class="v" style="font-size:13px">${esc(d.sessionId || "(未建立)")}</div></div>
+      <div class="kv"><div class="k">状态</div><div class="v">${d.busy ? '<span class="pill warn">生成中</span>' : '<span class="pill ok">空闲</span>'}${info.outcome ? '<span class="pill">' + esc(info.outcome) + "</span>" : ""}</div></div>
+      <div class="kv"><div class="k">标题</div><div class="v" style="font-size:13px">${esc(info.title || d.title || "-")}</div></div>
+      <div class="kv"><div class="k">消息 / 待回应</div><div class="v">今日 ${d.todayCount || 0} 条 · 待回应 ${(d.pending || []).length} 条</div></div>
+      <div class="kv"><div class="k">工作区</div><div class="v" style="font-size:12px">${esc(d.workspace || "-")}</div></div>
+    </div>
+    <div class="toolbar" style="margin-top:12px">
+      <button class="btn danger" data-action="reset">/reset 清空记忆</button>
+      <button class="btn" data-action="abort">/abort 打断生成</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>操作</h2>
+    <div class="row" style="margin-bottom:8px">
+      <select id="sendTarget" style="width:auto">
+        <option value="qq"${S.sendTarget === "qq" ? " selected" : ""}>发到 QQ（以机器人身份）</option>
+        <option value="agent"${S.sendTarget === "agent" ? " selected" : ""}>作为 prompt 发给 Agent</option>
+      </select>
+      <span class="muted" style="font-size:12px">${d.busy ? "当前有生成进行中，prompt 会排队" : ""}</span>
+    </div>
+    <textarea id="sendText" placeholder="输入要发送的内容…">${esc(S.draft)}</textarea>
+    <div class="row" style="margin-top:8px"><button class="btn primary" data-action="send">发送</button></div>
+  </div>
+
+  <div class="card">
+    <h2>Session 对话 <span class="muted" style="font-weight:400;font-size:12px">最近 ${oc.length} 条（OpenCode 侧）</span></h2>
+    <div class="chat">${oc.length ? oc.map(ocMessageHtml).join("") : '<div class="empty">暂无 Session 消息</div>'}</div>
+  </div>
+
+  <div class="card">
+    <h2>QQ 消息记录 <span class="muted" style="font-weight:400;font-size:12px">最近 ${qq.length} 条（消息库）</span></h2>
+    <div class="chat">${qq.length ? qq.map(qqMessageHtml).join("") : '<div class="empty">暂无 QQ 消息</div>'}</div>
+  </div>
+
+  <div class="card">
+    <h2>工作区文件</h2>
+    <details><summary class="muted">AGENTS.md</summary><pre>${esc(files.agentsMd || "(无)")}</pre></details>
+    <details style="margin-top:8px"><summary class="muted">opencode.json</summary><pre>${esc(files.opencodeJson || "(无)")}</pre></details>
+  </div>
+
+  ${(d.mutes && d.mutes.length) ? '<div class="card"><h2>被屏蔽的用户</h2><table><thead><tr><th>QQ</th><th>解除时间</th><th>原因</th></tr></thead><tbody>' + d.mutes.map((m) => '<tr><td>' + esc(m.qq) + '</td><td>' + esc(fmtTime(m.until)) + '</td><td>' + esc(m.reason || "-") + '</td></tr>').join("") + '</tbody></table></div>' : ""}
+  ${(d.tasks && d.tasks.length) ? '<div class="card"><h2>该会话的任务</h2><table><thead><tr><th>编号</th><th>状态</th><th>内容</th><th>时间</th></tr></thead><tbody>' + d.tasks.map((t) => '<tr><td class="scope">' + esc(t.task_id) + '</td><td>' + esc(t.status) + '</td><td>' + esc(trunc(t.task, 60)) + '</td><td>' + esc(fmtTime(t.created_at)) + '</td></tr>').join("") + '</tbody></table></div>' : ""}
+  `;
+}
+function qqMessageHtml(m) {
+  const isBot = m.isBot;
+  return '<div class="msg ' + (isBot ? "bot" : "") + '"><div class="bubble"><div class="who">' + esc(m.nickname || m.user_id) + " · " + esc(fmtTime(m.time)) + '</div>' + esc(m.text) + '</div></div>';
+}
+function ocMessageHtml(m) {
+  if (m.role === "system") {
+    const text = String(m.text || "");
+    if (text.length > 200) return '<div class="msg sys"><div class="bubble"><details><summary>系统消息（' + text.length + ' 字，点击展开）</summary><pre>' + esc(text) + "</pre></details></div></div>";
+    return '<div class="msg sys"><div class="bubble">' + esc(text) + "</div></div>";
+  }
+  const isBot = m.role === "assistant";
+  let extra = "";
+  if (m.reasoning) extra += '<details class="reasoning"><summary>思考过程</summary><pre>' + esc(m.reasoning) + "</pre></details>";
+  if (m.tools && m.tools.length) extra += '<details class="reasoning"><summary>工具调用（' + m.tools.length + '）</summary><pre>' + esc(m.tools.map((t) => t.type + ": " + t.summary).join("\n\n")) + "</pre></details>";
+  return '<div class="msg ' + (isBot ? "bot" : "") + '"><div class="bubble"><div class="who">' + esc(roleLabel(m)) + (m.model ? " · " + esc(m.model) : "") + " · " + esc(fmtTime(m.time)) + '</div>' + (esc(m.text) || '<span class="muted">(无文本)</span>') + extra + "</div></div>";
+}
+
+function renderConfig() {
+  const cfg = S.config, fields = S.fields || [];
+  if (!cfg) return;
+  const groups = [];
+  for (const f of fields) { let g = groups.find((x) => x.name === f.group); if (!g) { g = { name: f.group, fields: [] }; groups.push(g); } g.fields.push(f); }
+  const restart = new Set(S.restartKeys);
+  const input = (f) => {
+    const v = cfg[f.key];
+    const id = "cfg_" + f.key;
+    if (f.type === "boolean") return '<label class="row" style="gap:8px"><input type="checkbox" id="' + id + '" ' + (v ? "checked" : "") + ' style="width:auto"> <span>' + esc(f.label) + "</span>" + (restart.has(f.key) ? '<span class="restart">需重启</span>' : "") + "</label>";
+    if (f.type === "json") return '<label class="field"><span class="lbl">' + esc(f.label) + (restart.has(f.key) ? '<span class="restart">需重启</span>' : "") + '</span><textarea id="' + id + '">' + esc(JSON.stringify(v, null, 2)) + '</textarea>' + (f.help ? '<span class="help">' + esc(f.help) + "</span>" : "") + "</label>";
+    const type = f.type === "number" ? "number" : f.type === "password" ? "password" : "text";
+    return '<label class="field"><span class="lbl">' + esc(f.label) + (restart.has(f.key) ? '<span class="restart">需重启</span>' : "") + '</span><input type="' + type + '" id="' + id + '" value="' + esc(v == null ? "" : v) + '"' + (f.min != null ? ' min="' + f.min + '"' : "") + (f.max != null ? ' max="' + f.max + '"' : "") + ">" + (f.help ? '<span class="help">' + esc(f.help) + "</span>" : "") + "</label>";
+  };
+  const form = groups.map((g) => '<fieldset><legend>' + esc(g.name) + "</legend>" + g.fields.map(input).join("") + "</fieldset>").join("");
+  $("#main").innerHTML = `<div class="card">
+    <div class="sec-header"><h2>配置 <span class="muted" style="font-weight:400;font-size:12px">${esc(S.configFile || "")}</span></h2>
+      <div class="row"><button class="btn" data-action="reload">重新加载</button><button class="btn primary" data-action="save-config">保存配置</button></div></div>
+    <p class="muted" style="font-size:12px;margin-top:0">标有「需重启」的字段保存后需要重启机器人进程才生效；其余字段立即生效。Token/密钥字段以密码框显示，直接清空表示留空。</p>
+    <details><summary class="muted">高级：直接编辑 JSON</summary><p style="margin:8px 0"><button class="btn" data-action="raw-toggle">${S.configRaw ? "切换为表单" : "切换为 JSON 编辑"}</button></p>${S.configRaw ? '<textarea id="rawConfig" style="min-height:420px">' + esc(JSON.stringify(cfg, null, 2)) + '</textarea><p style="margin:8px 0"><button class="btn primary" data-action="save-config-raw">保存 JSON 配置</button></p>' : ""}</details>
+    ${S.configRaw ? "" : form}
+  </div>`;
+  S.configFile = S.configFile || "";
+}
+function collectConfig() {
+  const cfg = {};
+  for (const f of S.fields) {
+    const el = document.getElementById("cfg_" + f.key); if (!el) continue;
+    if (f.type === "boolean") cfg[f.key] = !!el.checked;
+    else if (f.type === "number") cfg[f.key] = Number(el.value);
+    else if (f.type === "json") cfg[f.key] = JSON.parse(el.value || "{}");
+    else cfg[f.key] = el.value;
+  }
+  return cfg;
+}
+async function saveConfig(payload) {
+  const res = await api("/config", { method: "PUT", body: JSON.stringify({ config: payload }) });
+  S.config = res.config;
+  toast("已保存" + (res.restartRequired && res.restartRequired.length ? "；需重启生效：" + res.restartRequired.join(", ") : "；已立即生效"), "ok");
+  await loadConfig();
+  render();
+}
+
+$("#main").addEventListener("click", async (e) => {
+  const el = e.target.closest("[data-scope]"); if (el) { setHash("sessions", el.dataset.scope); return; }
+  const btn = e.target.closest("[data-action]"); if (!btn) return;
+  const action = btn.dataset.action;
+  try {
+    if (action === "reload") await refresh();
+    else if (action === "back") setHash("sessions");
+    else if (action === "reset") { if (confirm("确定清空该会话的记忆（删除并重建 OpenCode session）？")) { await api("/sessions/" + encodeURIComponent(S.scope) + "/action", { method: "POST", body: JSON.stringify({ action: "reset" }) }); toast("已重置会话", "ok"); await refresh(); } }
+    else if (action === "abort") { await api("/sessions/" + encodeURIComponent(S.scope) + "/action", { method: "POST", body: JSON.stringify({ action: "abort" }) }); toast("已发送打断", "ok"); await refresh(); }
+    else if (action === "send") {
+      const text = $("#sendText").value.trim(); if (!text) return;
+      const target = $("#sendTarget").value;
+      btn.disabled = true;
+      try {
+        await api("/sessions/" + encodeURIComponent(S.scope) + "/action", { method: "POST", body: JSON.stringify({ action: "send", target, text }) });
+        S.draft = "";
+        $("#sendText").value = "";
+        toast(target === "qq" ? "已发到 QQ" : "已发给 Agent", "ok");
+        setTimeout(() => refresh().catch(() => {}), 800);
+      } finally { btn.disabled = false; }
+    }
+    else if (action === "save-config") await saveConfig(collectConfig());
+    else if (action === "raw-toggle") { S.configRaw = !S.configRaw; render(); }
+    else if (action === "save-config-raw") await saveConfig(JSON.parse($("#rawConfig").value));
+  } catch (err) { toast(err.message, "err"); }
+});
+document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => setHash(b.dataset.tab)));
+$("#tokenBtn").addEventListener("click", () => { const t = prompt("设置面板访问 Token（留空则清除）：", token()); setToken((t || "").trim()); toast("Token 已更新"); refresh(); });
+window.addEventListener("hashchange", route);
+ensureTokenFromUrl();
+route();
+refresh();
+setInterval(() => { $("#clock").textContent = new Date().toLocaleTimeString(); }, 1000);
+setInterval(() => {
+  if (document.visibilityState !== "visible" || S.tab === "config") return;
+  if (S.tab === "sessions" && S.scope) { if (S.detail && S.detail.busy) refresh(); return; }
+  refresh();
+}, 5000);
+</script>
+</body>
+</html>

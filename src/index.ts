@@ -7,6 +7,7 @@ import { SessionController } from './sessions'
 import { TaskRegistry } from './tasks'
 import { TaskExecutor } from './executor'
 import { QqMcpServer } from './mcp'
+import { ControlPanel } from './panel'
 
 let config: PluginConfig
 let db: MsgDB | null = null
@@ -14,6 +15,7 @@ let oc: OpencodeClient | null = null
 let sessions: SessionController | null = null
 let executor: TaskExecutor | null = null
 let mcp: QqMcpServer | null = null
+let panel: ControlPanel | null = null
 let reminderTimer: ReturnType<typeof setInterval> | null = null
 let running = false
 
@@ -47,6 +49,19 @@ export async function plugin_init(ctx: PluginContext) {
     log: (m, ...a) => ctx.logger.warn(m, ...a),
   })
   await mcp.start()
+
+  panel = new ControlPanel({
+    config,
+    configPath: ctx.configPath,
+    dataPath: ctx.dataPath,
+    mode: 'plugin',
+    sessions,
+    db,
+    oc,
+    tasks,
+    log: (m, ...a) => ctx.logger.info(m, ...a),
+  })
+  await panel.start()
 
   running = true
   executor.recoverQueued()
@@ -106,6 +121,8 @@ export async function plugin_cleanup(ctx: PluginContext) {
     clearInterval(reminderTimer)
     reminderTimer = null
   }
+  panel?.stop()
+  panel = null
   mcp?.stop()
   mcp = null
   executor = null

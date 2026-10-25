@@ -100,6 +100,38 @@ export class SessionController {
     return this.map.get(scope)?.sessionId
   }
 
+  // ---- 控制面板用：只读快照 + 会话语义操作 ----
+
+  listScopes(): { scope: string; sessionId: string; directory: string }[] {
+    return [...this.map.entries()].map(([scope, entry]) => ({ scope, ...entry }))
+  }
+
+  workspaceOf(scope: string): string | null {
+    return this.map.has(scope) ? this.workspaceFor(scope) : null
+  }
+
+  pendingOf(scope: string): { id: number | null; userId: number; line: string }[] {
+    return [...(this.pendingRequests.get(scope) ?? [])]
+  }
+
+  selfIdOf(): number {
+    return this.selfId
+  }
+
+  // 面板触发：删除并重建 session（与群命令 /reset 的区别是不往 QQ 发提示）
+  async resetScope(scope: string): Promise<boolean> {
+    if (!this.map.has(scope)) return false
+    await this.reset(scope)
+    return true
+  }
+
+  async abortScope(scope: string): Promise<boolean> {
+    const entry = this.map.get(scope)
+    if (!entry) return false
+    await this.oc.abort(entry.sessionId)
+    return true
+  }
+
   private workspaceFor(scope: string): string {
     return path.join(this.workspacesDir, scope)
   }

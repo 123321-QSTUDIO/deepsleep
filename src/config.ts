@@ -32,6 +32,11 @@ export interface PluginConfig {
   replyDelayMinMs: number
   replyDelayMaxMs: number
   maxLinesPerReply: number
+  // 控制面板（WebUI）
+  panelEnabled: boolean
+  panelHost: string
+  panelPort: number
+  panelToken: string
 }
 
 export const defaultConfig: PluginConfig = {
@@ -65,6 +70,10 @@ export const defaultConfig: PluginConfig = {
   replyDelayMinMs: 1200,
   replyDelayMaxMs: 3000,
   maxLinesPerReply: 4,
+  panelEnabled: true,
+  panelHost: '127.0.0.1',
+  panelPort: 5101,
+  panelToken: '',
 }
 
 const modelMigrations: Record<string, string> = {
@@ -75,8 +84,20 @@ const modelMigrations: Record<string, string> = {
 
 // NapCat ctx.configPath 语义：插件配置文件路径（<config>/plugins/<id>/config.json）。
 // 兼容旧语义：若以 .json 结尾视为文件路径，否则视为目录并拼接 config.json。
+export function resolveConfigFile(configPath: string): string {
+  return configPath.endsWith('.json') ? configPath : path.join(configPath, 'config.json')
+}
+
+// 控制面板保存配置：写回磁盘（调用方负责先校验并更新内存中的 config 对象）
+export function saveConfig(configPath: string, config: PluginConfig): string {
+  const file = resolveConfigFile(configPath)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, JSON.stringify(config, null, 2))
+  return file
+}
+
 export function loadConfig(configPath: string): PluginConfig {
-  const file = configPath.endsWith('.json') ? configPath : path.join(configPath, 'config.json')
+  const file = resolveConfigFile(configPath)
   try {
     if (fs.existsSync(file)) {
       const saved = JSON.parse(fs.readFileSync(file, 'utf-8')) as Partial<PluginConfig>
