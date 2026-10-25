@@ -173,7 +173,10 @@ node smoke.mjs     # 期望输出 SMOKE TEST 1 PASS
 
 【验证】`ls dist` 有 `index.mjs`、`package.json`、`sql-wasm.wasm`。
 
-## 4. 自编译 NapCat（白名单放行本插件）
+## 4. （仅旧插件模式）自编译 NapCat + 白名单
+
+> 推荐形态是**独立服务**（`src/main.ts`，OneBot WS 连 NapCat），用官方发行版 NapCat 即可，**本节整节可跳过**。
+> 只有坚持用 `src/index.ts` 的 NapCat 进程内插件模式时，才需要自编译并加白名单。
 
 ```powershell
 cd C:\qqbot

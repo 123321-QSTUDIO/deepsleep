@@ -6,3 +6,10 @@ test-vision-ws/
 
 dist-service/
 test-svc-data/
+
+# 运行时配置与密钥（防止误提交，仓库对外公开）
+config.json
+.env
+*.pem
+*.key
+*.p12

@@ -9,7 +9,7 @@ QQ 群 AI 机器人（DeepSleep）：双形态——**独立服务（推荐，On
 要求 **OpenCode 2.1.4**，使用 V2 API（`/api/session`、`/api/session/active`、`/api/event`、`/api/info`）。创建 session 的 `directory` 放在 POST body；新 session 未显式传模型时不再一概在创建时锁死。
 
 ```
-QQ群/私聊 ⇄ NapCat (自编译, 白名单放行本插件)
+QQ群/私聊 ⇄ NapCat (官方发行版；仅旧插件模式需自编译加白名单)
              └─ napcat-plugin-qqbot（本插件，系统中枢）
                 ├─ 消息收发（plugin_onmessage / send_msg）
                 ├─ 消息库：每群/每人每天一个 SQLite（sql.js WASM）
@@ -56,7 +56,7 @@ smoke*.mjs        冒烟测试（消息库 / V2 session / MCP 八工具 / 图片
 ```
 
 > 任务沙箱镜像、HK 部署脚本、产物下载服务在独立的执行层仓库
-> [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner)（HK 服务器由单独的 Agent 部署，镜像须使用 OpenCode 2.1.4）。
+> [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner)（HK 服务器单独部署，镜像须使用 OpenCode 2.1.4）。
 
 ## 构建
 
