@@ -100,6 +100,7 @@ export function dedupeImages(list: { url: string; mime: string }[]): { url: stri
 export function cleanCqForDisplay(text: string): string {
   return text
     .replace(/,raw=\{[^\]]*\}/g, '')
+    .replace(/\[CQ:(reply|at)[^\]]*\]/g, '')
     .replace(/\[CQ:(image|mface)[^\]]*\]/g, '[图片]')
     .replace(/\[CQ:record[^\]]*\]/g, '[语音]')
     .replace(/\[CQ:video[^\]]*\]/g, '[视频]')

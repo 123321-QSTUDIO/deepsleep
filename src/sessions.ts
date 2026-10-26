@@ -253,6 +253,7 @@ export class SessionController {
   }
 
   pendingOf(scope: string): { id: number | null; userId: number; line: string }[] {
+    this.pruneStalePending(scope)
     return [...(this.pendingRequests.get(scope) ?? [])]
   }
 
@@ -270,6 +271,7 @@ export class SessionController {
   async abortScope(scope: string): Promise<boolean> {
     const entry = this.map.get(scope)
     if (!entry) return false
+    this.clearPending(scope)
     await this.oc.abort(entry.sessionId)
     return true
   }
@@ -499,7 +501,9 @@ export class SessionController {
   }
 
   private pendingRequests = new Map<string, { id: number | null; userId: number; line: string }[]>()
+  private pendingSince = new Map<string, number>()
   private sentMsgIds = new Map<string, Set<number>>()
+  private static readonly PENDING_TTL_MS = 30 * 60_000
 
   private markSent(scope: string, ids: (number | null)[]) {
     const set = this.sentMsgIds.get(scope) ?? new Set<number>()
@@ -719,6 +723,7 @@ export class SessionController {
     const now = Math.floor(Date.now() / 1000)
     const currentId = typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null
     const sent = this.sentMsgIds.get(scope) ?? new Set<number>()
+    this.pruneStalePending(scope)
     const pending = this.pendingRequests.get(scope) ?? []
 
     const contextLimit = this.config.groupContextBatchEnabled
@@ -785,6 +790,7 @@ export class SessionController {
     } else {
       pending.push({ id: currentId, userId: event.user_id ?? 0, line: currentLine })
       this.pendingRequests.set(scope, pending)
+      if (!this.pendingSince.has(scope)) this.pendingSince.set(scope, Date.now())
     }
 
     const parts: string[] = []
@@ -1250,6 +1256,7 @@ export class SessionController {
   }
 
   private async reset(scope: string) {
+    this.clearPending(scope)
     this.clearGroupBatchWindow(scope)
     const entry = this.map.get(scope)
     if (!entry) return
@@ -1263,6 +1270,15 @@ export class SessionController {
     const pending = this.pendingRequests.get(scope) ?? []
     if (pending.length > 0) this.markSent(scope, pending.map((p) => p.id))
     this.pendingRequests.delete(scope)
+    this.pendingSince.delete(scope)
+  }
+
+  private pruneStalePending(scope: string) {
+    const at = this.pendingSince.get(scope)
+    if (!at) return
+    if (Date.now() - at < SessionController.PENDING_TTL_MS) return
+    this.log('清理超时未完成的待回应请求 scope=' + scope + ' age=' + Math.round((Date.now() - at) / 1000) + 's')
+    this.clearPending(scope)
   }
 
   private watch(sessionId: string) {
@@ -1345,13 +1361,13 @@ export class SessionController {
     }
     if (ev.type === 'session.execution.interrupted') {
       this.lastText.delete(sessionId)
-      if (ev.data.reason !== 'user') return
       const scope = this.reverse.get(sessionId)
       if (scope) {
         this.clearPending(scope)
         this.toolSendsByScope.delete(scope)
       }
       this.sentViaTool.delete(sessionId)
+      this.log('opencode 执行被中断 session=' + sessionId + ' reason=' + String(ev.data.reason ?? ''))
     }
   }
 
