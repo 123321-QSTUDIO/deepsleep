@@ -905,8 +905,15 @@ export class SessionController {
       ...extractImagesFromRaw(event.raw_message ?? ''),
       ...(replyTo !== null ? this.quotedImages(scope, replyTo) : []),
     ])
-    const { note: imageNote, files: imageFiles } = await this.downloadImages(entry.directory, images)
-    await this.prompt(entry.sessionId, imageNote ? prompt + imageNote : prompt, imageFiles)
+    try {
+      const { note: imageNote, files: imageFiles } = await this.downloadImages(entry.directory, images)
+      await this.prompt(entry.sessionId, imageNote ? prompt + imageNote : prompt, imageFiles)
+    } catch (e) {
+      // buildPrompt 已经把当前消息放进 pending；如果 prompt 根本没发出去（服务异常/409/图片处理异常），
+      // 必须回滚这一条，否则面板会永久显示“待回应请求”但模型从未运行
+      this.dropPending(scope, mid)
+      this.log('prompt 发送失败，模型未触发 scope=' + scope + ' msg=' + String(mid) + ':', e)
+    }
   }
 
   private quotedImages(scope: string, replyTo: number): { url: string; mime: string }[] {
@@ -1271,6 +1278,17 @@ export class SessionController {
     if (pending.length > 0) this.markSent(scope, pending.map((p) => p.id))
     this.pendingRequests.delete(scope)
     this.pendingSince.delete(scope)
+  }
+
+  private dropPending(scope: string, id: number | null) {
+    const list = this.pendingRequests.get(scope) ?? []
+    const next = list.filter((p) => p.id !== id)
+    if (next.length === 0) {
+      this.pendingRequests.delete(scope)
+      this.pendingSince.delete(scope)
+    } else {
+      this.pendingRequests.set(scope, next)
+    }
   }
 
   private pruneStalePending(scope: string) {

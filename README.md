@@ -103,6 +103,7 @@ node smoke24.mjs         # 冒烟：表情原图视觉链路 / get_sticker_image
 node smoke25.mjs         # 冒烟：多模态主模型 Prompt.files 图片附件（mock opencode，离线）
 node smoke27.mjs         # 冒烟：群聊上下文批量投喂 / 立即@ / 去重（mock opencode，离线）
 node smoke28.mjs         # 冒烟：批量窗口计时器 / 冷场提前投喂 / 8 分钟 cutoff（mock opencode，离线）
+node smoke29.mjs         # 冒烟：prompt 发送失败时回滚待回应清单（mock opencode，离线）
 node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 ```
 
