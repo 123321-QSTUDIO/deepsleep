@@ -93,6 +93,7 @@ node smoke15.mjs         # 冒烟：重复发送/重复入站消息防重（mock
 node smoke16.mjs         # 冒烟：戳一戳 / TTS 发语音 / 语音 ASR（mock opencode + mock TTS，离线）
 node smoke17.mjs         # 冒烟：主动参与判官 / SILENT / 启发式兜底 / 节流（mock opencode + mock judge，离线）
 node smoke18.mjs         # 冒烟：定时提醒持久化 / 到点投递 / 列表取消（mock opencode，离线）
+node smoke19.mjs         # 冒烟：回复单条长度/单轮条数限制（mock opencode，离线）
 node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 ```
 

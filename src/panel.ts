@@ -52,7 +52,8 @@ const FIELDS: FieldDef[] = [
   { key: 'contextMessageCount', label: 'contextMessageCount（上下文条数）', group: '消息与回复', type: 'number', min: 1 },
   { key: 'replyDelayMinMs', label: 'replyDelayMinMs（兜底分句最小间隔）', group: '消息与回复', type: 'number', min: 0 },
   { key: 'replyDelayMaxMs', label: 'replyDelayMaxMs（兜底分句最大间隔）', group: '消息与回复', type: 'number', min: 0 },
-  { key: 'maxLinesPerReply', label: 'maxLinesPerReply（兜底最大分句数）', group: '消息与回复', type: 'number', min: 1 },
+  { key: 'maxLinesPerReply', label: 'maxLinesPerReply（单轮最多消息条数）', group: '消息与回复', type: 'number', min: 1, help: '模型一轮回复最多发几条消息，超过会被 MCP 拒绝' },
+  { key: 'maxCharsPerMessage', label: 'maxCharsPerMessage（单条消息最大字数）', group: '消息与回复', type: 'number', min: 20, help: '单条消息超过这个长度会被 MCP 拒绝，模型需要精简或合并' },
   { key: 'turnTimeoutSec', label: 'turnTimeoutSec（单轮超时秒数）', group: '消息与回复', type: 'number', min: 10 },
 
   { key: 'mcpHost', label: 'mcpHost（MCP 绑定地址）', group: 'MCP', type: 'string' },

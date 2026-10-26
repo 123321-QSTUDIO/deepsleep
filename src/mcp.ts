@@ -83,6 +83,15 @@ export class QqMcpServer {
       async ({ text: t, reply_to, at_qq }) => {
         if (!scope) return text('错误: 未知对话上下文')
         if (taskMode) return text('错误: 沙箱任务中不能发消息')
+        const cfg = this.deps.config
+        const maxChars = Math.max(20, cfg.maxCharsPerMessage || 120)
+        if (t.length > maxChars) {
+          return text('错误: 单条消息太长（上限 ' + maxChars + ' 字，当前 ' + t.length + ' 字），请精简或合并成更少的消息')
+        }
+        const maxLines = Math.max(1, cfg.maxLinesPerReply || 4)
+        if (sessions.toolSendCountOfScope(scope) >= maxLines) {
+          return text('错误: 本轮消息条数已达上限（' + maxLines + ' 条），不要再发，把需要说的精简掉')
+        }
         await sessions.sendTextToScope(scope, t, { replyTo: reply_to, atQq: at_qq })
         sessions.markSentByScope(scope)
         const atTargets = [...t.matchAll(/\[CQ:at,qq=(\w+)\]/g)].map((m) => m[1])

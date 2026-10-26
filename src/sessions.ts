@@ -65,6 +65,7 @@ export class SessionController {
   private mapFile: string
   private workspacesDir: string
   private sentViaTool = new Map<string, number>()
+  private toolSendsByScope = new Map<string, number>()
   private lastText = new Map<string, string>()
   private lastTrigger = new Map<string, { userId: number; messageId: number; groupId: number | null }>()
   private selfId = 0
@@ -161,6 +162,11 @@ export class SessionController {
     this.sentViaTool.set(sessionId, (this.sentViaTool.get(sessionId) ?? 0) + 1)
   }
 
+  // 本轮已经通过 MCP 发出的消息条数（用于限制单轮刷屏；不依赖是否已建 session）
+  toolSendCountOfScope(scope: string): number {
+    return this.toolSendsByScope.get(scope) ?? 0
+  }
+
   markAnsweredByAt(scope: string, qqs: string[]) {
     if (qqs.length === 0) return
     const pend = this.pendingRequests.get(scope)
@@ -174,6 +180,7 @@ export class SessionController {
   }
 
   markSentByScope(scope: string) {
+    this.toolSendsByScope.set(scope, (this.toolSendsByScope.get(scope) ?? 0) + 1)
     const entry = this.map.get(scope)
     if (entry) this.markSentViaTool(entry.sessionId)
   }
@@ -790,6 +797,7 @@ export class SessionController {
       if (!scope) return
       this.clearPending(scope)
       this.sentViaTool.delete(sessionId)
+      this.toolSendsByScope.delete(scope)
       this.lastText.delete(sessionId)
       this.log(`opencode 执行失败 session=${sessionId}:`, ev.data.error)
       await this.sendTextToScope(scope, '我这边刚才出了点问题，再说一次呗')
@@ -799,7 +807,10 @@ export class SessionController {
       this.lastText.delete(sessionId)
       if (ev.data.reason !== 'user') return
       const scope = this.reverse.get(sessionId)
-      if (scope) this.clearPending(scope)
+      if (scope) {
+        this.clearPending(scope)
+        this.toolSendsByScope.delete(scope)
+      }
       this.sentViaTool.delete(sessionId)
     }
   }
@@ -813,8 +824,9 @@ export class SessionController {
       this.markSent(scope, answered.map((p) => p.id))
       this.pendingRequests.delete(scope)
     }
-    const usedTool = this.sentViaTool.get(sessionId) ?? 0
+    const usedTool = this.toolSendsByScope.get(scope) ?? this.sentViaTool.get(sessionId) ?? 0
     this.sentViaTool.delete(sessionId)
+    this.toolSendsByScope.delete(scope)
     const text = this.lastText.get(sessionId) ?? ''
     this.lastText.delete(sessionId)
     if (usedTool === 0 && text.trim()) {
