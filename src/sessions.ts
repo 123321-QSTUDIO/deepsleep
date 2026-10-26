@@ -108,6 +108,7 @@ export class SessionController {
   private lastPokeTurnAt = new Map<string, number>()
   // qqbot_wait_for_messages 生效期间，新消息只入库、不再单独触发一轮模型
   private waitScopes = new Map<string, number>()
+  private waitTriggered = new Map<string, { messageId: number | null; userId: number; line: string }>()
   // 群聊上下文批量投喂：见过的群 scope / 定时器 / 水位（按时间+消息ID）
   private groupScopes = new Set<string>()
   private groupBatchWindows = new Map<string, GroupBatchWindow>()
@@ -481,11 +482,21 @@ export class SessionController {
 
   private isTriggered(event: OB11MessageEvent, segments: MsgSegment[]): boolean {
     if (event.message_type === 'private') return true
-    const selfId = String(event.self_id ?? '')
+    // 个别网关事件可能不带 self_id；用最近一次事件的 self_id 兜底，避免 @ 被当成普通聊天
+    const selfIds = [...new Set([String(event.self_id ?? ''), String(this.selfId ?? '')].filter(Boolean))]
     const atTargets = extractAtTargets(segments)
-    if (selfId && atTargets.includes(selfId)) return true
+    // 个别网关/适配器只在 raw_message 里保留 CQ:at，segments 里没有 at 段；
+    // 再从原始消息补一次，避免明确 @ 机器人却被当成普通群聊
+    if (atTargets.length === 0) {
+      const raw = String(event.raw_message ?? '')
+      for (const m of raw.matchAll(/\[CQ:at,qq=(\d+)\]/g)) atTargets.push(m[1])
+    }
+    if (atTargets.some((t) => selfIds.includes(t))) return true
+    if (atTargets.length > 0 && selfIds.length > 0 && !atTargets.some((t) => selfIds.includes(t))) {
+      this.log('收到 @ 但不是本机器人 scope=group-' + String(event.group_id) + ' target=' + atTargets.join(',') + ' self=' + selfIds.join(','))
+    }
     const replyTo = extractReplyTo(segments)
-    if (replyTo !== null && selfId) {
+    if (replyTo !== null && selfIds.length > 0) {
       // 回复了机器人、但同时在跟其他人说话（@了别人而没@机器人）→ 不触发
       if (atTargets.length > 0) return false
       const scope = `group-${event.group_id}`
@@ -493,7 +504,7 @@ export class SessionController {
       for (const day of [dayKey(now), dayKey(now - 86400)]) {
         try {
           const rows = this.db.query(scope, day, 'SELECT user_id FROM message WHERE message_id = ? LIMIT 1', [replyTo])
-          if (rows.length > 0 && String(rows[0].user_id) === selfId) return true
+          if (rows.length > 0 && selfIds.includes(String(rows[0].user_id))) return true
         } catch {
           // db file for that day may not exist
         }
@@ -521,7 +532,7 @@ export class SessionController {
   async waitForMessages(
     scope: string,
     opts: { purpose: 'reply' | 'messages'; timeoutSec: number; quietSec: number }
-  ): Promise<{ newMessages: { message_id: number | null; user_id: number; nickname: string; time: number; text: string }[]; quiet: boolean; timeout: boolean; waitedMs: number }> {
+  ): Promise<{ newMessages: { message_id: number | null; user_id: number; nickname: string; time: number; text: string }[]; quiet: boolean; timeout: boolean; waitedMs: number; triggered?: { messageId: number | null; userId: number; line: string } }> {
     const started = Date.now()
     const startPk = this.lastMsgPk(scope)
     const timeoutMs = Math.max(1, Math.min(60, opts.timeoutSec)) * 1000
@@ -538,6 +549,11 @@ export class SessionController {
           time: Number(r.time),
           text: String(r.text ?? ''),
         }))
+        const triggered = this.waitTriggered.get(scope)
+        if (triggered) {
+          this.waitTriggered.delete(scope)
+          return { newMessages: messages, quiet: false, timeout: false, waitedMs: now - started, triggered }
+        }
         if (messages.length > 0) {
           const lastAt = messages[messages.length - 1].time * 1000
           if (opts.purpose === 'messages' || now - lastAt >= quietMs) {
@@ -545,12 +561,13 @@ export class SessionController {
           }
         }
         if (now - started >= timeoutMs) {
-          return { newMessages: messages, quiet: messages.length > 0, timeout: true, waitedMs: now - started }
+          return { newMessages: messages, quiet: messages.length > 0, timeout: true, waitedMs: now - started, triggered: this.waitTriggered.get(scope) }
         }
         await new Promise((r) => setTimeout(r, 250))
       }
     } finally {
       this.waitScopes.delete(scope)
+      this.waitTriggered.delete(scope)
       // 等待期间的消息已经作为工具结果交给模型，批量投喂不要再重复灌一遍
       this.groupBatchLast.set(scope, { time: Math.floor(Date.now() / 1000), msgId: 0 })
       this.contextSince.set(scope, Math.floor(Date.now() / 1000))
@@ -804,6 +821,9 @@ export class SessionController {
     const week = '日一二三四五六'[d.getDay()]
     parts.push(`[当前时间] ${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())} 星期${week}（以此为准，下面消息前面的方括号是它们的发送时间）`)
     if (context.length > 0) parts.push('[新的聊天记录]\n' + context.map((c) => c.line).join('\n'))
+    if (mode === 'normal') {
+      parts.unshift('[系统] 这是明确 @/回复你或私聊你的请求，优先正面回应；除非内容完全无法处理，否则不要只输出 [SILENT]。')
+    }
     if (mode === 'poke') {
       parts.unshift(
         '[系统] 刚刚 ' + contextNote + ' 戳了你一下（聊天记录里的 [戳一戳]）。' +
@@ -859,10 +879,19 @@ export class SessionController {
       return
     }
 
-    // 模型正在用 qqbot_wait_for_messages 等消息：新消息只入库，由等待结果交给模型
-    if (this.waitScopes.has(scope)) return
-
     const triggered = this.isTriggered(event, segments)
+    // 模型正在用 qqbot_wait_for_messages 等消息：普通消息只入库；
+    // 但如果有人 @/回复机器人，不能吞掉——记下触发，让等待立刻返回并提示模型优先回应
+    if (this.waitScopes.has(scope)) {
+      if (triggered) {
+        this.waitTriggered.set(scope, {
+          messageId: typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null,
+          userId: Number(event.user_id ?? 0),
+          line: cleanCqForDisplay(String(event.raw_message ?? '')).trim(),
+        })
+      }
+      return
+    }
     let promptMode: 'normal' | 'proactive' | 'context' = 'normal'
     let contextNote = ''
     if (!triggered) {

@@ -312,7 +312,10 @@ export class QqMcpServer {
           timeoutSec: timeout_sec ?? (mode === 'reply' ? 30 : 20),
           quietSec: quiet_sec ?? (mode === 'reply' ? 10 : 0),
         })
-        return text(JSON.stringify(result))
+        const payload = result.triggered
+          ? { ...result, hint: '等待期间有人 @/回复你：' + result.triggered.line + '，这条优先级高于普通聊天，请优先回应。' }
+          : result
+        return text(JSON.stringify(payload))
       }
     )
 
