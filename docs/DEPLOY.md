@@ -312,6 +312,7 @@ schtasks /create /tn "qqbot-svc" /sc onlogon /rl highest /f `
 - 本机直接打开 <http://127.0.0.1:5101/>（服务器上则用 SSH 隧道：`ssh -N -L 5101:127.0.0.1:5101 <用户>@<服务器IP>`，再在本机浏览器打开同一地址）
 - `panelToken` 非空时，页面会提示输入 token（也能用 `http://127.0.0.1:5101/?token=xxx` 直接进）
 - 功能：表单改全部配置（写回 config.json，部分字段提示需重启）、看所有群/私聊会话与 Session 状态、打开某个会话看 OpenCode 对话/QQ 消息记录/工作区文件、执行 `/reset`、`/abort`、以机器人身份发 QQ 消息、把文字作为 prompt 直接发给 Agent
+- **表情看图**：群友发的收藏/商城表情也会把原图下载到工作区 inbox，模型可以直接看（或走 vision-bridge）；想确认收藏表情长什么样，可用 `qqbot_get_sticker_image` 保存到 inbox 后查看。
 - **表情两套**：内置小黄脸（CQ face）和收藏表情（MCP）是两套东西。提示词会自动注入内置表情表和所有已启用收藏表情；收藏表情需要在面板里同步、打标、启用后才会出现，未启用的不会注入。
 - **权限确认**：OpenCode V2 在模型首次使用搜索/联网等工具时会发权限请求（TUI 里是弹窗）。服务形态默认自动批准：workspace 配置提前放行 + `permission.asked` 事件自动回复；面板「权限与安全」组可关（`autoApprovePermissions`）或改成只批一次（`permissionAutoReply=once`）。关闭后服务端不会回应，会话可能一直等待，谨慎操作。
 - **回复长度/条数**：`normalCharsPerMessage`（默认 20 字）写进人格提示词，普通对话单条尽量不超过；`maxCharsPerMessage`（默认 200 字）与 `maxLinesPerReply`（默认 4 条）是提醒阈值——超出不会拦截发送，消息照发，但 MCP 会在工具结果里返回警告，让模型自己收尾/精简；如果这一轮同时在回复多个人（pending >= 2），条数警告会自动跳过，方便逐人回复。人格提示词保留拟人化分条，但不再强制每条都拆，模型按内容自由选择 1 到 4 条。

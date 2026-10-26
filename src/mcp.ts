@@ -151,6 +151,24 @@ export class QqMcpServer {
     )
 
     mcp.registerTool(
+      'get_sticker_image',
+      {
+        description: '把某个收藏表情的原图下载到工作区 inbox/，返回路径。想知道一个表情到底长什么样时先调它，再用 read 查看图片（模型不支持看图时用 vision-bridge 子代理读）；不要拿它当发表情用。',
+        inputSchema: { sticker: z.string().describe('收藏表情的 id 或 md5（来自系统提示列表 / qqbot_list_stickers）') },
+      },
+      async ({ sticker }) => {
+        if (!scope) return text('错误: 未知对话上下文')
+        if (taskMode) return text('错误: 沙箱任务中不能读写工作区')
+        try {
+          const info = await sessions.prepareStickerImage(scope, String(sticker))
+          return text('表情「' + info.label + '」的图片已保存到工作目录：' + info.relPath + '。用 read 工具查看图片内容（看不了图就用 vision-bridge 子代理），看完再决定要不要 qqbot_send_sticker。')
+        } catch (e) {
+          return text('获取表情图片失败: ' + String((e as Error)?.message ?? e))
+        }
+      }
+    )
+
+    mcp.registerTool(
       'send_voice',
       {
         description: '把一段话用 TTS 合成语音发到当前对话（群里就是语音消息）。适合想用声音表达时；文本尽量短（默认最多 200 字）。音色由本群/本会话设定的声音决定。',

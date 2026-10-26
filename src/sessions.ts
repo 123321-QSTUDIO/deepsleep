@@ -725,9 +725,15 @@ export class SessionController {
 
     const segments = (Array.isArray(event.message) ? event.message : []) as MsgSegment[]
     const nick = event.sender?.card || event.sender?.nickname || String(event.user_id ?? '')
-    const currentText = cleanCqForDisplay(
+    let currentText = cleanCqForDisplay(
       typeof event.raw_message === 'string' && event.raw_message ? event.raw_message : extractText(segments)
     )
+    // 收藏/商城表情的 image 段带 emoji_id/summary：当前消息也要带上可读描述，
+    // 否则只有 [CQ:image] 或 [图片]，模型不知道这是个表情包
+    const stickerNotes = segments
+      .filter((seg) => seg.type === 'image' && (seg.data?.emoji_id || seg.data?.summary))
+      .map((seg) => `[表情包${seg.data?.summary ? ':' + String(seg.data.summary) : ''}]`)
+    if (stickerNotes.length > 0) currentText += ' ' + stickerNotes.join('')
     let currentLine = `[${hhmm(event.time ?? now)}] ${nick}(${event.user_id}): ${currentText}`
     const replyTo = extractReplyTo(segments)
     if (replyTo !== null) {
@@ -847,18 +853,13 @@ export class SessionController {
     const prompt = this.buildPrompt(event, promptMode, contextNote)
     if (!prompt) return
     const replyTo = extractReplyTo(segments)
-    // 商城/收藏表情在 SnowLuma 里是带 emoji_id 的 image 段：交给视觉模型没意义，
-    // 由上下文文本里的 [表情包: ...] 描述代替（见 app.ts storeMessage）
-    const stickerUrls = new Set(
-      segments
-        .filter((seg) => seg.type === 'image' && seg.data?.emoji_id && typeof seg.data.url === 'string')
-        .map((seg) => String(seg.data.url))
-    )
+    // 收藏/商城表情也要给模型看原图：它们的 image 段和普通图片一起走视觉链路，
+    // 文本里另有 [表情包:描述] 供接梗，两者不冲突。
     const images = dedupeImages([
       ...extractImages(segments),
       ...extractImagesFromRaw(event.raw_message ?? ''),
       ...(replyTo !== null ? this.quotedImages(scope, replyTo) : []),
-    ]).filter((img) => !stickerUrls.has(img.url))
+    ])
     const imageNote = await this.downloadImages(entry.directory, images)
     await this.prompt(entry.sessionId, imageNote ? prompt + imageNote : prompt)
   }
@@ -909,6 +910,34 @@ export class SessionController {
       return `\n[系统] 这条消息带了图片，已存到工作目录：${notes.join('、')}。用 subagent 工具调 vision-bridge 子代理读取图片内容后再回答。`
     }
     return `\n[系统] 这条消息带了图片，已存到工作目录：${notes.join('、')}。你当前没有可用的看图能力，回复里直接说明看不到图或请对方描述。`
+  }
+
+  // 让模型看到收藏表情原图：把表情图片下载到当前会话工作区 inbox/，返回相对路径
+  async prepareStickerImage(scope: string, ref: string): Promise<{ relPath: string; label: string; mime: string }> {
+    if (!this.stickers) throw new Error('表情库未初始化')
+    const all = this.stickers.list()
+    const raw = String(ref ?? '').trim()
+    const target =
+      this.stickers.get(raw) ||
+      all.find((x) => x.md5 && x.md5.toUpperCase() === raw.toUpperCase()) ||
+      all.find((x) => x.url === raw)
+    if (!target) throw new Error('找不到这个收藏表情，请先用 qqbot_list_stickers 拿 id')
+    if (!target.url) throw new Error('这个收藏表情没有可下载的图片地址')
+    const res = await fetch(target.url, { headers: { 'user-agent': 'Mozilla/5.0' } })
+    if (!res.ok) throw new Error('下载表情图片失败: HTTP ' + res.status)
+    const mime = String(res.headers.get('content-type') ?? 'image/jpeg').split(';')[0].trim()
+    if (!mime.startsWith('image/')) throw new Error('表情地址返回的不是图片: ' + mime)
+    const buffer = Buffer.from(await res.arrayBuffer())
+    const maxBytes = 8 * 1024 * 1024
+    if (buffer.length === 0) throw new Error('表情图片为空')
+    if (buffer.length > maxBytes) throw new Error('表情图片过大（' + buffer.length + ' 字节）')
+    const ext = mime.includes('png') ? 'png' : mime.includes('gif') ? 'gif' : mime.includes('webp') ? 'webp' : 'jpg'
+    const inbox = path.join(this.workspaceFor(scope), 'inbox')
+    fs.mkdirSync(inbox, { recursive: true })
+    const safeId = target.id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40) || 'sticker'
+    const name = 'sticker-' + safeId + '-' + Date.now() + '.' + ext
+    fs.writeFileSync(path.join(inbox, name), buffer)
+    return { relPath: 'inbox/' + name, label: target.collection ? target.collection + ':' + target.label : target.label, mime }
   }
 
   private async reset(scope: string) {
