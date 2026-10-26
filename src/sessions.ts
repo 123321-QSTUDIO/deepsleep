@@ -27,6 +27,17 @@ interface SessionEntry {
   directory: string
 }
 
+// 群聊批量投喂的窗口：首条消息起算正常超时，最后一条消息后 idleFlush 秒冷场提前投喂
+interface GroupBatchWindow {
+  startedAt: number
+  lastMsgAt: number
+  normalTimer: ReturnType<typeof setTimeout> | null
+  idleTimer: ReturnType<typeof setTimeout> | null
+  cutoffTimer: ReturnType<typeof setTimeout> | null
+  retryTimer: ReturnType<typeof setTimeout> | null
+  flushing: boolean
+}
+
 // 梦境记忆维护的结构化记忆文件：instructions 注入，夜间由 dream.ts 更新
 export const MEMORY_FILE = 'MEMORY.md'
 export const MEMORY_TEMPLATE = `# 记忆 · MEMORY.md
@@ -99,7 +110,7 @@ export class SessionController {
   private waitScopes = new Map<string, number>()
   // 群聊上下文批量投喂：见过的群 scope / 定时器 / 水位（按时间+消息ID）
   private groupScopes = new Set<string>()
-  private groupBatchTimer: ReturnType<typeof setInterval> | null = null
+  private groupBatchWindows = new Map<string, GroupBatchWindow>()
   private groupBatchRunning = new Set<string>()
   private groupBatchLast = new Map<string, { time: number; msgId: number }>()
 
@@ -536,6 +547,7 @@ export class SessionController {
       this.waitScopes.delete(scope)
       // 等待期间的消息已经作为工具结果交给模型，批量投喂不要再重复灌一遍
       this.groupBatchLast.set(scope, { time: Math.floor(Date.now() / 1000), msgId: 0 })
+      this.clearGroupBatchWindow(scope)
     }
   }
 
@@ -805,8 +817,10 @@ export class SessionController {
         `[待回应的请求，共 ${pending.length} 条，请逐条回应]\n` + pending.map((p, i) => `${i + 1}. ${p.line}`).join('\n')
       )
     }
-    // 任何一次真实 prompt 都视为已经「看」到当前时刻之前的消息，批量投喂从此刻之后继续
+    // 任何一次真实 prompt 都视为已经「看」到当前时刻之前的消息，批量投喂从此刻之后继续；
+    // 同时关闭该群窗口（这次的即时 prompt 已经覆盖了窗口里积攒的消息）
     this.groupBatchLast.set(scope, { time: now, msgId: currentId ?? 0 })
+    if (scope.startsWith('group-')) this.clearGroupBatchWindow(scope)
     return parts.join('\n')
   }
 
@@ -838,8 +852,11 @@ export class SessionController {
     let promptMode: 'normal' | 'proactive' | 'context' = 'normal'
     let contextNote = ''
     if (!triggered) {
-      // 群聊批量投喂模式：不@的消息先只入库，等定时器把它们作为一次 prompt 交给模型
-      if (this.config.groupContextBatchEnabled && this.config.proactiveEnabled) return
+      // 群聊批量投喂模式：不@的消息先只入库，并开始/续期该群窗口；由窗口到点或冷场提前交给模型
+      if (this.config.groupContextBatchEnabled && this.config.proactiveEnabled) {
+        this.noteGroupMessage(scope)
+        return
+      }
       const ctx = this.tryContextReply(scope, event, segments)
       if (ctx) {
         promptMode = 'context'
@@ -984,24 +1001,131 @@ export class SessionController {
     return { relPath: 'inbox/' + name, label: target.collection ? target.collection + ':' + target.label : target.label, mime }
   }
 
-  // ---- 群聊上下文批量投喂：不@ 时每 N 秒把新聊天记录当成一次 user prompt 交给模型 ----
+  // ---- 群聊上下文批量投喂 ----
+  // 不是固定全局 tick：某群「首条不@消息」到达才开窗口；窗口到点或冷场提前投喂后窗口关闭，
+  // 下一条消息重新开窗。空群不产生任何计时器/模型调用。
   startGroupContextBatch() {
     if (!this.config.groupContextBatchEnabled) {
       this.log('群聊上下文批量投喂未启用 (groupContextBatchEnabled=false)')
       return
     }
-    const sec = Math.max(10, Math.min(3600, Number(this.config.groupContextBatchIntervalSec) || 600))
-    if (this.groupBatchTimer) clearInterval(this.groupBatchTimer)
-    this.groupBatchTimer = setInterval(() => void this.flushGroupContextBatches(), sec * 1000)
-    this.log('群聊上下文批量投喂已启用: 每 ' + sec + ' 秒')
+    const sec = this.groupBatchIntervalMs() / 1000
+    this.log('群聊上下文批量投喂已启用: 首条消息起 ' + sec + ' 秒窗口；最后一条后 ' + (this.groupBatchIdleFlushMs() / 1000) + ' 秒冷场提前投喂（窗口开始 ' + (this.groupBatchIdleCutoffMs() / 1000) + ' 秒后不再冷场跳出）')
   }
 
   stopGroupContextBatch() {
-    if (this.groupBatchTimer) clearInterval(this.groupBatchTimer)
-    this.groupBatchTimer = null
+    for (const scope of [...this.groupBatchWindows.keys()]) this.clearGroupBatchWindow(scope)
   }
 
-  // 定时器/测试调用：逐个群检查并投喂新消息；返回本轮真正投喂的群数
+  private groupBatchIntervalMs(): number {
+    return Math.max(1000, Math.min(3600_000, (Number(this.config.groupContextBatchIntervalSec) || 600) * 1000))
+  }
+
+  private groupBatchIdleFlushMs(): number {
+    return Math.max(1000, (Number(this.config.groupContextBatchIdleFlushSec) || 120) * 1000)
+  }
+
+  private groupBatchIdleCutoffMs(): number {
+    return Math.max(this.groupBatchIdleFlushMs(), (Number(this.config.groupContextBatchIdleCutoffSec) || 480) * 1000)
+  }
+
+  // 非@群消息到达：没有窗口就开窗；有窗口就更新最后消息时间并重置冷场计时
+  private noteGroupMessage(scope: string) {
+    if (!this.config.groupContextBatchEnabled || !this.config.proactiveEnabled) return
+    if (!scope.startsWith('group-')) return
+    const now = Date.now()
+    let w = this.groupBatchWindows.get(scope)
+    if (!w) {
+      const created: GroupBatchWindow = { startedAt: now, lastMsgAt: now, normalTimer: null, idleTimer: null, cutoffTimer: null, retryTimer: null, flushing: false }
+      w = created
+      this.groupBatchWindows.set(scope, created)
+      created.normalTimer = setTimeout(() => void this.onGroupBatchDue(scope, 'normal'), this.groupBatchIntervalMs())
+      // 到 cutoff 还没收到后续消息，就关闭冷场跳出，避免它和正常窗口几乎同时触发
+      created.cutoffTimer = setTimeout(() => {
+        created.cutoffTimer = null
+        if (created.idleTimer) clearTimeout(created.idleTimer)
+        created.idleTimer = null
+      }, this.groupBatchIdleCutoffMs())
+    } else {
+      w.lastMsgAt = now
+      // 正在投喂/等待重试时只更新最后消息时间，不再另开计时器
+      if (w.retryTimer || w.flushing) return
+    }
+    const elapsed = now - w.startedAt
+    if (elapsed < this.groupBatchIdleCutoffMs()) {
+      if (w.idleTimer) clearTimeout(w.idleTimer)
+      const delay = Math.max(0, w.lastMsgAt + this.groupBatchIdleFlushMs() - Date.now())
+      w.idleTimer = setTimeout(() => void this.onGroupBatchDue(scope, 'idle'), delay)
+    } else if (w.idleTimer) {
+      clearTimeout(w.idleTimer)
+      w.idleTimer = null
+    }
+  }
+
+  // 窗口到点/冷场到点：session 忙则短重试；否则立即投喂并关闭窗口
+  private async onGroupBatchDue(scope: string, reason: 'normal' | 'idle' | 'retry') {
+    const w = this.groupBatchWindows.get(scope)
+    if (!w) return
+    if (!this.config.groupContextBatchEnabled || !this.config.proactiveEnabled) {
+      this.clearGroupBatchWindow(scope)
+      return
+    }
+    if (w.flushing) return
+    w.flushing = true
+    for (const timer of [w.normalTimer, w.idleTimer, w.cutoffTimer, w.retryTimer]) if (timer) clearTimeout(timer)
+    w.normalTimer = null
+    w.idleTimer = null
+    w.cutoffTimer = null
+    w.retryTimer = null
+    try {
+      const entry = this.map.get(scope)
+      if (entry) {
+        const status = await this.oc.getStatus().catch(() => null as Record<string, unknown> | null)
+        if (this.groupBatchWindows.get(scope) !== w) return
+        if (status && status[entry.sessionId]) {
+          this.log('群聊批量上下文等待 session 空闲 scope=' + scope + ' reason=' + reason)
+          w.retryTimer = setTimeout(() => {
+            w.retryTimer = null
+            void this.onGroupBatchDue(scope, 'retry')
+          }, 5000)
+          return
+        }
+      }
+      const ok = await this.flushGroupContextBatch(scope)
+      if (this.groupBatchWindows.get(scope) !== w) return
+      if (!ok) {
+        // session 忙 / 等待工具占用 / 临时失败：窗口先保留，短重试，消息不丢
+        if (this.hasPendingGroupBatchRows(scope)) {
+          w.retryTimer = setTimeout(() => {
+            w.retryTimer = null
+            void this.onGroupBatchDue(scope, 'retry')
+          }, 5000)
+          return
+        }
+        this.clearGroupBatchWindow(scope)
+        return
+      }
+      this.log('群聊批量投喂触发(' + reason + ') scope=' + scope)
+      this.clearGroupBatchWindow(scope)
+    } finally {
+      w.flushing = false
+    }
+  }
+
+  private hasPendingGroupBatchRows(scope: string): boolean {
+    const last = this.groupBatchLast.get(scope)
+    const since = last ? last.time - 1 : Math.floor(Date.now() / 1000) - Math.round(this.groupBatchIntervalMs() / 1000)
+    return this.collectGroupBatchRows(scope, since, last).length > 0
+  }
+
+  private clearGroupBatchWindow(scope: string) {
+    const w = this.groupBatchWindows.get(scope)
+    if (!w) return
+    for (const timer of [w.normalTimer, w.idleTimer, w.cutoffTimer, w.retryTimer]) if (timer) clearTimeout(timer)
+    this.groupBatchWindows.delete(scope)
+  }
+
+  // 测试/手动：强制扫一遍有窗口或消息的群；返回真正投喂的群数
   async flushGroupContextBatches(): Promise<number> {
     if (!this.config.groupContextBatchEnabled) return 0
     const scopes = new Set<string>()
@@ -1013,7 +1137,6 @@ export class SessionController {
     }
     return fed
   }
-
   // 单个群：收「上次投喂后」的新消息，作为一次 user prompt 发给模型；没有新消息就不触发
   async flushGroupContextBatch(scope: string): Promise<boolean> {
     const cfg = this.config
@@ -1127,6 +1250,7 @@ export class SessionController {
   }
 
   private async reset(scope: string) {
+    this.clearGroupBatchWindow(scope)
     const entry = this.map.get(scope)
     if (!entry) return
     await this.oc.deleteSession(entry.sessionId).catch(() => undefined)

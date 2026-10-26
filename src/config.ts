@@ -34,6 +34,9 @@ export interface PluginConfig {
   groupContextBatchIntervalSec: number
   groupContextBatchMaxMessages: number
   groupContextBatchMaxChars: number
+  // 冷场跳出：最后一条消息后 N 秒没人说话就提前投喂；窗口开始超过 cutoff 秒后不再启用冷场跳出
+  groupContextBatchIdleFlushSec: number
+  groupContextBatchIdleCutoffSec: number
   replyDelayMinMs: number
   replyDelayMaxMs: number
   maxLinesPerReply: number
@@ -121,6 +124,8 @@ export const defaultConfig: PluginConfig = {
   groupContextBatchIntervalSec: 600,
   groupContextBatchMaxMessages: 80,
   groupContextBatchMaxChars: 16000,
+  groupContextBatchIdleFlushSec: 120,
+  groupContextBatchIdleCutoffSec: 480,
   replyDelayMinMs: 1200,
   replyDelayMaxMs: 3000,
   maxLinesPerReply: 4,
