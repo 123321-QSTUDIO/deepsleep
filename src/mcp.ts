@@ -171,16 +171,19 @@ export class QqMcpServer {
     mcp.registerTool(
       'send_voice',
       {
-        description: '把一段话用 TTS 合成语音发到当前对话（群里就是语音消息）。适合想用声音表达时；文本尽量短（默认最多 200 字）。音色由本群/本会话设定的声音决定。',
-        inputSchema: { text: z.string().describe('要念出来的文本，尽量口语化、简短') },
+        description: '把一段话用 TTS 合成语音发到当前对话（群里就是语音消息）。适合想用声音表达、卖萌、哄人或唱歌时；普通说话文本尽量短。sing=true 时用预置音色唱歌，text 必须是完整歌词（不能只给一两句），会自动切到支持唱歌的预置模型。音色由本群设定的音色描述决定（唱歌时使用面板配置的预置音色）。',
+        inputSchema: {
+          text: z.string().describe('要念出来/唱出来的文本；sing=true 时是完整歌词'),
+          sing: z.boolean().optional().describe('true=唱歌（预置音色模型；歌词要完整）'),
+        },
       },
-      async ({ text: t }) => {
+      async ({ text: t, sing }) => {
         if (!scope) return text('错误: 未知对话上下文')
         if (taskMode) return text('错误: 沙箱任务中不能发消息')
         const content = String(t ?? '').trim()
         if (!content) return text('错误: 语音文本为空')
         try {
-          await sessions.sendVoiceToScope(scope, content)
+          await sessions.sendVoiceToScope(scope, content, { sing: !!sing })
           return text('已发送语音')
         } catch (e) {
           return text('发送语音失败: ' + String((e as Error)?.message ?? e))
@@ -191,8 +194,8 @@ export class QqMcpServer {
     mcp.registerTool(
       'set_voice',
       {
-        description: '设置当前群/私聊里机器人说话的声音（用一段音色描述）。传空字符串恢复默认声音。设置后之后发的语音都用这个声音；建议结合群氛围/角色来写。',
-        inputSchema: { description: z.string().describe('音色描述（年龄/性别/音色质感/语速/情绪底色），空字符串=恢复默认') },
+        description: '设置当前群/私聊里机器人说话的声音（用一段音色描述）。传空字符串恢复默认声音。只影响普通 TTS；唱歌固定使用面板预置音色（voicedesign 模型不支持唱歌）。建议 1-2 句白描：年龄+性别、音色质感、语速、情绪底色；不要写场景/动作，不要用真实明星/IP 名字。',
+        inputSchema: { description: z.string().describe('音色描述（年龄/性别/音色质感/语速/情绪底色），空字符串=恢复默认；例：青年女性，声音清亮偏软，语速稍快') },
       },
       async ({ description }) => {
         if (!scope) return text('错误: 未知对话上下文')

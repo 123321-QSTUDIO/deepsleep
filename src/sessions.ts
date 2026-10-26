@@ -859,7 +859,7 @@ export class SessionController {
     let contextNote = ''
     if (!triggered) {
       // 群聊批量投喂模式：不@的消息先只入库，并开始/续期该群窗口；由窗口到点或冷场提前交给模型
-      if (this.config.groupContextBatchEnabled && this.config.proactiveEnabled) {
+      if (this.config.groupContextBatchEnabled) {
         this.noteGroupMessage(scope)
         return
       }
@@ -1044,7 +1044,7 @@ export class SessionController {
 
   // 非@群消息到达：没有窗口就开窗；有窗口就更新最后消息时间并重置冷场计时
   private noteGroupMessage(scope: string) {
-    if (!this.config.groupContextBatchEnabled || !this.config.proactiveEnabled) return
+    if (!this.config.groupContextBatchEnabled) return
     if (!scope.startsWith('group-')) return
     const now = Date.now()
     let w = this.groupBatchWindows.get(scope)
@@ -1079,7 +1079,7 @@ export class SessionController {
   private async onGroupBatchDue(scope: string, reason: 'normal' | 'idle' | 'retry') {
     const w = this.groupBatchWindows.get(scope)
     if (!w) return
-    if (!this.config.groupContextBatchEnabled || !this.config.proactiveEnabled) {
+    if (!this.config.groupContextBatchEnabled) {
       this.clearGroupBatchWindow(scope)
       return
     }
@@ -1153,7 +1153,7 @@ export class SessionController {
   // 单个群：收「上次投喂后」的新消息，作为一次 user prompt 发给模型；没有新消息就不触发
   async flushGroupContextBatch(scope: string): Promise<boolean> {
     const cfg = this.config
-    if (!cfg.groupContextBatchEnabled || !cfg.proactiveEnabled || !scope.startsWith('group-')) return false
+    if (!cfg.groupContextBatchEnabled || !scope.startsWith('group-')) return false
     if (this.groupBatchRunning.has(scope) || this.waitScopes.has(scope)) return false
     this.groupBatchRunning.add(scope)
     try {
@@ -1527,23 +1527,24 @@ export class SessionController {
     return this.voices.set(scope, description)
   }
 
-  async sendVoiceToScope(scope: string, text: string): Promise<void> {
+  async sendVoiceToScope(scope: string, text: string, opts?: { sing?: boolean }): Promise<void> {
     const prev = this.sendQueues.get(scope) ?? Promise.resolve()
-    const next = prev.then(() => this.doSendVoice(scope, text)).catch((e) => {
+    const next = prev.then(() => this.doSendVoice(scope, text, opts)).catch((e) => {
       this.log('发送语音失败:', e)
     })
     this.sendQueues.set(scope, next)
     return next
   }
 
-  private async doSendVoice(scope: string, text: string): Promise<void> {
+  private async doSendVoice(scope: string, text: string, opts?: { sing?: boolean }): Promise<void> {
     if (!this.tts) throw new Error('TTS 未初始化')
     const trimmed = text.trim()
     if (!trimmed) throw new Error('语音文本为空')
-    const max = Math.max(1, this.config.ttsMaxChars || 200)
+    const sing = !!opts?.sing
+    const max = Math.max(1, sing ? this.config.ttsSingMaxChars || 600 : this.config.ttsMaxChars || 200)
     if (trimmed.length > max) throw new Error('语音文本过长（最多 ' + max + ' 字，当前 ' + trimmed.length + ' 字）')
     const voice = this.voiceOf(scope)
-    const { buffer, format } = await this.tts.synthesize(trimmed, voice)
+    const { buffer, format } = await this.tts.synthesize(trimmed, voice, { sing })
     // WS 可能连远端网关，本地文件路径在远端不可读；默认走 base64 内联音频
     const useBase64 = this.config.voiceSendBase64 !== false
     let file = 'base64://' + buffer.toString('base64')

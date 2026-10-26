@@ -92,7 +92,9 @@ const FIELDS: FieldDef[] = [
   { key: 'ttsEnabled', label: 'ttsEnabled（启用语音 TTS）', group: '语音', type: 'boolean', help: '开启后 Agent 可以用 qqbot_send_voice 发语音（MiMo TTS，OpenAI 兼容接口）' },
   { key: 'ttsBaseUrl', label: 'ttsBaseUrl（TTS 服务地址）', group: '语音', type: 'string', help: '默认 https://api.xiaomimimo.com/v1' },
   { key: 'ttsApiKey', label: 'ttsApiKey（MiMo API Key）', group: '语音', type: 'password' },
-  { key: 'ttsModel', label: 'ttsModel', group: '语音', type: 'string', help: 'mimo-v2.5-tts-voicedesign（文本描述定制音色）/ mimo-v2.5-tts（预置音色）' },
+  { key: 'ttsModel', label: 'ttsModel', group: '语音', type: 'string', help: 'mimo-v2.5-tts-voicedesign（文本描述定制音色，不支持唱歌）/ mimo-v2.5-tts（预置音色，支持唱歌）' },
+  { key: 'ttsPresetVoice', label: 'ttsPresetVoice（预置音色）', group: '语音', type: 'string', help: 'ttsModel=mimo-v2.5-tts 或唱歌时使用：冰糖 / 茉莉 / 苏打 / 白桦 / Mia / Chloe / Milo / Dean' },
+  { key: 'ttsSingMaxChars', label: 'ttsSingMaxChars（唱歌最大字数）', group: '语音', type: 'number', min: 100 },
   { key: 'ttsFormat', label: 'ttsFormat（音频格式）', group: '语音', type: 'string', help: 'mp3 / wav；网关会转成 QQ 语音格式' },
   { key: 'ttsDefaultVoice', label: 'ttsDefaultVoice（默认音色描述）', group: '语音', type: 'string', help: '每个群可以用 qqbot_set_voice 覆盖；这里是没有单独设置时用的声音' },
   { key: 'ttsMaxChars', label: 'ttsMaxChars（语音最大字数）', group: '语音', type: 'number', min: 1 },
@@ -106,7 +108,6 @@ const FIELDS: FieldDef[] = [
   { key: 'reminderCheckSec', label: 'reminderCheckSec（检查间隔秒）', group: '定时提醒', type: 'number', min: 1, help: '调度器多久检查一次到期提醒' },
   { key: 'reminderMaxPerScope', label: 'reminderMaxPerScope（单会话上限）', group: '定时提醒', type: 'number', min: 1 },
   { key: 'reminderMaxDays', label: 'reminderMaxDays（最大天数）', group: '定时提醒', type: 'number', min: 1 },
-  { key: 'proactiveEnabled', label: 'proactiveEnabled（自动回复 · 测试功能）', group: '主动参与（测试）', type: 'boolean', help: '测试功能：没人@时由判官决定是否主动接话，行为可能随版本调整；可在顶部开关快速启停' },
   { key: 'proactiveChance', label: 'proactiveChance（候选概率 %）', group: '主动参与（测试）', type: 'number', min: 0, max: 100, help: '满足最少消息数/冷却后，每条候选消息进入判官的概率；本地判官便宜，默认 100' },
   { key: 'proactiveMinIntervalSec', label: 'proactiveMinIntervalSec（冷却秒数）', group: '主动参与（测试）', type: 'number', min: 0 },
   { key: 'proactiveMinMessages', label: 'proactiveMinMessages（最少新消息数）', group: '主动参与（测试）', type: 'number', min: 1 },
@@ -514,7 +515,6 @@ export class ControlPanel {
       tasks: { queued, running: count('running'), done: count('done'), error: count('error'), total: all.length },
       sessions: { total: sessions.listScopes().length },
       dream: { enabled: config.dreamMemoryEnabled, hour: config.dreamMemoryHour, minute: config.dreamMemoryMinute },
-      autoReplyEnabled: config.proactiveEnabled,
     }
   }
 

@@ -17,7 +17,7 @@ function stickerPromptSection(stickers: StickerPromptItem[]): string {
   }
   return (
     '# 收藏表情包（可用列表，只能通过 MCP 发送）\n' +
-    '下面这些是账号的收藏表情，和内置小黄脸是两套东西：只能调用 qqbot_send_sticker(sticker=<id>) 发送，**不能**写成 CQ 码或普通文本；一次回复最多发 1-2 个，只在真的贴切时用，不要每条都发。\n' +
+    '下面这些是账号的收藏表情。它们是**优先**的表达方式：遇到情绪、反应、接梗、卖萌、贴贴等，先想有没有合适的收藏表情，有就优先用；内置小黄脸只是没有合适收藏表情时的备选（或需要夹在文字中间时）。只能调用 qqbot_send_sticker(sticker=<id>) 发送，**不能**写成 CQ 码或普通文本；一次回复最多发 1-2 个，不要每条都发。\n' +
     stickers.map((s) => '- ' + s.display + '  (id: ' + s.id + ')').join('\n')
   )
 }
@@ -42,10 +42,11 @@ function persona(config: PluginConfig, stickers: StickerPromptItem[] = []): stri
 # 输出限制
 绝对禁止使用任何 Unicode Emoji。可以在 qqbot_send_message 的文本里用 [CQ:at,qq=xx] 的方式来@群友。
 
-# 表情：内置小黄脸 vs 收藏表情包（两套，别混）
-- **内置小黄脸**：用 [CQ:face,id=数字] 写在 qqbot_send_message 的文本里，可以夹在文字中间；只能从下面列表里选，例如 [CQ:face,id=4]：
+# 表情：收藏表情包优先，内置小黄脸是备选
+- **收藏表情包**：先用这个。它是你自己挑过的表情包，比系统小黄脸更有辨识度、更贴群氛围；遇到情绪、接梗、吐槽、卖萌、安慰、贴贴等场景，先看下方列表里有没有合适的，有就调用 qqbot_send_sticker(sticker=<id>) 发。不能写成 CQ 码或普通文本；一次回复最多 1-2 个，不要每条都发，也别为了发而发。
+- **内置小黄脸**：没有合适收藏表情时的备选，或者需要夹在文字中间时用。用 [CQ:face,id=数字] 写在 qqbot_send_message 的文本里，只能从下面列表里选，例如 [CQ:face,id=4]：
 ${FACE_TABLE}
-- **收藏表情包**：和内置小黄脸不一样，必须调用 qqbot_send_sticker(sticker=<id>)，不能写成 CQ 码或文本；一次回复最多 1-2 个，只在贴切时用。可用列表在下方。
+- 判断顺序：情绪/反应/接梗 → 先想收藏表情 → 都不贴切再考虑小黄脸；纯文字能说清就不发表情。
 
 ${stickerPromptSection(stickers)}`
 }
@@ -63,8 +64,8 @@ const TOOLS_DOC = `# 响应速度原则（重要）
 - qqbot_list_stickers(query?, limit?): 查这个账号的收藏表情（返回 id、合集、标签；系统提示里已经注入了全部启用表情，这里可用于按关键词筛或刷新）。
 - qqbot_get_sticker_image(sticker): 把收藏表情原图下载到工作区 inbox/ 并返回路径；不确定某个表情长什么样时先用它 + read 看一眼（看不了图走 vision-bridge），不要拿它当发表情用。
 - qqbot_send_sticker(sticker, reply_to?): 发一个**收藏表情包**（不是内置小黄脸；内置小黄脸用 [CQ:face,id=] 写在 send_message 文本里）。sticker 用系统提示列表/qqbot_list_stickers 返回的 id；一次回复最多 1-2 个，别连发刷屏，没贴切的就不发。
-- qqbot_send_voice(text): 把一段短文本用 TTS 合成语音发出来（群语音/私聊语音）。声音由这个群设定的音色决定；适合不适合打字/想卖萌/想用语气表达的时候，别每条都发。
-- qqbot_set_voice(description): 给当前群/私聊设定机器人说话的音色（一段音色描述，空字符串恢复默认）。改完后之后发的语音都用这个声音，按群氛围自己设计。
+- qqbot_send_voice(text, sing?): 把文本用 TTS 合成语音发出来（群语音/私聊语音）。普通说话文本尽量短；sing=true 时是唱歌，text 必须是完整歌词（不能只给一两句，残缺歌词会跑调），系统会自动切到支持唱歌的预置音色模型。适合卖萌、哄人、语音条更有感觉或群友让你唱的时候，别每句都发。
+- qqbot_set_voice(description): 给当前群/私聊设定说话音色（空字符串恢复默认）。写 1-2 句白描：年龄+性别、声音质感、语速、情绪底色；不要写场景/动作，不要用真实明星/IP 名字。例：「青年女性，声音清亮偏软，语速稍快，情绪松弛，偶尔带点笑意」。这个音色只影响普通 TTS；唱歌固定用面板配置的预置音色。
 - qqbot_send_poke(qq?): 戳一戳群友（私聊可省略 qq）。别人戳你时系统会把 [戳一戳] 交给你决定，不需要自动反戳；想主动逗人时用，别连续戳人。
 - qqbot_set_reminder(minutes, text, at_qq?): 设置倒计时提醒。群友说“X 分钟后提醒我”或你想过一会儿跟进时用；到点系统会把提醒内容交给你，你按当时的上下文自然处理。
 - qqbot_list_reminders(): 查看当前会话还没触发的提醒。

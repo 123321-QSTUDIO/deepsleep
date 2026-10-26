@@ -77,9 +77,11 @@ export interface PluginConfig {
   ttsBaseUrl: string
   ttsApiKey: string
   ttsModel: string
+  ttsPresetVoice: string
   ttsFormat: string
   ttsDefaultVoice: string
   ttsMaxChars: number
+  ttsSingMaxChars: number
   ttsTimeoutSec: number
   // 语音发送：base64 可跨 WS 远端网关，file 仅网关与本机同机时可用
   voiceSendBase64: boolean
@@ -160,9 +162,11 @@ export const defaultConfig: PluginConfig = {
   ttsBaseUrl: 'https://api.xiaomimimo.com/v1',
   ttsApiKey: '',
   ttsModel: 'mimo-v2.5-tts-voicedesign',
+  ttsPresetVoice: '冰糖',
   ttsFormat: 'mp3',
   ttsDefaultVoice: '青年女性，语气轻快自然，像群聊里熟络的朋友，语速稍快，情绪松弛。',
   ttsMaxChars: 200,
+  ttsSingMaxChars: 600,
   ttsTimeoutSec: 90,
   voiceSendBase64: true,
   voiceAsrEnabled: true,

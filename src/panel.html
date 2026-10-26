@@ -1388,11 +1388,6 @@ body.modal-open{overflow:hidden}
           <span class="health" id="health-api" data-name="面板" title="面板 · 连接中"><span class="dot dim"></span><span class="health-label">面板 · 连接中</span></span>
         </div>
         <span class="clock" id="clock">--:--:--</span>
-        <label class="auto-toggle" id="auto-reply-wrap" title="自动回复（测试功能）：没人@时由判官决定是否主动接话，行为可能随版本调整；可在配置页细调节流">
-          <input type="checkbox" id="auto-reply-toggle">
-          <span class="auto-toggle-track"></span>
-          <span class="auto-toggle-text">自动回复 <em>测试</em></span>
-        </label>
         <span class="pill warn-tint" id="demo-pill" data-od-id="demo-badge" hidden><span class="dot warn"></span>演示数据</span>
         <button class="btn btn-icon topbar-token" type="button" data-action="token" title="设置面板 Token" aria-label="设置面板 Token">
           <svg class="svg-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
@@ -1702,7 +1697,6 @@ function buildMock(){
         onebot:{connected:true},
         mcp:{host:'127.0.0.1', port:cfg.mcpPort, tokenSet:!!cfg.mcpToken},
         panel:{host:cfg.panelHost, port:cfg.panelPort, tokenSet:!!cfg.panelToken},
-        autoReplyEnabled:!!cfg.proactiveEnabled,
         tasks:{queued:0, running:1, done:47, error:2, total:50},
         sessions:{total:Object.keys(details).length}
       };
@@ -2167,8 +2161,6 @@ function updateHealth(st){
     sideHealth.className='dot '+(S.demo?'warn':bad?'err':good?'ok':'dim');
     sideHealth.title=S.demo?'演示数据':bad?'存在连接异常':good?'运行正常':'状态未知';
   }
-  var ar=$('#auto-reply-toggle');
-  if(ar&&typeof st.autoReplyEnabled==='boolean'){ ar.checked=st.autoReplyEnabled; }
   var sv=$('#side-version');
   if(sv) sv.textContent='v'+(st.version||'—');
   var sin=$('#side-instance-name');
@@ -3834,15 +3826,6 @@ document.addEventListener('change', function(e){
   var t=e.target;
   if(t&&t.matches&&t.matches('[data-st-coll-toggle]')){
     toggleCollection(t.getAttribute('data-st-coll-toggle'), t.checked);
-  }else if(t&&t.id==='auto-reply-toggle'){
-    var autoEnabled=t.checked
-    api('/config',{method:'PUT',body:{config:{proactiveEnabled:autoEnabled}}}).then(function(){
-      toast(autoEnabled?'自动回复已开启（测试功能）':'自动回复已关闭','success',2400)
-      refreshOverview(false)
-    }).catch(function(err){
-      t.checked=!autoEnabled
-      toast(friendlyError(err),'error',4200)
-    })
   }else if(t&&t.id==='md-host-select'){
     S.models.hostSelect=t.value;
   }else if(t&&t.id==='md-vision-select'){

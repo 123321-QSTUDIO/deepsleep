@@ -136,7 +136,7 @@ export class DreamMemory {
     try {
       // 群聊上下文批量投喂开启时，当天聊天记录已经在原 session 的上下文里；
       // fork 会继承这段历史，梦境不需要再从 DB 重新拼 transcript。
-      const useContext = !!config.groupContextBatchEnabled && !!config.proactiveEnabled
+      const useContext = !!config.groupContextBatchEnabled
       const transcript = useContext ? '' : this.gatherTranscript(scope, since)
       if (useContext) {
         const existing = await oc.getMessages(sessionId, 1).catch(() => [] as OcMessage[])
