@@ -172,42 +172,23 @@ export async function createApp(options: AppOptions): Promise<App> {
     }
   }
 
-  // 戳一戳：别人戳机器人时，构造一条 synthetic 消息走正常触发链路（可被 mute/上下文合并）
-  let pokeSeq = 0
+  // 戳一戳：别人戳机器人就自动反戳回去，不触发模型回复
   const handlePoke = async (notice: Record<string, unknown>): Promise<void> => {
     const selfId = Number(notice.self_id ?? 0)
     const poker = Number(notice.user_id ?? notice.sender_id ?? 0)
     const target = Number(notice.target_id ?? 0)
     if (!selfId || !poker || poker === selfId) return
-    // 只处理戳机器人自己的；戳别人不触发
-    if (target && target !== selfId) return
+    // 只回应「戳机器人自己」的；戳别人不处理
+    if (target !== selfId) return
     const groupId = notice.group_id != null ? Number(notice.group_id) : null
-    const now = Math.floor(Date.now() / 1000)
-    const seq = ++pokeSeq
-    const fake: OB11MessageEvent = {
-      post_type: 'message',
-      message_type: groupId ? 'group' : 'private',
-      time: now,
-      self_id: selfId,
-      user_id: poker,
-      group_id: groupId ?? undefined,
-      message_id: -(Date.now() * 1000 + seq),
-      raw_message: '[CQ:poke] 戳了戳你',
-      message: [{ type: 'text', data: { text: '（' + (groupId ? '群友' : '对方') + ' 戳了戳你）' } }],
-      sender: { user_id: poker, nickname: groupId ? '群友' : '对方' },
-    }
+    const scope = groupId ? 'group-' + groupId : 'private-' + poker
     try {
-      storeMessage(db, fake)
+      await sessions.sendPokeToScope(scope, String(poker))
+      log('已反戳 ' + poker + ' (' + scope + ')')
     } catch (e) {
-      logErr('写戳一戳消息失败', e)
-    }
-    try {
-      await sessions.handleMessage(fake, { forceTrigger: true })
-    } catch (e) {
-      logErr('处理戳一戳失败', e)
+      logErr('反戳失败', e)
     }
   }
-
   const onEvent = async (event: Record<string, unknown>): Promise<void> => {
     if (event.post_type === 'notice' && event.notice_type === 'notify' && event.sub_type === 'poke') {
       await handlePoke(event)

@@ -495,7 +495,7 @@ export class SessionController {
     return parts.join('\n')
   }
 
-  async handleMessage(event: OB11MessageEvent, opts?: { forceTrigger?: boolean }): Promise<void> {
+  async handleMessage(event: OB11MessageEvent): Promise<void> {
     if (event.self_id) this.selfId = event.self_id
     if (event.user_id && event.self_id && event.user_id === event.self_id) return
     const segments = (Array.isArray(event.message) ? event.message : []) as MsgSegment[]
@@ -515,7 +515,7 @@ export class SessionController {
       return
     }
 
-    if (!opts?.forceTrigger && !this.isTriggered(event, segments)) return
+    if (!this.isTriggered(event, segments)) return
 
     const mid = typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null
     const pendingNow = this.pendingRequests.get(scope) ?? []
