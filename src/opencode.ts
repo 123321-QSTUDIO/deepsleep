@@ -20,6 +20,30 @@ export interface OcMessagePart {
 }
 
 // OpenCode V2 会话消息：user/assistant/system/synthetic/idle 等类型
+export interface OcModelCost {
+  input: number
+  output: number
+  cache?: { read?: number; write?: number }
+}
+
+export interface OcModelInfo {
+  id: string
+  modelID?: string
+  providerID: string
+  name: string
+  cost?: OcModelCost[]
+  status?: 'alpha' | 'beta' | 'deprecated' | 'active'
+  enabled?: boolean
+  limit?: { context: number; output: number; input?: number }
+  capabilities?: { tools?: boolean; input?: string[]; output?: string[] }
+}
+
+export interface OcProviderInfo {
+  id: string
+  name?: string
+  activation?: string
+}
+
 export interface OcMessage {
   id: string
   type?: string
@@ -114,6 +138,27 @@ export class OpencodeClient {
 
   async abort(sessionId: string): Promise<void> {
     await this.request('POST', `/api/session/${sessionId}/interrupt`)
+  }
+
+  // 可用模型目录（OpenCode 按 provider/model 注册表 + 当前目录配置解析；免费模型也在其中）
+  listModels(directory?: string): Promise<OcModelInfo[]> {
+    const query = directory ? '?location[directory]=' + encodeURIComponent(directory) : ''
+    return this.requestData('GET', '/api/model' + query)
+  }
+
+  listProviders(directory?: string): Promise<OcProviderInfo[]> {
+    const query = directory ? '?location[directory]=' + encodeURIComponent(directory) : ''
+    return this.requestData('GET', '/api/provider' + query)
+  }
+
+  getDefaultModel(directory?: string): Promise<OcModelInfo | null> {
+    const query = directory ? '?location[directory]=' + encodeURIComponent(directory) : ''
+    return this.requestData('GET', '/api/model/default' + query)
+  }
+
+  // 切换已存在 Session 后续请求使用的模型（不重置上下文）
+  async switchSessionModel(sessionId: string, model: { providerID: string; id: string }): Promise<void> {
+    await this.request('POST', '/api/session/' + sessionId + '/model', { model })
   }
 
   getStatus(): Promise<Record<string, { type?: string }>> {

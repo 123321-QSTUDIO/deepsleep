@@ -88,6 +88,7 @@ node smoke10.mjs         # 冒烟：配置模型 ID 自动迁移（离线）
 node smoke11.mjs         # 冒烟：控制面板（mock opencode，离线）
 node smoke12.mjs         # 冒烟：梦境记忆 fork/替换/compact + 定时调度（mock opencode，离线）
 node smoke13.mjs         # 冒烟：收藏表情同步/打标/MCP 可见性（mock opencode，离线）
+node smoke14.mjs         # 冒烟：模型目录/免费标记/一键切换所有 Session（mock opencode，离线）
 node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 ```
 

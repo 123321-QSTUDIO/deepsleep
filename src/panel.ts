@@ -192,6 +192,102 @@ export class ControlPanel {
       this.sendJson(res, 200, result)
       return
     }
+    if (method === 'GET' && pathname === '/api/models') {
+      try {
+        const [rawModels, providers, defaultModel] = await Promise.all([
+          this.deps.oc.listModels(),
+          this.deps.oc.listProviders().catch(() => []),
+          this.deps.oc.getDefaultModel().catch(() => null),
+        ])
+        const providerNames = new Map<string, string>(providers.map((x) => [x.id, x.name ?? x.id]))
+        const modelIdOf = (m: { id: string; modelID?: string }) => m.modelID ?? m.id
+        const items = rawModels
+          .map((m) => {
+            const id = m.providerID + '/' + modelIdOf(m)
+            const cost = Array.isArray(m.cost) ? m.cost : []
+            const free = cost.length > 0 && cost.every((c) => (c.input ?? 0) === 0 && (c.output ?? 0) === 0)
+            return {
+              id,
+              providerID: m.providerID,
+              providerName: providerNames.get(m.providerID) ?? m.providerID,
+              name: m.name,
+              free,
+              status: m.status ?? 'active',
+              enabled: m.enabled !== false,
+              context: m.limit?.context ?? null,
+              vision: Array.isArray(m.capabilities?.input) && m.capabilities.input.includes('image'),
+              currentHost: id === this.deps.config.hostModel,
+              currentVision: id === this.deps.config.visionModel,
+            }
+          })
+          .sort((a, b) => Number(b.free) - Number(a.free) || a.providerName.localeCompare(b.providerName) || a.name.localeCompare(b.name))
+        this.sendJson(res, 200, {
+          items,
+          current: { hostModel: this.deps.config.hostModel, visionModel: this.deps.config.visionModel },
+          defaultModel: defaultModel ? defaultModel.providerID + '/' + modelIdOf(defaultModel) : null,
+          providers: providers.map((x) => ({ id: x.id, name: x.name ?? x.id })),
+        })
+      } catch (e) {
+        this.sendJson(res, 502, { error: '读取 OpenCode 模型目录失败（OpenCode 是否在线？）: ' + String((e as Error)?.message ?? e) })
+      }
+      return
+    }
+    if (method === 'POST' && pathname === '/api/models/switch') {
+      const body = await this.readBody(req)
+      const model = String(body.model ?? '').trim()
+      const target = body.target === 'vision' ? 'vision' : 'host'
+      const applySessions = body.applySessions !== false
+      if (!/^[^/\s]+\/.+$/.test(model)) {
+        this.sendJson(res, 400, { error: '模型 ID 格式应为 provider/model' })
+        return
+      }
+      let known = true
+      try {
+        const models = await this.deps.oc.listModels()
+        const ids = new Set(models.map((m) => m.providerID + '/' + (m.modelID ?? m.id)))
+        known = ids.has(model)
+      } catch {
+        known = true
+      }
+      if (!known) {
+        this.sendJson(res, 400, { error: '模型不在当前可用目录中: ' + model })
+        return
+      }
+      if (target === 'host') {
+        const upd = this.updateConfig({ hostModel: model })
+        if (typeof upd.error === 'string') {
+          this.sendJson(res, 400, upd)
+          return
+        }
+        const result = applySessions
+          ? await this.deps.sessions.switchModelForAll(model)
+          : { switched: 0, failed: [] as { scope: string; error: string }[] }
+        this.sendJson(res, 200, {
+          ok: true,
+          target,
+          model,
+          switched: result.switched,
+          failed: result.failed,
+          sessions: this.deps.sessions.listScopes().length,
+          current: { hostModel: this.deps.config.hostModel, visionModel: this.deps.config.visionModel },
+        })
+        return
+      }
+      const upd = this.updateConfig({ visionModel: model })
+      if (typeof upd.error === 'string') {
+        this.sendJson(res, 400, upd)
+        return
+      }
+      const workspaces = this.deps.sessions.updateAllWorkspaceVisionModel(model)
+      this.sendJson(res, 200, {
+        ok: true,
+        target,
+        model,
+        workspaces,
+        current: { hostModel: this.deps.config.hostModel, visionModel: this.deps.config.visionModel },
+      })
+      return
+    }
     if (method === 'GET' && pathname === '/api/sessions') {
       this.sendJson(res, 200, await this.sessionsPayload())
       return

@@ -159,6 +159,55 @@ export class SessionController {
     return true
   }
 
+  // 把模型写入单个工作区 opencode.json（默认模型 / vision-bridge 子代理模型）
+  private patchWorkspaceModel(scope: string, hostModel?: string, visionModel?: string): boolean {
+    const file = path.join(this.workspaceFor(scope), 'opencode.json')
+    try {
+      if (!fs.existsSync(file)) return false
+      const json = JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, unknown>
+      if (hostModel) json.model = hostModel
+      if (visionModel) {
+        const agents = (json.agents ?? {}) as Record<string, Record<string, unknown>>
+        agents['vision-bridge'] = { ...(agents['vision-bridge'] ?? {}), model: visionModel }
+        json.agents = agents
+      }
+      fs.writeFileSync(file, JSON.stringify(json, null, 2))
+      return true
+    } catch (e) {
+      this.log('更新工作区模型失败 ' + scope + ':', e)
+      return false
+    }
+  }
+
+  // 切换所有已登记 Session 的模型（保留上下文），并同步工作区默认配置
+  async switchModelForAll(modelId: string): Promise<{ switched: number; failed: { scope: string; error: string }[] }> {
+    const parts = modelId.split('/')
+    const providerID = parts.shift() ?? ''
+    const id = parts.join('/')
+    if (!providerID || !id) throw new Error('模型 ID 格式应为 provider/model')
+    const result = { switched: 0, failed: [] as { scope: string; error: string }[] }
+    for (const [scope, entry] of this.map.entries()) {
+      this.patchWorkspaceModel(scope, modelId)
+      try {
+        await this.oc.switchSessionModel(entry.sessionId, { providerID, id })
+        result.switched++
+      } catch (e) {
+        result.failed.push({ scope, error: String((e as Error)?.message ?? e) })
+      }
+    }
+    this.log('切换模型 ' + modelId + ': 成功 ' + result.switched + '，失败 ' + result.failed.length)
+    return result
+  }
+
+  // 更新所有工作区的识图子代理模型（新会话/子代理调用生效）
+  updateAllWorkspaceVisionModel(modelId: string): number {
+    let updated = 0
+    for (const scope of this.map.keys()) {
+      if (this.patchWorkspaceModel(scope, undefined, modelId)) updated++
+    }
+    return updated
+  }
+
   private workspaceFor(scope: string): string {
     return path.join(this.workspacesDir, scope)
   }
