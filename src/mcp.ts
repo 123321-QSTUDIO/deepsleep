@@ -95,7 +95,8 @@ export class QqMcpServer {
           notes.push('这条消息偏长（' + t.length + ' 字，建议单条不超过 ' + maxChars + ' 字），之后请精简或拆成几条')
         }
         const countAfter = countBefore + 1
-        if (countAfter > maxLines) {
+        const pendingPeople = sessions.pendingCountOfScope(scope)
+        if (countAfter > maxLines && pendingPeople < 2) {
           notes.push('本轮已经发了 ' + countAfter + ' 条，超过建议的 ' + maxLines + ' 条，接下来请收尾，不要再刷屏')
         }
         return text('已发送' + (notes.length > 0 ? '。警告：' + notes.join('；') : ''))

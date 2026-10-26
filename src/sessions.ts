@@ -167,6 +167,11 @@ export class SessionController {
     return this.toolSendsByScope.get(scope) ?? 0
   }
 
+  // 本轮待回应的请求数：一次回复多个人时允许更多条，不按单轮条数提醒
+  pendingCountOfScope(scope: string): number {
+    return (this.pendingRequests.get(scope) ?? []).length
+  }
+
   markAnsweredByAt(scope: string, qqs: string[]) {
     if (qqs.length === 0) return
     const pend = this.pendingRequests.get(scope)
