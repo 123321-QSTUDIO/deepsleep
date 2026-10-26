@@ -126,9 +126,28 @@ export async function createApp(options: AppOptions): Promise<App> {
   setTimeout(() => void executor.checkExpiryReminders(), 30_000)
 
   let stopped = false
+  // 网关重连/重复投递防护：同一 message_id 短时间内只处理一次
+  const seenInbound = new Map<string, number>()
+  const inboundKey = (event: OB11MessageEvent): string | null => {
+    if (event.message_id === undefined || event.message_id === null) return null
+    return `${event.self_id ?? ''}:${event.message_type}:${event.group_id ?? event.user_id ?? ''}:${event.message_id}`
+  }
   const onMessage = async (event: OB11MessageEvent): Promise<void> => {
     if (event.post_type !== 'message') return
     if (event.user_id && event.self_id && event.user_id === event.self_id) return
+    const key = inboundKey(event)
+    if (key) {
+      const now = Date.now()
+      const last = seenInbound.get(key)
+      if (last && now - last < 5 * 60_000) {
+        log('忽略重复入站消息: ' + key)
+        return
+      }
+      seenInbound.set(key, now)
+      if (seenInbound.size > 5000) {
+        for (const [k, t] of seenInbound) if (now - t > 5 * 60_000) seenInbound.delete(k)
+      }
+    }
     try {
       storeMessage(db, event)
     } catch (e) {

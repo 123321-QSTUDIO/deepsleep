@@ -57,6 +57,9 @@ export class SessionController {
   private selfId = 0
   private hostVisionCache: { model: string; vision: boolean; at: number } | null = null
   private sendQueues = new Map<string, Promise<void>>()
+  // 同一 scope 短时间内的重复发送（模型重复调工具/工具重试）直接忽略
+  private lastSent = new Map<string, { text: string; at: number }>()
+  private static readonly DUPLICATE_SEND_WINDOW_MS = 8000
   private runtime!: SessionRuntime
 
   constructor(
@@ -721,6 +724,11 @@ export class SessionController {
   }
 
   private async doSendToScope(scope: string, text: string, opts?: { replyTo?: number | string; atQq?: number | string }): Promise<void> {
+    const previous = this.lastSent.get(scope)
+    if (previous && previous.text === text && Date.now() - previous.at < SessionController.DUPLICATE_SEND_WINDOW_MS) {
+      this.log('忽略重复发送(' + scope + '): ' + text.slice(0, 40))
+      return
+    }
     const segments: Record<string, unknown>[] = []
     if (opts?.replyTo) segments.push({ type: 'reply', data: { id: String(opts.replyTo) } })
     let body = text
@@ -743,6 +751,7 @@ export class SessionController {
     }
     await this.runtime.actions.call('send_msg', params)
     this.recordSent(scope, text)
+    this.lastSent.set(scope, { text, at: Date.now() })
     await this.delay()
   }
 
