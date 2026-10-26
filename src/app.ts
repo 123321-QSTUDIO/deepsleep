@@ -102,16 +102,16 @@ export async function createApp(options: AppOptions): Promise<App> {
   const reminderScheduler = new ReminderScheduler(
     reminders,
     async (reminder) => {
-      const staticText = (reminder.atUserId ? '[CQ:at,qq=' + reminder.atUserId + '] ' : '') + '提醒：' + reminder.text
       if ((config.reminderMode || 'agent') === 'static') {
+        const staticText = (reminder.atUserId ? '[CQ:at,qq=' + reminder.atUserId + '] ' : '') + '提醒：' + reminder.text
         await sessions.sendTextToScope(reminder.scope, staticText)
         return
       }
       try {
-        await sessions.deliverReminder(reminder.scope, reminder.text, staticText)
+        await sessions.deliverReminder(reminder.scope, reminder.text)
       } catch (e) {
-        logErr('提醒唤醒失败，退回直接发送:', e)
-        await sessions.sendTextToScope(reminder.scope, staticText)
+        logErr('提醒唤醒失败（下轮重试）:', e)
+        throw e
       }
     },
     () => config.remindersEnabled,

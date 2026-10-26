@@ -277,33 +277,14 @@ export class SessionController {
   }
 
   // 定时提醒到点：构造 synthetic 上下文唤醒模型，让它用自己的语气发提醒；模型 90s 内没发则退回固定文案
-  async deliverReminder(scope: string, text: string, fallbackText: string): Promise<'agent'> {
+  async deliverReminder(scope: string, text: string): Promise<'agent'> {
     const entry = await this.ensureSession(scope, this.syntheticEventForScope(scope))
     if (!entry) throw new Error('会话建立失败')
-    // 只把提醒内容交给模型，怎么处理由它结合上下文决定
+    // 只把提醒内容交给模型，怎么处理由它结合上下文决定；没调用发送工具=保持沉默
     const notice = '[系统提醒] 你之前设置的定时提醒到时间了：' + text
-    const injectedAt = Math.floor(Date.now() / 1000)
     await this.prompt(entry.sessionId, notice)
-    const timer = setTimeout(() => {
-      try {
-        const rows = this.db.query(
-          scope,
-          dayKey(Math.floor(Date.now() / 1000)),
-          'SELECT 1 FROM message WHERE user_id = ? AND time >= ? LIMIT 1',
-          [this.selfId, injectedAt]
-        )
-        if (rows.length === 0) {
-          this.log('提醒唤醒后未检测到发言，退回直接发送 scope=' + scope)
-          void this.sendTextToScope(scope, fallbackText)
-        }
-      } catch {
-        // 查询失败就不兜底，避免重复发送
-      }
-    }, 90_000)
-    timer.unref?.()
     return 'agent'
   }
-
   private syntheticEventForScope(scope: string): OB11MessageEvent {
     const now = Math.floor(Date.now() / 1000)
     if (scope.startsWith('group-')) {
@@ -823,6 +804,7 @@ export class SessionController {
     }
   }
 
+  // 出站只认 MCP 发送工具：模型没调用发送工具就视为选择沉默，不再兜底发送最终文本
   async onSessionIdle(sessionId: string): Promise<void> {
     const scope = this.reverse.get(sessionId)
     if (!scope) return
@@ -833,23 +815,10 @@ export class SessionController {
     }
     const usedTool = this.sentViaTool.get(sessionId) ?? 0
     this.sentViaTool.delete(sessionId)
-    let text = this.lastText.get(sessionId) ?? ''
+    const text = this.lastText.get(sessionId) ?? ''
     this.lastText.delete(sessionId)
-    if (usedTool > 0) return
-    if (!text.trim()) {
-      text = await this.oc.getLastAssistantText(sessionId)
-    }
-    const trimmed = text.trim()
-    if (!trimmed || trimmed === '[SILENT]') return
-    let lines = trimmed
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0 && l !== '[SILENT]')
-    if (lines.length > this.config.maxLinesPerReply) {
-      lines = [...lines.slice(0, this.config.maxLinesPerReply - 1), lines.slice(this.config.maxLinesPerReply - 1).join('\n')]
-    }
-    for (const line of lines) {
-      await this.sendTextToScope(scope, line)
+    if (usedTool === 0 && text.trim()) {
+      this.log('本轮未调用 MCP 发送工具，视为保持沉默 session=' + sessionId)
     }
   }
 
