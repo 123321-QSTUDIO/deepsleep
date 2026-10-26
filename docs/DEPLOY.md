@@ -312,7 +312,7 @@ schtasks /create /tn "qqbot-svc" /sc onlogon /rl highest /f `
 - 本机直接打开 <http://127.0.0.1:5101/>（服务器上则用 SSH 隧道：`ssh -N -L 5101:127.0.0.1:5101 <用户>@<服务器IP>`，再在本机浏览器打开同一地址）
 - `panelToken` 非空时，页面会提示输入 token（也能用 `http://127.0.0.1:5101/?token=xxx` 直接进）
 - 功能：表单改全部配置（写回 config.json，部分字段提示需重启）、看所有群/私聊会话与 Session 状态、打开某个会话看 OpenCode 对话/QQ 消息记录/工作区文件、执行 `/reset`、`/abort`、以机器人身份发 QQ 消息、把文字作为 prompt 直接发给 Agent
-- **定时提醒**：Agent 可以自己设倒计时（`qqbot_set_reminder`），到点由系统自动发消息；数据存 `data/reminders.json`，服务重启后仍会补发过期提醒。面板「定时提醒」组可开关、调检查间隔/单会话上限/最大天数。注意：它不是 cron 定时任务，只支持“从现在起 N 分钟后”的相对倒计时。
+- **定时提醒**：Agent 可以自己设倒计时（`qqbot_set_reminder`）。默认 `reminderMode=agent`：到点系统会唤醒模型，让它用当前身份/语气发提醒（90 秒内没发出去会自动退回固定文案）；改成 `static` 则直接发固定文案。数据存 `data/reminders.json`，服务重启后仍会补发过期提醒。面板「定时提醒」组可开关、调检查间隔/单会话上限/最大天数。注意：它不是 cron 定时任务，只支持“从现在起 N 分钟后”的相对倒计时。
 - **主动参与**：没人@时机器人是否主动接话由「判官」先筛一遍，面板「主动参与」组可调。推荐给配置好的机器接本地小模型：Ollama 拉一个 0.6B 级模型（如 `ollama pull qwen3:0.6b`），`proactiveJudgeBaseUrl=http://127.0.0.1:11434/v1`、`proactiveJudgeModel=qwen3:0.6b`、`proactiveJudgeMode=auto`；llama.cpp server 的 `/v1` 同样可用。跑不动 0.6B 的机器把 `proactiveJudgeModel` 留空即可，自动使用零依赖启发式规则（问句/求助/提到机器人等加权），不会报错。节流参数：最少新消息数、冷却秒数、每小时上限、候选概率，默认 3 条/180s/6 次每小时。
 - **语音（TTS / 语音转文字）**：面板「语音」组填入 MiMo API Key（`ttsApiKey`，来自 MiMo 开放平台）并打开 `ttsEnabled`；默认地址 `https://api.xiaomimimo.com/v1`、模型 `mimo-v2.5-tts-voicedesign`。配置好后 Agent 可用 `qqbot_send_voice` 发语音、用 `qqbot_set_voice` 给每个群设定不同音色（存在 `data/voices.json`）。入站语音默认尝试让网关做 QQ 语音转文字（SnowLuma `fetch_ptt_text`），失败则上下文里显示 `[语音]`；可用 `voiceAsrEnabled` 关闭。语音发送依赖网关（SnowLuma）把本地音频转成 QQ 所需的 silk 格式，网关需与机器人服务在同一台机器（`record` 传的是本地路径）。
 - **模型（「模型」页）**：直接读 OpenCode 的 `/api/model` 动态目录，免费模型（provider `opencode`、cost 全 0）标「免费」并排在前面；模型列表会随 OpenCode 更新/下架，**免费模型失效时刷新页面选一个新免费模型即可**。

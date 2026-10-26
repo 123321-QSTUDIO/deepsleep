@@ -276,6 +276,46 @@ export class SessionController {
     return updated
   }
 
+  // 定时提醒到点：构造 synthetic 上下文唤醒模型，让它用自己的语气发提醒；模型 90s 内没发则退回固定文案
+  async deliverReminder(scope: string, text: string, fallbackText: string): Promise<'agent'> {
+    const entry = await this.ensureSession(scope, this.syntheticEventForScope(scope))
+    if (!entry) throw new Error('会话建立失败')
+    const isGroup = scope.startsWith('group-')
+    const notice =
+      '[系统提醒] 你之前设置的定时提醒到时间了：' + text + '。' +
+      '请用 qqbot_send_message 发一条自然、简短的提醒' + (isGroup ? '到群里' : '给对方') +
+      '，用你平时的语气，不要说“系统提醒/定时任务”之类的话，也不要输出 [SILENT]。'
+    const injectedAt = Math.floor(Date.now() / 1000)
+    await this.prompt(entry.sessionId, notice)
+    const timer = setTimeout(() => {
+      try {
+        const rows = this.db.query(
+          scope,
+          dayKey(Math.floor(Date.now() / 1000)),
+          'SELECT 1 FROM message WHERE user_id = ? AND time >= ? LIMIT 1',
+          [this.selfId, injectedAt]
+        )
+        if (rows.length === 0) {
+          this.log('提醒唤醒后未检测到发言，退回直接发送 scope=' + scope)
+          void this.sendTextToScope(scope, fallbackText)
+        }
+      } catch {
+        // 查询失败就不兜底，避免重复发送
+      }
+    }, 90_000)
+    timer.unref?.()
+    return 'agent'
+  }
+
+  private syntheticEventForScope(scope: string): OB11MessageEvent {
+    const now = Math.floor(Date.now() / 1000)
+    if (scope.startsWith('group-')) {
+      return { post_type: 'message', message_type: 'group', group_id: Number(scope.slice(6)), self_id: this.selfId, time: now, user_id: 0, sender: { user_id: 0, nickname: '系统' }, message: [] }
+    }
+    const user = Number(scope.slice(8))
+    return { post_type: 'message', message_type: 'private', user_id: user, self_id: this.selfId, time: now, sender: { user_id: user, nickname: '对方' }, message: [] }
+  }
+
   private workspaceFor(scope: string): string {
     return path.join(this.workspacesDir, scope)
   }

@@ -114,7 +114,7 @@ export class ReminderScheduler {
 
   constructor(
     private store: ReminderStore,
-    private send: (scope: string, text: string) => Promise<void>,
+    private deliver: (reminder: Reminder) => Promise<void>,
     private enabled: () => boolean,
     private intervalSec: number,
     private log: (msg: string, ...args: unknown[]) => void
@@ -138,9 +138,8 @@ export class ReminderScheduler {
       const now = Math.floor(Date.now() / 1000)
       for (const r of this.store.due(now)) {
         this.store.markAttempt(r.id)
-        const text = r.atUserId ? '[CQ:at,qq=' + r.atUserId + '] 提醒：' + r.text : '提醒：' + r.text
         try {
-          await this.send(r.scope, text)
+          await this.deliver(r)
           this.store.markSent(r.id)
           this.log('已投递提醒 ' + r.id + ' -> ' + r.scope)
         } catch (e) {

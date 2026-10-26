@@ -44,7 +44,7 @@ const TOOLS_DOC = `# 响应速度原则（重要）
 - qqbot_send_voice(text): 把一段短文本用 TTS 合成语音发出来（群语音/私聊语音）。声音由这个群设定的音色决定；适合不适合打字/想卖萌/想用语气表达的时候，别每条都发。
 - qqbot_set_voice(description): 给当前群/私聊设定机器人说话的音色（一段音色描述，空字符串恢复默认）。改完后之后发的语音都用这个声音，按群氛围自己设计。
 - qqbot_send_poke(qq?): 戳一戳群友（私聊可省略 qq）。被戳会自动反戳，不需要你用；想主动逗人时用，别连续戳人。
-- qqbot_set_reminder(minutes, text, at_qq?): 设置倒计时提醒，到点系统会自动发消息（群聊里可 @ 发起人）。群友说“X 分钟后提醒我”或你想过一会儿跟进时用。
+- qqbot_set_reminder(minutes, text, at_qq?): 设置倒计时提醒。群友说“X 分钟后提醒我”或你想过一会儿跟进时用；到点系统会唤醒你，让你用自己的语气发提醒（所以 content 写清楚要提醒什么事就行）。
 - qqbot_list_reminders(): 查看当前会话还没触发的提醒。
 - qqbot_cancel_reminder(id): 取消一个还没触发的提醒。
 - websearch / webfetch（内置工具，不是MCP）：联网搜索/读网页。群友问到你不确定的信息、新闻、事实、梗（比如"某某是不是出事了"）时，先搜一下再回答，不要凭印象瞎说。看到群友发链接想了解内容时用 webfetch 读取。

@@ -101,7 +101,19 @@ export async function createApp(options: AppOptions): Promise<App> {
   const reminders = new ReminderStore(options.dataPath, (m, ...x) => logger.warn(m, ...x))
   const reminderScheduler = new ReminderScheduler(
     reminders,
-    (scope, text) => sessions.sendTextToScope(scope, text),
+    async (reminder) => {
+      const staticText = (reminder.atUserId ? '[CQ:at,qq=' + reminder.atUserId + '] ' : '') + '提醒：' + reminder.text
+      if ((config.reminderMode || 'agent') === 'static') {
+        await sessions.sendTextToScope(reminder.scope, staticText)
+        return
+      }
+      try {
+        await sessions.deliverReminder(reminder.scope, reminder.text, staticText)
+      } catch (e) {
+        logErr('提醒唤醒失败，退回直接发送:', e)
+        await sessions.sendTextToScope(reminder.scope, staticText)
+      }
+    },
     () => config.remindersEnabled,
     config.reminderCheckSec,
     (m, ...a) => logger.info(m, ...a)

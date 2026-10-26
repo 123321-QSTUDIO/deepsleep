@@ -50,6 +50,7 @@ export interface PluginConfig {
   proactiveJudgeTimeoutSec: number
   // 定时提醒：机器人可自设倒计时，系统到点投递
   remindersEnabled: boolean
+  reminderMode: string
   reminderCheckSec: number
   reminderMaxPerScope: number
   reminderMaxDays: number
@@ -117,6 +118,7 @@ export const defaultConfig: PluginConfig = {
   proactiveJudgeApiKey: '',
   proactiveJudgeTimeoutSec: 3,
   remindersEnabled: true,
+  reminderMode: 'agent',
   reminderCheckSec: 5,
   reminderMaxPerScope: 20,
   reminderMaxDays: 7,
