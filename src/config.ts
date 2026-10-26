@@ -32,6 +32,7 @@ export interface PluginConfig {
   replyDelayMinMs: number
   replyDelayMaxMs: number
   maxLinesPerReply: number
+  normalCharsPerMessage: number
   maxCharsPerMessage: number
   // 控制面板（WebUI）
   panelEnabled: boolean
@@ -104,7 +105,8 @@ export const defaultConfig: PluginConfig = {
   replyDelayMinMs: 1200,
   replyDelayMaxMs: 3000,
   maxLinesPerReply: 4,
-  maxCharsPerMessage: 120,
+  normalCharsPerMessage: 20,
+  maxCharsPerMessage: 200,
   panelEnabled: true,
   panelHost: '127.0.0.1',
   panelPort: 5101,

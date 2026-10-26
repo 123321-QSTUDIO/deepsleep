@@ -53,7 +53,8 @@ const FIELDS: FieldDef[] = [
   { key: 'replyDelayMinMs', label: 'replyDelayMinMs（兜底分句最小间隔）', group: '消息与回复', type: 'number', min: 0 },
   { key: 'replyDelayMaxMs', label: 'replyDelayMaxMs（兜底分句最大间隔）', group: '消息与回复', type: 'number', min: 0 },
   { key: 'maxLinesPerReply', label: 'maxLinesPerReply（单轮最多消息条数）', group: '消息与回复', type: 'number', min: 1, help: '模型一轮回复最多发几条消息，超过会被 MCP 拒绝' },
-  { key: 'maxCharsPerMessage', label: 'maxCharsPerMessage（单条消息最大字数）', group: '消息与回复', type: 'number', min: 20, help: '单条消息超过这个长度会被 MCP 拒绝，模型需要精简或合并' },
+  { key: 'normalCharsPerMessage', label: 'normalCharsPerMessage（普通对话单条建议字数）', group: '消息与回复', type: 'number', min: 5, help: '写进人格提示词：普通聊天单条尽量不超过这个字数（默认 20），解释类内容可适当加长' },
+  { key: 'maxCharsPerMessage', label: 'maxCharsPerMessage（单条消息硬上限）', group: '消息与回复', type: 'number', min: 20, help: '单条消息超过这个长度会被 MCP 拒绝（默认 200），给解释类长内容留余量' },
   { key: 'turnTimeoutSec', label: 'turnTimeoutSec（单轮超时秒数）', group: '消息与回复', type: 'number', min: 10 },
 
   { key: 'mcpHost', label: 'mcpHost（MCP 绑定地址）', group: 'MCP', type: 'string' },
