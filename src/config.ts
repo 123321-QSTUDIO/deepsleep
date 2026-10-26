@@ -37,6 +37,17 @@ export interface PluginConfig {
   panelHost: string
   panelPort: number
   panelToken: string
+  // 主动参与：没人@时先由轻量判官决定要不要让主模型接话（判官可本地小模型/启发式）
+  proactiveEnabled: boolean
+  proactiveChance: number
+  proactiveMinIntervalSec: number
+  proactiveMinMessages: number
+  proactiveMaxPerHour: number
+  proactiveJudgeMode: string
+  proactiveJudgeBaseUrl: string
+  proactiveJudgeModel: string
+  proactiveJudgeApiKey: string
+  proactiveJudgeTimeoutSec: number
   // 语音：TTS（MiMo，OpenAI 兼容接口）+ 入站语音转文字
   ttsEnabled: boolean
   ttsBaseUrl: string
@@ -90,6 +101,16 @@ export const defaultConfig: PluginConfig = {
   panelHost: '127.0.0.1',
   panelPort: 5101,
   panelToken: '',
+  proactiveEnabled: true,
+  proactiveChance: 100,
+  proactiveMinIntervalSec: 180,
+  proactiveMinMessages: 3,
+  proactiveMaxPerHour: 6,
+  proactiveJudgeMode: 'auto',
+  proactiveJudgeBaseUrl: '',
+  proactiveJudgeModel: '',
+  proactiveJudgeApiKey: '',
+  proactiveJudgeTimeoutSec: 3,
   ttsEnabled: false,
   ttsBaseUrl: 'https://api.xiaomimimo.com/v1',
   ttsApiKey: '',

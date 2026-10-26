@@ -8,6 +8,7 @@ import { cleanCqForDisplay, dedupeImages, extractAtTargets, extractImages, extra
 import { MuteStore } from './mutes'
 import { OB11MessageEvent, SessionRuntime } from './types'
 import { TtsClient } from './tts'
+import { ProactiveJudge } from './proactive'
 import { VoiceStore } from './voices'
 
 function extractPttText(result: unknown): string {
@@ -75,6 +76,11 @@ export class SessionController {
   private runtime!: SessionRuntime
   private tts: TtsClient | null = null
   private voices: VoiceStore | null = null
+  private judge: ProactiveJudge | null = null
+  // 主动参与：新消息计数 / 上次尝试 / 近一小时尝试时间戳
+  private proactiveNewCount = new Map<string, number>()
+  private proactiveLastAt = new Map<string, number>()
+  private proactiveAttempts = new Map<string, number[]>()
 
   constructor(
     private config: PluginConfig,
@@ -96,6 +102,10 @@ export class SessionController {
   attachVoice(tts: TtsClient, voices: VoiceStore) {
     this.tts = tts
     this.voices = voices
+  }
+
+  attachJudge(judge: ProactiveJudge) {
+    this.judge = judge
   }
 
   // 入站语音：优先取网关自带转写；否则调用 OneBot fetch_ptt_text（SnowLuma 支持）；都失败则存 [语音]
@@ -425,7 +435,62 @@ export class SessionController {
     this.sentMsgIds.set(scope, set)
   }
 
-  private buildPrompt(event: OB11MessageEvent): string {
+  // 主动参与：节流检查 → 调轻量判官决定是否让主模型判断/接话
+  private async tryProactive(scope: string, event: OB11MessageEvent, segments: MsgSegment[]): Promise<boolean> {
+    const cfg = this.config
+    if (!cfg.proactiveEnabled) return false
+    if (event.message_type !== 'group') return false
+    if ((this.pendingRequests.get(scope) ?? []).length > 0) return false
+    const now = Date.now()
+    const recentBot = this.lastSent.get(scope)?.at ?? 0
+    if (recentBot && now - recentBot < 15_000) return false
+    const lastAt = this.proactiveLastAt.get(scope) ?? 0
+    if (lastAt && now - lastAt < Math.max(0, cfg.proactiveMinIntervalSec) * 1000) return false
+    const count = (this.proactiveNewCount.get(scope) ?? 0) + 1
+    this.proactiveNewCount.set(scope, count)
+    if (count < Math.max(1, cfg.proactiveMinMessages)) return false
+    const attempts = (this.proactiveAttempts.get(scope) ?? []).filter((t) => now - t < 3_600_000)
+    this.proactiveAttempts.set(scope, attempts)
+    if (attempts.length >= Math.max(1, cfg.proactiveMaxPerHour)) return false
+    const text = extractText(segments).trim()
+    if (!text && !segments.some((seg) => seg.type === 'image')) return false
+    if (Math.random() * 100 >= Math.max(0, Math.min(100, cfg.proactiveChance))) return false
+    this.proactiveNewCount.set(scope, 0)
+    this.proactiveLastAt.set(scope, now)
+    this.proactiveAttempts.set(scope, [...attempts, now])
+    if (!this.judge) return false
+    const recent = this.recentChatLines(scope, 12)
+    if (recent.length === 0) {
+      const nick = event.sender?.card || event.sender?.nickname || String(event.user_id ?? '')
+      recent.push('[' + hhmm(event.time ?? Math.floor(now / 1000)) + '] ' + nick + '(' + (event.user_id ?? '') + '): ' + (text || '[图片]'))
+    }
+    const decision = await this.judge.decide(recent)
+    this.log('主动参与判断 -> ' + (decision.participate ? 'REPLY' : 'SILENT') + ' (' + decision.source + (decision.reason ? ', ' + decision.reason : '') + ') scope=' + scope)
+    return decision.participate
+  }
+
+  private recentChatLines(scope: string, limit: number): string[] {
+    const out: { time: number; line: string }[] = []
+    const now = Math.floor(Date.now() / 1000)
+    const seen = new Set<number>()
+    for (const day of [dayKey(now - 86400), dayKey(now)]) {
+      try {
+        const rows = this.db.query(scope, day, 'SELECT msg_pk, time, nickname, user_id, text FROM message ORDER BY msg_pk DESC LIMIT ?', [limit])
+        for (const r of rows.reverse()) {
+          const pk = Number(r.msg_pk)
+          if (seen.has(pk)) continue
+          seen.add(pk)
+          out.push({ time: Number(r.time), line: '[' + hhmm(Number(r.time)) + '] ' + String(r.nickname || r.user_id) + '(' + r.user_id + '): ' + cleanCqForDisplay(String(r.text ?? '')) })
+        }
+      } catch {
+        // day db missing
+      }
+    }
+    out.sort((a, b) => a.time - b.time)
+    return out.slice(-limit).map((x) => x.line)
+  }
+
+  private buildPrompt(event: OB11MessageEvent, proactive = false): string {
     const scope = event.message_type === 'group' ? `group-${event.group_id}` : `private-${event.user_id}`
     const now = Math.floor(Date.now() / 1000)
     const currentId = typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null
@@ -447,7 +512,7 @@ export class SessionController {
           if (seen.has(pk)) continue
           seen.add(pk)
           const mid = Number(r.message_id)
-          if (currentId !== null && mid === currentId) continue
+          if (!proactive && currentId !== null && mid === currentId) continue
           if (sent.has(mid)) continue
           if (pending.some((p) => p.id === mid)) continue
           const nick = String(r.nickname || r.user_id)
@@ -457,7 +522,7 @@ export class SessionController {
         // no db for that day
       }
     }
-    const context = candidates.slice(-this.config.contextMessageCount)
+    let context = candidates.slice(-this.config.contextMessageCount)
     this.markSent(scope, context.map((c) => c.mid))
 
     const segments = (Array.isArray(event.message) ? event.message : []) as MsgSegment[]
@@ -480,8 +545,13 @@ export class SessionController {
         }
       }
     }
-    pending.push({ id: currentId, userId: event.user_id ?? 0, line: currentLine })
-    this.pendingRequests.set(scope, pending)
+    if (proactive) {
+      // 主动参与：当前消息只是普通聊天记录，不进入「待回应清单」
+      context = [...context, { mid: currentId ?? 0, line: currentLine }].slice(-this.config.contextMessageCount)
+    } else {
+      pending.push({ id: currentId, userId: event.user_id ?? 0, line: currentLine })
+      this.pendingRequests.set(scope, pending)
+    }
 
     const parts: string[] = []
     const d = new Date()
@@ -489,9 +559,18 @@ export class SessionController {
     const week = '日一二三四五六'[d.getDay()]
     parts.push(`[当前时间] ${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())} 星期${week}（以此为准，下面消息前面的方括号是它们的发送时间）`)
     if (context.length > 0) parts.push('[新的聊天记录]\n' + context.map((c) => c.line).join('\n'))
-    parts.push(
-      `[待回应的请求，共 ${pending.length} 条，请逐条回应]\n` + pending.map((p, i) => `${i + 1}. ${p.line}`).join('\n')
-    )
+    if (proactive) {
+      parts.unshift(
+        '[系统] 这条消息没有@你，也不是在回复你。你可以根据最近的群聊自己判断要不要主动接一句：' +
+          '只有真的有趣、有梗、能帮上忙或者适合插话的时候，才用 qqbot_send_message 发言；' +
+          '不想说、没把握、或者别人在聊私事/严肃话题时，只输出 [SILENT]，系统不会发任何消息。' +
+          '不要为了刷存在感硬接，宁可沉默。'
+      )
+    } else {
+      parts.push(
+        `[待回应的请求，共 ${pending.length} 条，请逐条回应]\n` + pending.map((p, i) => `${i + 1}. ${p.line}`).join('\n')
+      )
+    }
     return parts.join('\n')
   }
 
@@ -515,13 +594,22 @@ export class SessionController {
       return
     }
 
-    if (!this.isTriggered(event, segments)) return
+    const triggered = this.isTriggered(event, segments)
+    let proactive = false
+    if (!triggered) {
+      if (!(await this.tryProactive(scope, event, segments))) return
+      proactive = true
+    } else {
+      // 正常被叫到后重置主动参与节流，避免刚回复完又主动插话
+      this.proactiveNewCount.set(scope, 0)
+      this.proactiveLastAt.set(scope, Date.now())
+    }
 
     const mid = typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null
     const pendingNow = this.pendingRequests.get(scope) ?? []
     if (mid !== null && pendingNow.some((p) => p.id === mid)) return
 
-    this.log(`触发 scope=${scope} msg_id=${event.message_id} user=${event.user_id}`)
+    this.log((proactive ? '主动参与 ' : '触发 ') + `scope=${scope} msg_id=${event.message_id} user=${event.user_id}`)
 
     this.lastTrigger.set(scope, {
       userId: event.user_id ?? 0,
@@ -534,7 +622,7 @@ export class SessionController {
       await this.sendText(event, '我现在脑子有点转不动，稍后再找我吧')
       return
     }
-    const prompt = this.buildPrompt(event)
+    const prompt = this.buildPrompt(event, proactive)
     if (!prompt) return
     const replyTo = extractReplyTo(segments)
     // 商城/收藏表情在 SnowLuma 里是带 emoji_id 的 image 段：交给视觉模型没意义，

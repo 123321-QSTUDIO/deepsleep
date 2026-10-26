@@ -13,6 +13,7 @@ import { DreamMemory } from './dream'
 import { StickerStore } from './stickers'
 import { TtsClient } from './tts'
 import { VoiceStore } from './voices'
+import { ProactiveJudge } from './proactive'
 import { AppLogger, OB11MessageEvent, OutboundActions } from './types'
 
 // 独立服务形态的组装层：main.ts（CLI 入口）与冒烟测试共用
@@ -93,7 +94,9 @@ export async function createApp(options: AppOptions): Promise<App> {
   const stickers = new StickerStore(options.dataPath, (m, ...x) => logger.warn(m, ...x))
   const tts = new TtsClient(config, (m, ...x) => logger.warn(m, ...x))
   const voices = new VoiceStore(options.dataPath, (m, ...x) => logger.warn(m, ...x))
+  const judge = new ProactiveJudge(config, (m, ...x) => logger.warn(m, ...x))
   sessions.attachVoice(tts, voices)
+  sessions.attachJudge(judge)
   const mcp = new QqMcpServer({
     config,
     db,

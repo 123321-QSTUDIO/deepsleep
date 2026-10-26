@@ -91,6 +91,7 @@ node smoke13.mjs         # 冒烟：收藏表情同步/打标/MCP 可见性（mo
 node smoke14.mjs         # 冒烟：模型目录/免费标记/一键切换所有 Session（mock opencode，离线）
 node smoke15.mjs         # 冒烟：重复发送/重复入站消息防重（mock opencode，离线）
 node smoke16.mjs         # 冒烟：戳一戳 / TTS 发语音 / 语音 ASR（mock opencode + mock TTS，离线）
+node smoke17.mjs         # 冒烟：主动参与判官 / SILENT / 启发式兜底 / 节流（mock opencode + mock judge，离线）
 node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 ```
 
