@@ -105,6 +105,7 @@ node smoke27.mjs         # 冒烟：群聊上下文批量投喂 / 立即@ / 去�
 node smoke28.mjs         # 冒烟：批量窗口计时器 / 冷场提前投喂 / 8 分钟 cutoff（mock opencode，离线）
 node smoke29.mjs         # 冒烟：prompt 发送失败时回滚待回应清单（mock opencode，离线）
 node smoke30.mjs         # 冒烟：即时 prompt 只带新增消息（旧积压不重复投喂，mock opencode，离线）
+node smoke31.mjs         # 冒烟：批量图片作为 Prompt.files 附件并在请求后清理（mock opencode，离线）
 node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 ```
 

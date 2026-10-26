@@ -116,6 +116,8 @@ export class SessionController {
   private groupBatchLast = new Map<string, { time: number; msgId: number }>()
   // 即时 prompt 的上下文下界（秒）：只带下界之后的新消息，避免每次 @ 都把历史积压分块重发
   private contextSince = new Map<string, number>()
+  // 批量投喂下载的图片：native 模式请求接受后即删；bridge/none 模式等回合结束再删
+  private batchImageFiles = new Map<string, string[]>()
 
   constructor(
     private config: PluginConfig,
@@ -974,17 +976,35 @@ export class SessionController {
     return []
   }
 
+  private cleanupPaths(paths: string[]) {
+    for (const p of paths) {
+      try {
+        fs.unlinkSync(p)
+      } catch {
+        // already removed / path gone
+      }
+    }
+  }
+
+  private cleanupBatchImages(sessionId: string) {
+    const paths = this.batchImageFiles.get(sessionId)
+    if (!paths) return
+    this.batchImageFiles.delete(sessionId)
+    this.cleanupPaths(paths)
+  }
+
   // 下载图片：native 策略直接以 Prompt.files 内联附件发给模型；bridge/none 仍落盘并在文本里指路
   private async downloadImages(
     directory: string,
     images: { url: string; mime: string }[]
-  ): Promise<{ note: string; files: OcPromptFile[] }> {
-    if (images.length === 0) return { note: '', files: [] }
+  ): Promise<{ note: string; files: OcPromptFile[]; savedPaths: string[] }> {
+    if (images.length === 0) return { note: '', files: [], savedPaths: [] }
     const inbox = path.join(directory, 'inbox')
     fs.mkdirSync(inbox, { recursive: true })
     const strategy = await this.visionStrategy()
     const notes: string[] = []
     const files: OcPromptFile[] = []
+    const savedPaths: string[] = []
     const failures: string[] = []
     for (const [i, img] of images.entries()) {
       const fallbackName = `inbox/${Date.now()}-${i}.jpg`
@@ -995,7 +1015,9 @@ export class SessionController {
         const mime = String(res.headers.get('content-type') ?? img.mime ?? 'image/jpeg').split(';')[0].trim() || 'image/jpeg'
         const ext = mime.includes('png') ? 'png' : mime.includes('gif') ? 'gif' : mime.includes('webp') ? 'webp' : 'jpg'
         const name = `inbox/${Date.now()}-${i}.${ext}`
-        fs.writeFileSync(path.join(directory, name), buffer)
+        const savedPath = path.join(directory, name)
+        fs.writeFileSync(savedPath, buffer)
+        savedPaths.push(savedPath)
         if (strategy === 'native') {
           const maxAttach = 8 * 1024 * 1024
           if (buffer.length <= maxAttach) {
@@ -1014,14 +1036,14 @@ export class SessionController {
     }
     if (strategy === 'native') {
       const note = failures.length > 0 ? `\n[系统] 有图片处理失败：${failures.join('、')}` : ''
-      return { note, files }
+      return { note, files, savedPaths }
     }
     const detail = notes.length > 0 ? notes.join('、') : '(无可用图片)'
     const extra = failures.length > 0 ? '（部分图片处理失败）' : ''
     if (strategy === 'bridge') {
-      return { note: `\n[系统] 这条消息带了图片${extra}，已存到工作目录：${detail}。用 subagent 工具调 vision-bridge 子代理读取图片内容后再回答。`, files: [] }
+      return { note: `\n[系统] 这条消息带了图片${extra}，已存到工作目录：${detail}。用 subagent 工具调 vision-bridge 子代理读取图片内容后再回答。`, files: [], savedPaths }
     }
-    return { note: `\n[系统] 这条消息带了图片${extra}，已存到工作目录：${detail}。你当前没有可用的看图能力，回复里直接说明看不到图或请对方描述。`, files: [] }
+    return { note: `\n[系统] 这条消息带了图片${extra}，已存到工作目录：${detail}。你当前没有可用的看图能力，回复里直接说明看不到图或请对方描述。`, files: [], savedPaths }
   }
   // 让模型看到收藏表情原图：把表情图片下载到当前会话工作区 inbox/，返回相对路径
   async prepareStickerImage(scope: string, ref: string): Promise<{ relPath: string; label: string; mime: string }> {
@@ -1227,7 +1249,23 @@ export class SessionController {
         body = '（较早记录已省略）\n' + body.slice(-maxChars)
       }
       const prompt = this.buildGroupBatchPrompt(scope, body, omitted)
-      await this.prompt(entry.sessionId, prompt)
+      const batchImages = this.collectGroupBatchImages(rows)
+      const imageInfo = batchImages.length > 0
+        ? await this.downloadImages(entry.directory, batchImages)
+        : { note: '', files: [] as OcPromptFile[], savedPaths: [] as string[] }
+      const imageNote = batchImages.length > 0
+        ? (imageInfo.files.length > 0
+            ? '\n[系统] 这条批量记录带 ' + batchImages.length + ' 张图片/表情原图，已作为请求附件发送（按记录中出现顺序）；结合图片理解聊天内容。' + imageInfo.note
+            : '\n[系统] 这条批量记录带 ' + batchImages.length + ' 张图片/表情原图，已保存到工作区；按提示查看后再回答。' + imageInfo.note)
+        : imageInfo.note
+      try {
+        await this.prompt(entry.sessionId, prompt + imageNote, imageInfo.files)
+      } finally {
+        if (imageInfo.savedPaths.length > 0) {
+          if (imageInfo.files.length > 0) this.cleanupPaths(imageInfo.savedPaths)
+          else this.batchImageFiles.set(entry.sessionId, [...(this.batchImageFiles.get(entry.sessionId) ?? []), ...imageInfo.savedPaths])
+        }
+      }
       this.markSent(scope, rows.map((r) => (r.message_id == null ? null : Number(r.message_id))))
       const lastRow = rows[rows.length - 1]
       this.groupBatchLast.set(scope, { time: Number(lastRow.time), msgId: lastRow.message_id == null ? 0 : Number(lastRow.message_id) })
@@ -1242,16 +1280,37 @@ export class SessionController {
     }
   }
 
-  private collectGroupBatchRows(scope: string, sinceSec: number, last?: { time: number; msgId: number }): { message_id: number | null; user_id: number; nickname: string; time: number; text: string }[] {
+  // 批量记录里的图片/表情原图：下载后作为 Prompt.files 附件；取最近出现的 N 张，避免一次请求过大
+  private collectGroupBatchImages(rows: { segments: string; text: string }[]): { url: string; mime: string }[] {
+    const max = Math.max(1, Math.min(60, Number(this.config.groupContextBatchMaxImages) || 16))
+    const seen = new Set<string>()
+    const images: { url: string; mime: string }[] = []
+    for (const r of rows) {
+      let segs: MsgSegment[] = []
+      try {
+        segs = JSON.parse(String(r.segments || '[]')) as MsgSegment[]
+      } catch {
+        // ignore malformed segments
+      }
+      for (const img of [...extractImages(segs), ...extractImagesFromRaw(String(r.text ?? ''))]) {
+        if (!img.url.startsWith('http') || seen.has(img.url)) continue
+        seen.add(img.url)
+        images.push(img)
+      }
+    }
+    return images.slice(-max)
+  }
+
+  private collectGroupBatchRows(scope: string, sinceSec: number, last?: { time: number; msgId: number }): { message_id: number | null; user_id: number; nickname: string; time: number; text: string; segments: string }[] {
     const now = Math.floor(Date.now() / 1000)
     const seen = new Set<string>()
-    const out: { message_id: number | null; user_id: number; nickname: string; time: number; text: string; pk: number; day: string }[] = []
+    const out: { message_id: number | null; user_id: number; nickname: string; time: number; text: string; segments: string; pk: number; day: string }[] = []
     for (const day of [dayKey(now - 86400), dayKey(now)]) {
       try {
         const rows = this.db.query(
           scope,
           day,
-          'SELECT msg_pk, message_id, nickname, user_id, time, text FROM message WHERE time >= ? ORDER BY time ASC, msg_pk ASC LIMIT 400',
+          'SELECT msg_pk, message_id, nickname, user_id, time, text, segments FROM message WHERE time >= ? ORDER BY time ASC, msg_pk ASC LIMIT 400',
           [Math.max(0, sinceSec)]
         ) as Record<string, unknown>[]
         for (const r of rows) {
@@ -1271,6 +1330,7 @@ export class SessionController {
             nickname: String(r.nickname ?? ''),
             time,
             text: String(r.text ?? ''),
+            segments: String(r.segments ?? '[]'),
             pk: Number(r.msg_pk),
             day,
           })
@@ -1306,6 +1366,7 @@ export class SessionController {
     this.contextSince.delete(scope)
     const entry = this.map.get(scope)
     if (!entry) return
+    this.cleanupBatchImages(entry.sessionId)
     await this.oc.deleteSession(entry.sessionId).catch(() => undefined)
     this.map.delete(scope)
     this.reverse.delete(entry.sessionId)
@@ -1406,6 +1467,7 @@ export class SessionController {
       return
     }
     if (ev.type === 'session.execution.failed') {
+      this.cleanupBatchImages(sessionId)
       const scope = this.reverse.get(sessionId)
       if (!scope) return
       this.clearPending(scope)
@@ -1417,6 +1479,7 @@ export class SessionController {
       return
     }
     if (ev.type === 'session.execution.interrupted') {
+      this.cleanupBatchImages(sessionId)
       this.lastText.delete(sessionId)
       const scope = this.reverse.get(sessionId)
       if (scope) {
@@ -1463,6 +1526,7 @@ export class SessionController {
 
   // 出站只认 MCP 发送工具：模型没调用发送工具就视为选择沉默，不再兜底发送最终文本
   async onSessionIdle(sessionId: string): Promise<void> {
+    this.cleanupBatchImages(sessionId)
     const scope = this.reverse.get(sessionId)
     if (!scope) return
     const answered = this.pendingRequests.get(scope) ?? []
