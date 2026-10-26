@@ -100,7 +100,6 @@ node smoke22.mjs         # 冒烟：模型主动等待消息（mock opencode，�
 node smoke23.mjs         # 冒烟：内置小黄脸(CQ) / 收藏表情(MCP) 提示词与发送（mock opencode，离线）
 node smoke24.mjs         # 冒烟：表情原图视觉链路 / get_sticker_image（mock opencode，离线）
 node smoke25.mjs         # 冒烟：多模态主模型 Prompt.files 图片附件（mock opencode，离线）
-node smoke26.mjs         # 冒烟：旧网关无 send_custom_face 时表情发送降级（mock opencode，离线）
 node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 ```
 

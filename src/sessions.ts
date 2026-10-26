@@ -1303,35 +1303,8 @@ export class SessionController {
       params.user_id = scope.slice(8)
     }
     if (opts?.replyTo) params.reply_to = String(opts.replyTo)
-    try {
-      await this.runtime.actions.call('send_custom_face', params)
-    } catch (e) {
-      // 兼容旧网关（如 SnowLuma v1.14.4 没有 send_custom_face）：
-      // 退回「图片 + sub_type=1」发送，效果和 v1.14.22 的实现一致
-      const record = this.findStickerRecord(sticker)
-      if (!record?.url) throw e
-      this.log('send_custom_face 不可用，退回图片形式发表情: ' + String((e as Error)?.message ?? e))
-      const fallback: Record<string, unknown> = {
-        message_type: scope.startsWith('group-') ? 'group' : 'private',
-        message: [{ type: 'image', data: { file: record.url, sub_type: 1, summary: '[动画表情]' } }],
-      }
-      if (scope.startsWith('group-')) fallback.group_id = scope.slice(6)
-      else fallback.user_id = scope.slice(8)
-      if (opts?.replyTo) fallback.message = [{ type: 'reply', data: { id: String(opts.replyTo) } }, ...(fallback.message as unknown[])]
-      await this.runtime.actions.call('send_msg', fallback)
-    }
+    await this.runtime.actions.call('send_custom_face', params)
     this.recordSent(scope, '[表情]')
-    this.lastSent.set(scope, { text: '[表情]', at: Date.now() })
     await this.delay()
-  }
-
-  private findStickerRecord(ref: string) {
-    if (!this.stickers) return undefined
-    const raw = String(ref ?? '').trim()
-    return (
-      this.stickers.get(raw) ||
-      this.stickers.list().find((x) => x.md5 && x.md5.toUpperCase() === raw.toUpperCase()) ||
-      this.stickers.list().find((x) => x.url === raw)
-    )
   }
 }
