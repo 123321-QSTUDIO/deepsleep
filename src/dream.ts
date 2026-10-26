@@ -134,8 +134,17 @@ export class DreamMemory {
     const today = dayKey(now)
     let dreamSessionId: string | undefined
     try {
-      const transcript = this.gatherTranscript(scope, since)
-      if (!transcript.trim()) {
+      // 群聊上下文批量投喂开启时，当天聊天记录已经在原 session 的上下文里；
+      // fork 会继承这段历史，梦境不需要再从 DB 重新拼 transcript。
+      const useContext = !!config.groupContextBatchEnabled && !!config.proactiveEnabled
+      const transcript = useContext ? '' : this.gatherTranscript(scope, since)
+      if (useContext) {
+        const existing = await oc.getMessages(sessionId, 1).catch(() => [] as OcMessage[])
+        if (existing.length === 0) {
+          this.record(scope, today, { ok: true, at: now, error: undefined, transcriptChars: 0, compacted: false })
+          return { ok: true, scope, skipped: '会话还没有可整理的上下文' }
+        }
+      } else if (!transcript.trim()) {
         this.record(scope, today, { ok: true, at: now, error: undefined, transcriptChars: 0, compacted: false })
         return { ok: true, scope, skipped: '没有新的群聊记录' }
       }
@@ -144,7 +153,7 @@ export class DreamMemory {
       const forked = await oc.forkSession(sessionId)
       dreamSessionId = forked.id
       log(`梦境整理 ${scope}: fork ${sessionId} -> ${dreamSessionId}`)
-      const prompt = this.buildPrompt(scope, transcript)
+      const prompt = this.buildPrompt(scope, transcript, useContext)
       await oc.promptAsync(dreamSessionId, prompt)
       const produced = await this.waitForDreamOutput(dreamSessionId, workspace, DREAM_TIMEOUT_MS)
       if (!produced) {
@@ -335,7 +344,7 @@ export class DreamMemory {
     }
   }
 
-  private buildPrompt(scope: string, transcript: string): string {
+  private buildPrompt(scope: string, transcript: string, useContext = false): string {
     const { config } = this.deps
     const maxChars = config.dreamMemoryMaxChars
     return `# 梦境整理任务（内部维护任务）
@@ -363,9 +372,7 @@ export class DreamMemory {
 - 禁止把 MEMORY.new.md 之外的内容写到别处。
 
 ## 本时段群聊记录（scope=${scope}）
-~~~
-${transcript}
-~~~
+${useContext ? `本时段的群聊记录已经作为 user prompt 在你从原会话 fork 继承的上下文中（宿主每 ${Math.max(1, Math.round((this.deps.config.groupContextBatchIntervalSec || 600) / 60))} 分钟批量投喂一次）。直接结合这些上下文和现有记忆整理；不要再去读数据库或用 read 找聊天记录。` : '~~~\n' + transcript + '\n~~~'}
 `
   }
 }

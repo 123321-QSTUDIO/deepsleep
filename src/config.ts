@@ -29,6 +29,11 @@ export interface PluginConfig {
   taskConcurrency: number
   turnTimeoutSec: number
   contextMessageCount: number
+  // 群聊上下文批量投喂：每 N 秒把新群聊记录作为一次 user prompt 灌给模型，由模型挑想回的回复
+  groupContextBatchEnabled: boolean
+  groupContextBatchIntervalSec: number
+  groupContextBatchMaxMessages: number
+  groupContextBatchMaxChars: number
   replyDelayMinMs: number
   replyDelayMaxMs: number
   maxLinesPerReply: number
@@ -112,6 +117,10 @@ export const defaultConfig: PluginConfig = {
   taskConcurrency: 3,
   turnTimeoutSec: 240,
   contextMessageCount: 15,
+  groupContextBatchEnabled: true,
+  groupContextBatchIntervalSec: 600,
+  groupContextBatchMaxMessages: 80,
+  groupContextBatchMaxChars: 16000,
   replyDelayMinMs: 1200,
   replyDelayMaxMs: 3000,
   maxLinesPerReply: 4,

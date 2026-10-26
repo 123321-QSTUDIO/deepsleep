@@ -24,7 +24,7 @@ QQ群/私聊 ⇄ SnowLuma（QQ 网关；OneBot v11 WS）
                 │   模型可见名带 qqbot_ 前缀，MCP 服务注册名不变
                 ├─ 控制面板（WebUI）：改配置 / 看会话 / 操作 Session，与服务同进程
                 ├─ 梦境记忆：每晚 fork 会话整理 MEMORY.md（instructions 注入）→ 原子替换
-                │    → compact 原 session，避免上下文无限增长
+                │    → compact 原 session；batch 模式下直接复用 session 上下文，不再回灌 DB transcript
                 ├─ 任务注册表：task_id ↔ 属主QQ/群号/消息ID（持久化，重启恢复）
                 └─ 任务执行器：本地 docker 一次性容器；或远程 docker 主机（ssh://）——
                     每 QQ 一个可休眠容器（qqbot-user-<QQ>），任务完成 stop + 产物压缩归档
@@ -37,13 +37,14 @@ Docker opencode（下层）：一次性容器跑重活；结果 → 私聊全文
 
 ## 消息流
 
-1. 群消息全部写入消息库（不触发的也写，供 Agent 检索上下文）
-2. @机器人 / 回复机器人消息 → 组装 prompt（最近 N 条上下文 + 引用还原）→ 群 session
-3. Agent 用 `qqbot_send_message` 分句回复（每条一次调用，像真人打字）；忘了调则兜底按行拆发
+1. 群消息全部写入消息库
+2. **不@机器人的群聊**：每 `groupContextBatchIntervalSec`（默认 600s）把这段时间的新消息作为一次 user prompt 交给模型，模型可以挑想接的回复，也可以 `[SILENT]` 安静；没有新消息不触发
+3. **@机器人 / 回复机器人 / 私聊 / 戳一戳** → 立即组装 prompt（最近 N 条上下文 + 引用还原 + 图片附件）→ 群/私聊 session
+4. Agent 用 `qqbot_send_message` 分句回复（每条一次调用，像真人打字）；没调用发送工具 = 选择沉默，不做兜底
 3b. 收藏表情包：先在控制面板「表情」页从当前 QQ 同步收藏、按合集归组并打标启用；Agent 之后会用 `qqbot_list_stickers` 挑（显示为「合集:描述」）、`qqbot_send_sticker` 发（未打标/未启用的不会暴露给 Agent）
-4. 复杂请求 → Agent 调 `qqbot_submit_task` → 自己回一句"处理完回复你" → 服务排队起容器
-5. 容器完成 → 群里 reply 原提问 + @发起人 + 一句话结论（Agent 措辞）；全文私聊属主并注入私聊上下文
-6. 属主私聊问"我的任务怎么样了" → 私聊 session 用 `qqbot_list_tasks`/`qqbot_get_task_detail` 查（越权只给状态不给内容）
+5. 复杂请求 → Agent 调 `qqbot_submit_task` → 自己回一句"处理完回复你" → 服务排队起容器
+6. 容器完成 → 群里 reply 原提问 + @发起人 + 一句话结论（Agent 措辞）；全文私聊属主并注入私聊上下文
+7. 属主私聊问"我的任务怎么样了" → 私聊 session 用 `qqbot_list_tasks`/`qqbot_get_task_detail` 查（越权只给状态不给内容）
 
 ## 目录
 
@@ -100,6 +101,7 @@ node smoke22.mjs         # 冒烟：模型主动等待消息（mock opencode，�
 node smoke23.mjs         # 冒烟：内置小黄脸(CQ) / 收藏表情(MCP) 提示词与发送（mock opencode，离线）
 node smoke24.mjs         # 冒烟：表情原图视觉链路 / get_sticker_image（mock opencode，离线）
 node smoke25.mjs         # 冒烟：多模态主模型 Prompt.files 图片附件（mock opencode，离线）
+node smoke27.mjs         # 冒烟：群聊上下文批量投喂 / 立即@ / 去重（mock opencode，离线）
 node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 ```
 

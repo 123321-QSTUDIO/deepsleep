@@ -50,6 +50,10 @@ const FIELDS: FieldDef[] = [
   { key: 'onebotToken', label: 'onebotToken（独立服务模式）', group: '连接', type: 'password' },
 
   { key: 'contextMessageCount', label: 'contextMessageCount（上下文条数）', group: '消息与回复', type: 'number', min: 1 },
+  { key: 'groupContextBatchEnabled', label: 'groupContextBatchEnabled（群聊上下文批量投喂）', group: '消息与回复', type: 'boolean', help: '每 N 秒把这段时间的新群聊记录作为一次 user prompt 交给模型，由模型决定要不要回复；@ 仍然立即触发。受顶部「自动回复」总开关控制' },
+  { key: 'groupContextBatchIntervalSec', label: 'groupContextBatchIntervalSec（批量投喂间隔秒）', group: '消息与回复', type: 'number', min: 10, help: '默认 600 秒（10 分钟）；没有新消息时不触发模型' },
+  { key: 'groupContextBatchMaxMessages', label: 'groupContextBatchMaxMessages（单次最多消息数）', group: '消息与回复', type: 'number', min: 1 },
+  { key: 'groupContextBatchMaxChars', label: 'groupContextBatchMaxChars（单次最多字符数）', group: '消息与回复', type: 'number', min: 500 },
   { key: 'replyDelayMinMs', label: 'replyDelayMinMs（兜底分句最小间隔）', group: '消息与回复', type: 'number', min: 0 },
   { key: 'replyDelayMaxMs', label: 'replyDelayMaxMs（兜底分句最大间隔）', group: '消息与回复', type: 'number', min: 0 },
   { key: 'maxLinesPerReply', label: 'maxLinesPerReply（单轮最多消息条数）', group: '消息与回复', type: 'number', min: 1, help: '模型一轮回复建议最多几条消息，超过不会拦截，但 MCP 会提醒模型收尾' },

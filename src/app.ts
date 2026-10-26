@@ -99,6 +99,7 @@ export async function createApp(options: AppOptions): Promise<App> {
   sessions.attachVoice(tts, voices)
   sessions.attachJudge(judge)
   sessions.attachStickers(stickers)
+  sessions.startGroupContextBatch()
   const reminders = new ReminderStore(options.dataPath, (m, ...x) => logger.warn(m, ...x))
   const reminderScheduler = new ReminderScheduler(
     reminders,
@@ -231,6 +232,7 @@ export async function createApp(options: AppOptions): Promise<App> {
     active = false
     reminderScheduler.stop()
     clearInterval(reminderTimer)
+    sessions.stopGroupContextBatch()
     dream.stop()
     panel.stop()
     mcp.stop()
