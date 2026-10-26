@@ -289,7 +289,7 @@ schtasks /create /tn "qqbot-svc" /sc onlogon /rl highest /f `
 
 - `hostModel`：host 层每个工作区的默认模型，默认 `opencode/deepseek-v4.1-flash-free`；已知旧模型 ID 会在配置加载时自动迁移，旧 session 存了弃用模型则 `/reset`
 - `visionModel`：视觉桥接 subagent（vision-bridge）用的识图模型，默认 `opencode/mimo-v2.6-flash-free`。图片消息会下载到工作目录 `inbox/`，由纯文本主模型通过 **subagent** 工具调桥接代理读图，**不是**直接切换主模型
-- 工作区 opencode.json 使用 `agents` + `system`、`mcp.servers` 和 `codemode: false`。MCP 共 16 个工具，模型可见名带 `qqbot_` 前缀（如 `qqbot_send_message`、`qqbot_list_stickers`/`qqbot_send_sticker`（收藏表情包）、`qqbot_query_chat_log`、`qqbot_submit_task`），MCP 服务注册名不变
+- 工作区 opencode.json 使用 `agents` + `system`、`mcp.servers` 和 `codemode: false`。MCP 共 17 个工具，模型可见名带 `qqbot_` 前缀（如 `qqbot_send_message`、`qqbot_list_stickers`/`qqbot_send_sticker`（收藏表情包）、`qqbot_query_chat_log`、`qqbot_submit_task`），MCP 服务注册名不变
 - `mcpHost`：MCP 服务绑定地址，默认 `127.0.0.1`（回环）。**服务器有公网 IP 直绑网卡时切勿改成 0.0.0.0**；方式 B（WSL2 docker）确需容器访问时才改为 `0.0.0.0` 并配合防火墙只放行容器网段
 - `opencodePassword` 必须等于第 2 步显式设置的 `OPENCODE_PASSWORD`，不能为空或写成可选项
 - `dockerHost`：留空 = 本机 docker；方式 C 填 `tcp://127.0.0.1:2375`（走持久 SSH 隧道，见方式 C-1）
@@ -315,6 +315,8 @@ schtasks /create /tn "qqbot-svc" /sc onlogon /rl highest /f `
 - **权限确认**：OpenCode V2 在模型首次使用搜索/联网等工具时会发权限请求（TUI 里是弹窗）。服务形态默认自动批准：workspace 配置提前放行 + `permission.asked` 事件自动回复；面板「权限与安全」组可关（`autoApprovePermissions`）或改成只批一次（`permissionAutoReply=once`）。关闭后服务端不会回应，会话可能一直等待，谨慎操作。
 - **回复长度/条数**：`normalCharsPerMessage`（默认 20 字）写进人格提示词，普通对话单条尽量不超过；`maxCharsPerMessage`（默认 200 字）与 `maxLinesPerReply`（默认 4 条）是提醒阈值——超出不会拦截发送，消息照发，但 MCP 会在工具结果里返回警告，让模型自己收尾/精简；如果这一轮同时在回复多个人（pending >= 2），条数警告会自动跳过，方便逐人回复。人格提示词保留拟人化分条，但不再强制每条都拆，模型按内容自由选择 1 到 4 条。
 - **定时提醒**：Agent 可以自己设倒计时（`qqbot_set_reminder`）。默认 `reminderMode=agent`：到点系统只把提醒内容交给模型、由它结合上下文处理；模型没调用发送工具就不发（不再兜底）；改成 `static` 则直接发固定文案。数据存 `data/reminders.json`，服务重启后仍会补发过期提醒。面板「定时提醒」组可开关、调检查间隔/单会话上限/最大天数。注意：它不是 cron 定时任务，只支持“从现在起 N 分钟后”的相对倒计时。
+- **戳一戳**：别人拍机器人时，桥接把 `[戳一戳]` 当作一条消息交给模型，模型自行决定回话/回拍/不理；可在面板・主动参与（测试）组调 `pokeReplyCooldownSec` 防止连环唤醒。
+- **主动等待**：模型可用 `qqbot_wait_for_messages` 在回合内等待群友说完或等后续，避免把一条没说完的话拆成两个回合判断。
 - **语境自动回复**：被戳后 `pokeFollowUpSec` 秒内戳你的人发消息、或机器人发消息后 `botReplyWindowSec` 秒内有人接话，会直接交给主模型判断要不要回（不走轻量判官，也不等最少消息数）；冷却 `contextReplyCooldownSec`，每小时总次数仍受 `proactiveMaxPerHour` 限制。与「自动回复」总开关共用 `proactiveEnabled`。
 - **主动参与（测试功能）**：面板顶栏有「自动回复」开关（带「测试」标记），可随时一键启停；行为可能随版本调整，建议先观察一段时间再依赖。没人@时机器人是否主动接话由「判官」先筛一遍，面板「主动参与」组可调。推荐给配置好的机器接本地小模型：Ollama 拉一个 0.6B 级模型（如 `ollama pull qwen3:0.6b`），`proactiveJudgeBaseUrl=http://127.0.0.1:11434/v1`、`proactiveJudgeModel=qwen3:0.6b`、`proactiveJudgeMode=auto`；llama.cpp server 的 `/v1` 同样可用。跑不动 0.6B 的机器把 `proactiveJudgeModel` 留空即可，自动使用零依赖启发式规则（问句/求助/提到机器人等加权），不会报错。节流参数：最少新消息数、冷却秒数、每小时上限、候选概率，默认 3 条/180s/6 次每小时。
 - **语音发送方式**：如果 OneBot 走 WS 连的是**远端** SnowLuma/网关，本地文件路径在远端读不到，语音会发不出去。默认 `voiceSendBase64=true`，TTS 音频以 `base64://` 内联进 `record` 段发送，远端/本机都可用；只有网关和机器人同机且网关不支持 base64 时，才把它关掉走本地文件路径。

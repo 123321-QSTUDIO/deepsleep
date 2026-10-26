@@ -54,6 +54,7 @@ export interface PluginConfig {
   pokeFollowUpSec: number
   botReplyWindowSec: number
   contextReplyCooldownSec: number
+  pokeReplyCooldownSec: number
   // 权限：OpenCode 首次调用搜索/网络等工具会请求确认，服务端自动批准避免卡住
   autoApprovePermissions: boolean
   permissionAutoReply: string
@@ -133,6 +134,7 @@ export const defaultConfig: PluginConfig = {
   pokeFollowUpSec: 120,
   botReplyWindowSec: 90,
   contextReplyCooldownSec: 20,
+  pokeReplyCooldownSec: 15,
   autoApprovePermissions: true,
   permissionAutoReply: 'always',
   remindersEnabled: true,

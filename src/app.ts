@@ -198,7 +198,7 @@ export async function createApp(options: AppOptions): Promise<App> {
     }
   }
 
-  // 戳一戳：别人戳机器人就自动反戳回去，不触发模型回复
+  // 戳一戳：像普通消息一样入库并交给模型决定（回话/回拍/不理）
   const handlePoke = async (notice: Record<string, unknown>): Promise<void> => {
     const selfId = Number(notice.self_id ?? 0)
     const poker = Number(notice.user_id ?? notice.sender_id ?? 0)
@@ -208,12 +208,12 @@ export async function createApp(options: AppOptions): Promise<App> {
     if (target !== selfId) return
     const groupId = notice.group_id != null ? Number(notice.group_id) : null
     const scope = groupId ? 'group-' + groupId : 'private-' + poker
-    sessions.recordPoke(scope, poker)
+    const senderInfo = (notice.sender as Record<string, unknown> | undefined) ?? {}
+    const nickname = String((senderInfo as { card?: unknown }).card || (senderInfo as { nickname?: unknown }).nickname || 'QQ' + poker)
     try {
-      await sessions.sendPokeToScope(scope, String(poker))
-      log('已反戳 ' + poker + ' (' + scope + ')')
+      await sessions.handlePoke(scope, poker, nickname, selfId)
     } catch (e) {
-      logErr('反戳失败', e)
+      logErr('处理戳一戳失败', e)
     }
   }
   const onEvent = async (event: Record<string, unknown>): Promise<void> => {

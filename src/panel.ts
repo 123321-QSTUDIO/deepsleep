@@ -111,6 +111,7 @@ const FIELDS: FieldDef[] = [
   { key: 'proactiveJudgeApiKey', label: 'proactiveJudgeApiKey（可选）', group: '主动参与（测试）', type: 'password' },
   { key: 'pokeFollowUpSec', label: 'pokeFollowUpSec（被戳后跟进窗口秒）', group: '主动参与（测试）', type: 'number', min: 1, help: '被戳后这段时间内，戳你的人再发消息会直接交给模型判断要不要回（不再走轻量判官）' },
   { key: 'botReplyWindowSec', label: 'botReplyWindowSec（发言后接话窗口秒）', group: '主动参与（测试）', type: 'number', min: 1, help: '机器人刚发过消息后这段时间内，群里有人接话会直接交给模型判断是不是在回它' },
+  { key: 'pokeReplyCooldownSec', label: 'pokeReplyCooldownSec（拍一拍回复冷却秒）', group: '主动参与（测试）', type: 'number', min: 1, help: '同一会话两次戳一戳唤醒的最小间隔；模型会像处理消息一样决定回话/回拍/不理' },
   { key: 'contextReplyCooldownSec', label: 'contextReplyCooldownSec（语境回复冷却秒）', group: '主动参与（测试）', type: 'number', min: 0, help: '两次语境自动回复之间的最小间隔' },
   { key: 'proactiveJudgeTimeoutSec', label: 'proactiveJudgeTimeoutSec（判官超时）', group: '主动参与（测试）', type: 'number', min: 1 },
   { key: 'dreamMemoryEnabled', label: 'dreamMemoryEnabled（启用梦境记忆）', group: '梦境记忆', type: 'boolean', help: '每天凌晨 fork 会话更新 MEMORY.md，然后压缩原 session' },

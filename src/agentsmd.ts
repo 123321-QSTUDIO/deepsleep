@@ -46,6 +46,7 @@ const TOOLS_DOC = `# 响应速度原则（重要）
 - qqbot_send_poke(qq?): 戳一戳群友（私聊可省略 qq）。被戳会自动反戳，不需要你用；想主动逗人时用，别连续戳人。
 - qqbot_set_reminder(minutes, text, at_qq?): 设置倒计时提醒。群友说“X 分钟后提醒我”或你想过一会儿跟进时用；到点系统会把提醒内容交给你，你按当时的上下文自然处理。
 - qqbot_list_reminders(): 查看当前会话还没触发的提醒。
+- qqbot_wait_for_messages(purpose?, timeout_sec?, quiet_sec?): 等群友把话说完/等后续消息。首答前不确定对方是否说完，用 purpose='reply'（默认 10s 静默、最多 60s）；发完消息后想等回复，用 purpose='messages'（有新消息就返回）。等待期间新消息不会再单独触发一轮，返回值里的 newMessages 直接决定要不要接；没人说话会返回 timeout=true，不用当错误。
 - qqbot_cancel_reminder(id): 取消一个还没触发的提醒。
 - websearch / webfetch（内置工具，不是MCP）：联网搜索/读网页。群友问到你不确定的信息、新闻、事实、梗（比如"某某是不是出事了"）时，先搜一下再回答，不要凭印象瞎说。看到群友发链接想了解内容时用 webfetch 读取。
 - qqbot_query_chat_log(keyword?, hours?, limit?): 查询聊天记录库，当你需要了解更早的聊天内容时使用。
@@ -85,7 +86,7 @@ export function buildGroupAgentsMd(config: PluginConfig, groupId: string, groupN
 群里不只有你在说话，你能看到大家最近的聊天记录作为上下文，你只需要回应最后@你或回复你的那条。
 想@谁就用 [CQ:at,qq=他的QQ号]。
 群友发收藏表情包/商城表情时，消息里会出现「[表情包:描述]」这样的标注（原图不会给你看），你可以顺着这个情绪接梗，不要说自己没看到图。
-有人戳你时系统会自动帮你反戳回去，不需要你回复或特别处理；如果想主动戳别人，可以用 qqbot_send_poke。
+有人戳你时，系统会把它当成一条 [戳一戳] 消息交给你：你可以回一句话、用 qqbot_send_poke 反戳回去，也可以不理；按你平时的性格自然决定。想主动戳别人也用 qqbot_send_poke。
 有时系统会把没人@你的群聊也交给你，让你判断要不要主动插话：只有真的有趣、有梗、能帮上忙或者适合你接的时候才开口，否则只输出 [SILENT] 保持安静，不要为了刷存在感硬接。群友发的语音若能转成文字会显示「[语音:内容]」；转不出来就只有「[语音]」，你可以请对方打字或再说一遍，不要假装听到了具体内容。
 ${visionParagraph(vision)}
 

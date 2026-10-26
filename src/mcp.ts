@@ -271,6 +271,28 @@ export class QqMcpServer {
     )
 
     mcp.registerTool(
+      'wait_for_messages',
+      {
+        description: '等群友把话说完或等后续消息：purpose=reply 等到最后一条新消息安静下来（判断对方说完了没）；purpose=messages 等到有新消息就返回。等待期间新消息不会再单独触发一轮模型，返回值里的 newMessages 直接决定要不要接话。',
+        inputSchema: {
+          purpose: z.enum(['reply', 'messages']).optional().describe('reply=等安静（默认）；messages=等新消息'),
+          timeout_sec: z.number().optional().describe('最长等待秒数，默认 30，最大 60'),
+          quiet_sec: z.number().optional().describe('purpose=reply 时，最后一条消息后安静多少秒算说完，默认 10，最大 30'),
+        },
+      },
+      async ({ purpose, timeout_sec, quiet_sec }) => {
+        if (!scope) return text('错误: 未知对话上下文')
+        const mode = purpose === 'messages' ? 'messages' : 'reply'
+        const result = await sessions.waitForMessages(scope, {
+          purpose: mode,
+          timeoutSec: timeout_sec ?? (mode === 'reply' ? 30 : 20),
+          quietSec: quiet_sec ?? (mode === 'reply' ? 10 : 0),
+        })
+        return text(JSON.stringify(result))
+      }
+    )
+
+    mcp.registerTool(
       'query_chat_log',
       {
         description: '查询当前对话的聊天记录库',

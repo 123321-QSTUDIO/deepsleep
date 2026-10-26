@@ -85,6 +85,9 @@ export class SessionController {
   // 语境自动回复：最近戳机器人的人 / 最近一次语境触发时间
   private recentPokes = new Map<string, { userId: number; at: number }>()
   private contextLastAt = new Map<string, number>()
+  private lastPokeTurnAt = new Map<string, number>()
+  // qqbot_wait_for_messages 生效期间，新消息只入库、不再单独触发一轮模型
+  private waitScopes = new Map<string, number>()
 
   constructor(
     private config: PluginConfig,
@@ -373,7 +376,7 @@ export class SessionController {
             disabled: false,
             codemode: false,
             oauth: false,
-            timeout: { startup: 8000, catalog: 8000, execution: 8000 },
+            timeout: { startup: 8000, catalog: 8000, execution: 90000 },
             headers: {
               authorization: `Bearer ${this.config.mcpToken}`,
               'x-qqbot-scope': scope,
@@ -477,6 +480,118 @@ export class SessionController {
     this.sentMsgIds.set(scope, set)
   }
 
+  // 模型主动等待：purpose=reply 等到最后一条消息安静下来；purpose=messages 等到有新消息就返回
+  async waitForMessages(
+    scope: string,
+    opts: { purpose: 'reply' | 'messages'; timeoutSec: number; quietSec: number }
+  ): Promise<{ newMessages: { message_id: number | null; user_id: number; nickname: string; time: number; text: string }[]; quiet: boolean; timeout: boolean; waitedMs: number }> {
+    const started = Date.now()
+    const startPk = this.lastMsgPk(scope)
+    const timeoutMs = Math.max(1, Math.min(60, opts.timeoutSec)) * 1000
+    const quietMs = Math.max(0, Math.min(30, opts.quietSec)) * 1000
+    this.waitScopes.set(scope, startPk)
+    try {
+      for (;;) {
+        const rows = this.messagesSince(scope, startPk, 30)
+        const now = Date.now()
+        const messages = rows.map((r) => ({
+          message_id: r.message_id == null ? null : Number(r.message_id),
+          user_id: Number(r.user_id),
+          nickname: String(r.nickname ?? ''),
+          time: Number(r.time),
+          text: String(r.text ?? ''),
+        }))
+        if (messages.length > 0) {
+          const lastAt = messages[messages.length - 1].time * 1000
+          if (opts.purpose === 'messages' || now - lastAt >= quietMs) {
+            return { newMessages: messages, quiet: opts.purpose === 'reply', timeout: false, waitedMs: now - started }
+          }
+        }
+        if (now - started >= timeoutMs) {
+          return { newMessages: messages, quiet: messages.length > 0, timeout: true, waitedMs: now - started }
+        }
+        await new Promise((r) => setTimeout(r, 250))
+      }
+    } finally {
+      this.waitScopes.delete(scope)
+    }
+  }
+
+  // 等待开始时记录当前消息水位（跨昨天/今天取最大 msg_pk），之后只看新到的消息
+  private lastMsgPk(scope: string): number {
+    const now = Math.floor(Date.now() / 1000)
+    let max = 0
+    for (const day of [dayKey(now - 86400), dayKey(now)]) {
+      try {
+        const rows = this.db.query(scope, day, 'SELECT MAX(msg_pk) AS pk FROM message', []) as { pk?: unknown }[]
+        const pk = Number(rows[0]?.pk ?? 0)
+        if (Number.isFinite(pk) && pk > max) max = pk
+      } catch {
+        // day db missing
+      }
+    }
+    return max
+  }
+
+  private messagesSince(scope: string, afterPk: number, limit: number): { message_id: number | null; user_id: number; nickname: string; time: number; text: string }[] {
+    const now = Math.floor(Date.now() / 1000)
+    const rows: Record<string, unknown>[] = []
+    for (const day of [dayKey(now - 86400), dayKey(now)]) {
+      try {
+        const part = this.db.query(
+          scope,
+          day,
+          'SELECT msg_pk, message_id, user_id, nickname, time, text FROM message WHERE msg_pk > ? ORDER BY msg_pk ASC LIMIT ?',
+          [afterPk, limit]
+        ) as Record<string, unknown>[]
+        rows.push(...part)
+      } catch {
+        // day db missing
+      }
+    }
+    return rows
+      .filter((r) => String(r.user_id) !== String(this.selfId))
+      .sort((a, b) => Number(a.msg_pk) - Number(b.msg_pk))
+      .slice(-limit) as { message_id: number | null; user_id: number; nickname: string; time: number; text: string }[]
+  }
+
+  // 戳一戳：像一条普通消息一样入库并交给模型，模型自己决定回话/回拍/不理
+  async handlePoke(scope: string, poker: number, nickname: string, selfId?: number): Promise<boolean> {
+    if (selfId) this.selfId = selfId
+    const now = Date.now()
+    const last = this.lastPokeTurnAt.get(scope) ?? 0
+    if (now - last < Math.max(1, this.config.pokeReplyCooldownSec) * 1000) return false
+    this.lastPokeTurnAt.set(scope, now)
+    // 仍记录戳人者，便于之后该用户的消息走语境直达模型
+    this.recordPoke(scope, poker)
+    const time = Math.floor(now / 1000)
+    const event = this.syntheticEventForScope(scope)
+    event.user_id = poker
+    event.sender = { user_id: poker, nickname: nickname || 'QQ' + poker }
+    event.time = time
+    try {
+      this.db.insert(scope, {
+        message_id: null,
+        user_id: poker,
+        nickname: nickname || 'QQ' + poker,
+        card: '',
+        time,
+        reply_to: null,
+        text: '[戳一戳]',
+        segments: JSON.stringify([{ type: 'text', data: { text: '[戳一戳]' } }]),
+      })
+    } catch (e) {
+      this.log('戳一戳入库失败:', e)
+    }
+    const entry = await this.ensureSession(scope, event)
+    if (!entry) return false
+    const prompt = this.buildPrompt(event, 'poke', nickname || 'QQ' + poker)
+    if (!prompt) return false
+    await this.prompt(entry.sessionId, prompt)
+    this.log('戳一戳已交给模型 scope=' + scope + ' poker=' + poker)
+    return true
+  }
+
   // 语境自动回复：被戳后/机器人刚发言后的窗口内，直接交给模型判断要不要回（不走判官）
   private tryContextReply(scope: string, event: OB11MessageEvent, segments: MsgSegment[]): { note: string } | null {
     const cfg = this.config
@@ -564,7 +679,7 @@ export class SessionController {
     return out.slice(-limit).map((x) => x.line)
   }
 
-  private buildPrompt(event: OB11MessageEvent, mode: 'normal' | 'proactive' | 'context' = 'normal', contextNote = ''): string {
+  private buildPrompt(event: OB11MessageEvent, mode: 'normal' | 'proactive' | 'context' | 'poke' = 'normal', contextNote = ''): string {
     const proactive = mode !== 'normal'
     const scope = event.message_type === 'group' ? `group-${event.group_id}` : `private-${event.user_id}`
     const now = Math.floor(Date.now() / 1000)
@@ -621,8 +736,9 @@ export class SessionController {
       }
     }
     if (proactive) {
-      // 主动参与：当前消息只是普通聊天记录，不进入「待回应清单」
-      context = [...context, { mid: currentId ?? 0, line: currentLine }].slice(-this.config.contextMessageCount)
+      // 主动参与/语境/戳一戳：当前消息只是普通聊天记录，不进入「待回应清单」
+      // 戳一戳是虚拟事件（已入库，message_id 为空），不能把空行塞进上下文
+      if (currentId !== null) context = [...context, { mid: currentId, line: currentLine }].slice(-this.config.contextMessageCount)
     } else {
       pending.push({ id: currentId, userId: event.user_id ?? 0, line: currentLine })
       this.pendingRequests.set(scope, pending)
@@ -634,7 +750,13 @@ export class SessionController {
     const week = '日一二三四五六'[d.getDay()]
     parts.push(`[当前时间] ${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())} 星期${week}（以此为准，下面消息前面的方括号是它们的发送时间）`)
     if (context.length > 0) parts.push('[新的聊天记录]\n' + context.map((c) => c.line).join('\n'))
-    if (mode === 'context') {
+    if (mode === 'poke') {
+      parts.unshift(
+        '[系统] 刚刚 ' + contextNote + ' 戳了你一下（聊天记录里的 [戳一戳]）。' +
+          '你可以：用 qqbot_send_message 回一句话；用 qqbot_send_poke 反戳回去；或者都不做、只输出 [SILENT] 保持沉默。' +
+          '按你平时的性格自然决定，不用每次都被戳就一定要回应。'
+      )
+    } else if (mode === 'context') {
       parts.unshift(
         '[系统] 这条消息没有@你，但系统注意到：' + contextNote + '。' +
           '判断一下是不是在跟你说话/接你的话：如果是、想说就正常调用发送工具回复；' +
@@ -674,6 +796,9 @@ export class SessionController {
       await this.sendText(event, '停了停了')
       return
     }
+
+    // 模型正在用 qqbot_wait_for_messages 等消息：新消息只入库，由等待结果交给模型
+    if (this.waitScopes.has(scope)) return
 
     const triggered = this.isTriggered(event, segments)
     let promptMode: 'normal' | 'proactive' | 'context' = 'normal'
