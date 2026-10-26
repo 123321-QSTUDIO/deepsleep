@@ -9,6 +9,7 @@ import { SessionController } from './sessions'
 import { TaskRec, TaskRegistry } from './tasks'
 import { MuteStore } from './mutes'
 import { StickerStore } from './stickers'
+import { ReminderStore } from './reminders'
 
 interface McpDeps {
   config: PluginConfig
@@ -17,6 +18,7 @@ interface McpDeps {
   tasks: TaskRegistry
   mutes: MuteStore
   stickers: StickerStore
+  reminders: ReminderStore
   enqueueTask: (rec: TaskRec) => void
   log: (msg: string, ...args: unknown[]) => void
 }
@@ -193,6 +195,68 @@ export class QqMcpServer {
         } catch (e) {
           return text('戳一戳失败: ' + String((e as Error)?.message ?? e))
         }
+      }
+    )
+
+    mcp.registerTool(
+      'set_reminder',
+      {
+        description: '设置一个倒计时提醒，到时间系统会自动在群里/私聊发出提醒。适合“X 分钟后提醒我/大家”的请求；也可以用来自我提醒过多久再跟进某件事。',
+        inputSchema: {
+          minutes: z.number().describe('多少分钟后提醒，大于 0，最多 reminderMaxDays 天'),
+          text: z.string().describe('提醒内容'),
+          at_qq: z.string().optional().describe('要@的 QQ 号；群聊里建议填发起人，到点会 @ta'),
+        },
+      },
+      async ({ minutes, text: reminderText, at_qq }) => {
+        if (!scope) return text('错误: 未知对话上下文')
+        if (taskMode) return text('错误: 沙箱任务中不能设置提醒')
+        const cfg = this.deps.config
+        if (!cfg.remindersEnabled) return text('错误: 定时提醒未启用')
+        const mins = Number(minutes)
+        if (!Number.isFinite(mins) || mins <= 0) return text('错误: minutes 必须大于 0')
+        const maxMinutes = Math.max(1, cfg.reminderMaxDays) * 1440
+        if (mins > maxMinutes) return text('错误: 提醒最多 ' + maxMinutes + ' 分钟（' + cfg.reminderMaxDays + ' 天）')
+        const content = String(reminderText ?? '').trim()
+        if (!content) return text('错误: 提醒内容不能为空')
+        if (this.deps.reminders.pendingCount(scope) >= Math.max(1, cfg.reminderMaxPerScope)) {
+          return text('错误: 这个会话待触发的提醒太多（上限 ' + cfg.reminderMaxPerScope + ' 条），先取消一些')
+        }
+        const rem = this.deps.reminders.add({
+          scope,
+          text: content,
+          dueAt: Date.now() / 1000 + mins * 60,
+          atUserId: at_qq ? Number(at_qq) : undefined,
+        })
+        return text('已设置提醒 ' + rem.id + '：约 ' + mins + ' 分钟后' + (rem.atUserId ? '（会 @' + rem.atUserId + '）' : ''))
+      }
+    )
+
+    mcp.registerTool(
+      'list_reminders',
+      {
+        description: '查看当前会话还没触发的定时提醒。',
+        inputSchema: {},
+      },
+      async () => {
+        if (!scope) return text('错误: 未知对话上下文')
+        const list = this.deps.reminders.pendingOfScope(scope)
+        if (list.length === 0) return text('当前没有待触发的提醒')
+        return text(JSON.stringify(list.map((r) => ({ id: r.id, inMinutes: Math.max(0, Math.round((r.dueAt - Date.now() / 1000) / 60)), text: r.text, atUserId: r.atUserId }))))
+      }
+    )
+
+    mcp.registerTool(
+      'cancel_reminder',
+      {
+        description: '取消一个还没触发的定时提醒（用 list_reminders 拿到的 id）。',
+        inputSchema: { id: z.string().describe('提醒 id') },
+      },
+      async ({ id }) => {
+        if (!scope) return text('错误: 未知对话上下文')
+        const rem = this.deps.reminders.cancel(String(id), scope)
+        if (!rem) return text('没有找到这个待触发的提醒（可能已触发或已取消）')
+        return text('已取消提醒 ' + rem.id)
       }
     )
 

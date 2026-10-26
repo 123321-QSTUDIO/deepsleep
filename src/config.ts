@@ -48,6 +48,11 @@ export interface PluginConfig {
   proactiveJudgeModel: string
   proactiveJudgeApiKey: string
   proactiveJudgeTimeoutSec: number
+  // 定时提醒：机器人可自设倒计时，系统到点投递
+  remindersEnabled: boolean
+  reminderCheckSec: number
+  reminderMaxPerScope: number
+  reminderMaxDays: number
   // 语音：TTS（MiMo，OpenAI 兼容接口）+ 入站语音转文字
   ttsEnabled: boolean
   ttsBaseUrl: string
@@ -111,6 +116,10 @@ export const defaultConfig: PluginConfig = {
   proactiveJudgeModel: '',
   proactiveJudgeApiKey: '',
   proactiveJudgeTimeoutSec: 3,
+  remindersEnabled: true,
+  reminderCheckSec: 5,
+  reminderMaxPerScope: 20,
+  reminderMaxDays: 7,
   ttsEnabled: false,
   ttsBaseUrl: 'https://api.xiaomimimo.com/v1',
   ttsApiKey: '',

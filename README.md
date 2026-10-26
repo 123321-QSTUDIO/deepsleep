@@ -20,7 +20,7 @@ QQ群/私聊 ⇄ SnowLuma（QQ 网关；OneBot v11 WS）
                 ├─ 消息收发（OneBot WS 事件 / send_msg）
                 ├─ 消息库：每群/每人每天一个 SQLite（sql.js WASM）
                 ├─ Session 控制器 → 本机 opencode serve（每群/每人一个持久 session）
-                ├─ MCP Server（HTTP+Bearer，共 13 个工具，含收藏表情包）
+                ├─ MCP Server（HTTP+Bearer，共 16 个工具，含收藏表情包）
                 │   模型可见名带 qqbot_ 前缀，MCP 服务注册名不变
                 ├─ 控制面板（WebUI）：改配置 / 看会话 / 操作 Session，与服务同进程
                 ├─ 梦境记忆：每晚 fork 会话整理 MEMORY.md（instructions 注入）→ 原子替换
@@ -92,6 +92,7 @@ node smoke14.mjs         # 冒烟：模型目录/免费标记/一键切换所有
 node smoke15.mjs         # 冒烟：重复发送/重复入站消息防重（mock opencode，离线）
 node smoke16.mjs         # 冒烟：戳一戳 / TTS 发语音 / 语音 ASR（mock opencode + mock TTS，离线）
 node smoke17.mjs         # 冒烟：主动参与判官 / SILENT / 启发式兜底 / 节流（mock opencode + mock judge，离线）
+node smoke18.mjs         # 冒烟：定时提醒持久化 / 到点投递 / 列表取消（mock opencode，离线）
 node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 ```
 

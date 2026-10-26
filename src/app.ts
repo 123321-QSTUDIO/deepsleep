@@ -14,6 +14,7 @@ import { StickerStore } from './stickers'
 import { TtsClient } from './tts'
 import { VoiceStore } from './voices'
 import { ProactiveJudge } from './proactive'
+import { ReminderScheduler, ReminderStore } from './reminders'
 import { AppLogger, OB11MessageEvent, OutboundActions } from './types'
 
 // 独立服务形态的组装层：main.ts（CLI 入口）与冒烟测试共用
@@ -97,6 +98,15 @@ export async function createApp(options: AppOptions): Promise<App> {
   const judge = new ProactiveJudge(config, (m, ...x) => logger.warn(m, ...x))
   sessions.attachVoice(tts, voices)
   sessions.attachJudge(judge)
+  const reminders = new ReminderStore(options.dataPath, (m, ...x) => logger.warn(m, ...x))
+  const reminderScheduler = new ReminderScheduler(
+    reminders,
+    (scope, text) => sessions.sendTextToScope(scope, text),
+    () => config.remindersEnabled,
+    config.reminderCheckSec,
+    (m, ...a) => logger.info(m, ...a)
+  )
+  reminderScheduler.start()
   const mcp = new QqMcpServer({
     config,
     db,
@@ -104,6 +114,7 @@ export async function createApp(options: AppOptions): Promise<App> {
     tasks,
     mutes: sessions.mutes,
     stickers,
+    reminders,
     enqueueTask: (rec) => executor.enqueue(rec),
     log: (m, ...a) => logger.warn(m, ...a),
   })
@@ -204,6 +215,7 @@ export async function createApp(options: AppOptions): Promise<App> {
     if (stopped) return
     stopped = true
     active = false
+    reminderScheduler.stop()
     clearInterval(reminderTimer)
     dream.stop()
     panel.stop()
