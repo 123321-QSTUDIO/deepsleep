@@ -280,11 +280,8 @@ export class SessionController {
   async deliverReminder(scope: string, text: string, fallbackText: string): Promise<'agent'> {
     const entry = await this.ensureSession(scope, this.syntheticEventForScope(scope))
     if (!entry) throw new Error('会话建立失败')
-    const isGroup = scope.startsWith('group-')
-    const notice =
-      '[系统提醒] 你之前设置的定时提醒到时间了：' + text + '。' +
-      '请用 qqbot_send_message 发一条自然、简短的提醒' + (isGroup ? '到群里' : '给对方') +
-      '，用你平时的语气，不要说“系统提醒/定时任务”之类的话，也不要输出 [SILENT]。'
+    // 只把提醒内容交给模型，怎么处理由它结合上下文决定
+    const notice = '[系统提醒] 你之前设置的定时提醒到时间了：' + text
     const injectedAt = Math.floor(Date.now() / 1000)
     await this.prompt(entry.sessionId, notice)
     const timer = setTimeout(() => {
