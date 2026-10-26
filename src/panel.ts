@@ -90,6 +90,7 @@ const FIELDS: FieldDef[] = [
   { key: 'ttsFormat', label: 'ttsFormat（音频格式）', group: '语音', type: 'string', help: 'mp3 / wav；网关会转成 QQ 语音格式' },
   { key: 'ttsDefaultVoice', label: 'ttsDefaultVoice（默认音色描述）', group: '语音', type: 'string', help: '每个群可以用 qqbot_set_voice 覆盖；这里是没有单独设置时用的声音' },
   { key: 'ttsMaxChars', label: 'ttsMaxChars（语音最大字数）', group: '语音', type: 'number', min: 1 },
+  { key: 'voiceSendBase64', label: 'voiceSendBase64（Base64 发送语音）', group: '语音', type: 'boolean', help: '开启后用 base64:// 发送语音，WS 连远端网关也能用；关闭则发本地文件路径（仅同机网关可用）' },
   { key: 'ttsTimeoutSec', label: 'ttsTimeoutSec（TTS 超时秒数）', group: '语音', type: 'number', min: 10 },
   { key: 'voiceAsrEnabled', label: 'voiceAsrEnabled（入站语音转文字）', group: '语音', type: 'boolean', help: '收到语音时尝试用网关 fetch_ptt_text 取 QQ 转写结果；失败则只显示 [语音]' },
   { key: 'autoApprovePermissions', label: 'autoApprovePermissions（自动批准权限请求）', group: '权限与安全', type: 'boolean', help: 'OpenCode 首次调用搜索/网络等工具会弹权限确认；开启后服务端自动回应，避免会话卡住' },

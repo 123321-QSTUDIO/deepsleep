@@ -72,6 +72,8 @@ export interface PluginConfig {
   ttsDefaultVoice: string
   ttsMaxChars: number
   ttsTimeoutSec: number
+  // 语音发送：base64 可跨 WS 远端网关，file 仅网关与本机同机时可用
+  voiceSendBase64: boolean
   voiceAsrEnabled: boolean
   // 梦境记忆：每晚 fork 会话整理 MEMORY.md，然后压缩原 session
   dreamMemoryEnabled: boolean
@@ -146,6 +148,7 @@ export const defaultConfig: PluginConfig = {
   ttsDefaultVoice: '青年女性，语气轻快自然，像群聊里熟络的朋友，语速稍快，情绪松弛。',
   ttsMaxChars: 200,
   ttsTimeoutSec: 90,
+  voiceSendBase64: true,
   voiceAsrEnabled: true,
   dreamMemoryEnabled: true,
   dreamMemoryHour: 4,

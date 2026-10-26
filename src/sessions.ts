@@ -1038,10 +1038,17 @@ export class SessionController {
     if (trimmed.length > max) throw new Error('语音文本过长（最多 ' + max + ' 字，当前 ' + trimmed.length + ' 字）')
     const voice = this.voiceOf(scope)
     const { buffer, format } = await this.tts.synthesize(trimmed, voice)
-    const dir = path.join(this.dataPath, 'tts-tmp')
-    fs.mkdirSync(dir, { recursive: true })
-    const file = path.join(dir, 'tts-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + format)
-    fs.writeFileSync(file, buffer)
+    // WS 可能连远端网关，本地文件路径在远端不可读；默认走 base64 内联音频
+    const useBase64 = this.config.voiceSendBase64 !== false
+    let file = 'base64://' + buffer.toString('base64')
+    let tempFile = ''
+    if (!useBase64) {
+      const dir = path.join(this.dataPath, 'tts-tmp')
+      fs.mkdirSync(dir, { recursive: true })
+      tempFile = path.join(dir, 'tts-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + format)
+      fs.writeFileSync(tempFile, buffer)
+      file = tempFile
+    }
     const params: Record<string, unknown> = { message: [{ type: 'record', data: { file } }] }
     if (scope.startsWith('group-')) {
       params.message_type = 'group'
@@ -1056,10 +1063,12 @@ export class SessionController {
       this.lastSent.set(scope, { text: '[语音]', at: Date.now() })
       await this.delay()
     } finally {
-      try {
-        fs.unlinkSync(file)
-      } catch {
-        // 临时音频清理失败不影响已发送
+      if (tempFile) {
+        try {
+          fs.unlinkSync(tempFile)
+        } catch {
+          // 临时音频清理失败不影响已发送
+        }
       }
     }
   }
