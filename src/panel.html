@@ -3593,9 +3593,12 @@ async function saveConfig(){
     var applied=Array.isArray(res.applied)?res.applied:[];
     var restart=Array.isArray(res.restartRequired)?res.restartRequired:[];
     var ignored=Array.isArray(res.ignored)?res.ignored:[];
-    var msg='配置已保存 · '+applied.length+' 项立即生效';
-    if(restart.length) msg+=' · 需重启：'+keyLabels(restart).join('、');
-    if(ignored.length) msg+=' · 已忽略：'+keyLabels(ignored).join('、');
+    var parts=[];
+    if(applied.length) parts.push(applied.length+' 项立即生效');
+    if(restart.length) parts.push('需重启：'+keyLabels(restart).join('、'));
+    if(ignored.length) parts.push('已忽略：'+keyLabels(ignored).join('、'));
+    var msg='配置已保存'+(parts.length?' · '+parts.join(' · '):'');
+    if(!applied.length&&!restart.length&&!ignored.length) msg='配置没有变化';
     toast(msg,restart.length?'warning':'success',restart.length?7200:4200);
     renderConfig();
   }catch(err){

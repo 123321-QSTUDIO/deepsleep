@@ -763,6 +763,11 @@ export class ControlPanel {
     if (errors.length > 0) return { error: errors.join('; ') }
     const keys = Object.keys(patch)
     if (keys.length === 0) return { error: '没有可保存的配置项', ignored }
+    // 只把真正变化的值算进 applied/restartRequired：面板保存时会提交整个表单，
+    // 未改动的字段不能让提示里冒出一堆“需重启”
+    const current = this.deps.config as unknown as Record<string, unknown>
+    const changedKeys = keys.filter((k) => JSON.stringify(patch[k]) !== JSON.stringify(current[k]))
+    if (changedKeys.length === 0) return { saved: true, applied: [], restartRequired: [], ignored, changed: 0, config: { ...this.deps.config, dockerEnv: { ...this.deps.config.dockerEnv } } }
     Object.assign(this.deps.config, patch)
     let file = ''
     try {
@@ -770,14 +775,15 @@ export class ControlPanel {
     } catch (e) {
       return { error: `写配置文件失败: ${(e as Error)?.message ?? e}` }
     }
-    const restartRequired = keys.filter((k) => RESTART_KEYS.has(k as keyof PluginConfig))
-    const applied = keys.filter((k) => !RESTART_KEYS.has(k as keyof PluginConfig))
+    const restartRequired = changedKeys.filter((k) => RESTART_KEYS.has(k as keyof PluginConfig))
+    const applied = changedKeys.filter((k) => !RESTART_KEYS.has(k as keyof PluginConfig))
     this.deps.log(`控制面板保存配置: applied=[${applied.join(',')}] restart=[${restartRequired.join(',')}]`)
     return {
       saved: true,
       file,
       applied,
       restartRequired,
+      changed: changedKeys.length,
       ignored,
       config: { ...this.deps.config, dockerEnv: { ...this.deps.config.dockerEnv } },
     }
