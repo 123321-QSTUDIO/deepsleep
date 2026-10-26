@@ -73,7 +73,7 @@ export class QqMcpServer {
     mcp.registerTool(
       'send_message',
       {
-        description: '发送一条消息到当前QQ对话（群或私聊）。想发几条就调几次；普通聊天尽量短，解释类可适当加长。可以用[CQ:at,qq=QQ号]@人、[CQ:face,id=数字]发表情。',
+        description: '发送一条消息到当前QQ对话（群或私聊）。想发几条就调几次；普通聊天尽量短，解释类可适当加长。可以用[CQ:at,qq=QQ号]@人；内置小黄脸用[CQ:face,id=数字]写在文本里（收藏表情包不能用文本/CQ码，必须用 qqbot_send_sticker）。',
         inputSchema: {
           text: z.string().describe('消息内容；普通闲聊尽量简短，解释类可适当加长，超长会收到警告'),
           reply_to: z.string().optional().describe('要引用的消息ID（回复某条消息时用）'),
@@ -127,7 +127,7 @@ export class QqMcpServer {
     mcp.registerTool(
       'send_sticker',
       {
-        description: '发送当前 QQ 账号收藏的表情包（比普通表情更生动）。先用 qqbot_list_stickers 找 id（同名表情看 display 的合集名前缀）；一次回复最多发 1-2 个，别刷屏。',
+        description: '发送一个**收藏表情包**（不是内置小黄脸；内置小黄脸用 [CQ:face,id=] 写在 send_message 文本里）。id 见系统提示的收藏表情列表或 qqbot_list_stickers；一次回复最多 1-2 个，别刷屏。',
         inputSchema: {
           sticker: z.string().describe('收藏表情的 emoji_id（来自 qqbot_list_stickers）或 32 位 MD5'),
           reply_to: z.string().optional().describe('要引用的消息ID，可选'),

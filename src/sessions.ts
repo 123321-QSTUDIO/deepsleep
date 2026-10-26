@@ -10,6 +10,7 @@ import { OB11MessageEvent, SessionRuntime } from './types'
 import { TtsClient } from './tts'
 import { ProactiveJudge } from './proactive'
 import { VoiceStore } from './voices'
+import { StickerStore } from './stickers'
 
 function extractPttText(result: unknown): string {
   if (!result) return ''
@@ -78,6 +79,7 @@ export class SessionController {
   private tts: TtsClient | null = null
   private voices: VoiceStore | null = null
   private judge: ProactiveJudge | null = null
+  private stickers: StickerStore | null = null
   // 主动参与：新消息计数 / 上次尝试 / 近一小时尝试时间戳
   private proactiveNewCount = new Map<string, number>()
   private proactiveLastAt = new Map<string, number>()
@@ -113,6 +115,10 @@ export class SessionController {
 
   attachJudge(judge: ProactiveJudge) {
     this.judge = judge
+  }
+
+  attachStickers(store: StickerStore) {
+    this.stickers = store
   }
 
   // 记录谁戳了机器人：之后一小段时间内该用户的消息直接交给模型判断
@@ -354,10 +360,12 @@ export class SessionController {
     const directory = this.workspaceFor(scope)
     fs.mkdirSync(directory, { recursive: true })
     const vision = await this.visionStrategy()
+    // 内置小黄脸和收藏表情都注入：小黄脸用 CQ 码，收藏表情只走 qqbot_send_sticker
+    const stickerList = (this.stickers?.listForAgent() ?? []).map((s) => ({ id: s.id, display: s.display }))
     const agentsMd =
       event.message_type === 'group'
-        ? buildGroupAgentsMd(this.config, String(event.group_id), event.group_name ?? '', vision)
-        : buildPrivateAgentsMd(this.config, String(event.user_id), event.sender?.nickname ?? '', vision)
+        ? buildGroupAgentsMd(this.config, String(event.group_id), event.group_name ?? '', vision, stickerList)
+        : buildPrivateAgentsMd(this.config, String(event.user_id), event.sender?.nickname ?? '', vision, stickerList)
     // 只有主模型没有视觉能力时才注册 vision-bridge 子代理；多模态主模型直接读图
     const ocConfig: Record<string, unknown> = {
       $schema: 'https://opencode.ai/config.json',

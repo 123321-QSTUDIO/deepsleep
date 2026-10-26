@@ -98,6 +98,7 @@ export async function createApp(options: AppOptions): Promise<App> {
   const judge = new ProactiveJudge(config, (m, ...x) => logger.warn(m, ...x))
   sessions.attachVoice(tts, voices)
   sessions.attachJudge(judge)
+  sessions.attachStickers(stickers)
   const reminders = new ReminderStore(options.dataPath, (m, ...x) => logger.warn(m, ...x))
   const reminderScheduler = new ReminderScheduler(
     reminders,

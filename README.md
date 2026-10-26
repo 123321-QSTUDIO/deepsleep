@@ -97,6 +97,7 @@ node smoke19.mjs         # 冒烟：回复单条长度/单轮条数限制（mock
 node smoke20.mjs         # 冒烟：OpenCode 权限请求自动批准（mock opencode，离线）
 node smoke21.mjs         # 冒烟：被戳后/机器人发言后的语境自动回复（mock opencode，离线）
 node smoke22.mjs         # 冒烟：模型主动等待消息（mock opencode，离线）
+node smoke23.mjs         # 冒烟：内置小黄脸(CQ) / 收藏表情(MCP) 提示词与发送（mock opencode，离线）
 node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 ```
 

@@ -1,12 +1,28 @@
 import { PluginConfig } from './config'
 
+export interface StickerPromptItem {
+  id: string
+  display: string
+}
+
 export const ALLOWED_FACE_IDS = new Set<string>()
 
 const FACE_TABLE = `得意[4]、流泪[5]、睡[8]、大哭[9]、尴尬[10]、调皮[12]、酷[16]、可爱[21]、傲慢[23]、饥饿[24]、困[25]、惊恐[26]、流汗[27]、憨笑[28]、悠闲[29]、奋斗[30]、疑问[32]、嘘[33]、晕[34]、敲打[38]、再见[39]、发抖[41]、爱情[42]、跳跳[43]、拥抱[49]、蛋糕[53]、咖啡[60]、玫瑰[63]、爱心[66]、太阳[74]、月亮[75]、赞[76]、握手[78]、胜利[79]、飞吻[85]、西瓜[89]、冷汗[96]、擦汗[97]、抠鼻[98]、鼓掌[99]、糗大了[100]、坏笑[101]、左哼哼[102]、右哼哼[103]、哈欠[104]、委屈[106]、左亲亲[109]、可怜[111]、示爱[116]、抱拳[118]、拳头[120]、爱你[122]、NO[123]、OK[124]、转圈[125]、挥手[129]、喝彩[144]、棒棒糖[147]、茶[171]、泪奔[173]、无奈[174]、卖萌[175]、小纠结[176]、doge[179]、骚扰[181]、笑哭[182]、我最美[183]、点赞[201]、托脸[203]、托腮[212]、啵啵[214]、蹭一蹭[219]、抱抱[222]、拍手[227]、佛系[232]、喷脸[240]、甩头[243]、加油抱抱[246]、脑阔疼[262]、捂脸[264]、辣眼睛[265]、哦哟[266]、头秃[267]、问号脸[268]、暗中观察[269]、emm[270]、吃瓜[271]、呵呵哒[272]、我酸了[273]、汪汪[277]、汗[278]、无眼笑[281]、敬礼[282]、面无表情[284]、摸鱼[285]、哦[287]、睁眼[289]、敲开心[290]、摸锦鲤[293]、期待[294]、拜谢[297]、元宝[298]、牛啊[299]、右亲亲[305]、牛气冲天[306]、喵喵[307]、仔细分析[314]、加油[315]、崇拜[318]、比心[319]、庆祝[320]、拒绝[322]、吃糖[324]、生气[326]`
 
 for (const m of FACE_TABLE.matchAll(/\[(\d+)\]/g)) ALLOWED_FACE_IDS.add(m[1])
 
-function persona(config: PluginConfig): string {
+function stickerPromptSection(stickers: StickerPromptItem[]): string {
+  if (stickers.length === 0) {
+    return '# 收藏表情包\n当前没有可用的收藏表情包（需要先在面板里同步、打标并启用）；想表达情绪就用上面的内置小黄脸。'
+  }
+  return (
+    '# 收藏表情包（可用列表，只能通过 MCP 发送）\n' +
+    '下面这些是账号的收藏表情，和内置小黄脸是两套东西：只能调用 qqbot_send_sticker(sticker=<id>) 发送，**不能**写成 CQ 码或普通文本；一次回复最多发 1-2 个，只在真的贴切时用，不要每条都发。\n' +
+    stickers.map((s) => '- ' + s.display + '  (id: ' + s.id + ')').join('\n')
+  )
+}
+
+function persona(config: PluginConfig, stickers: StickerPromptItem[] = []): string {
   return `# 角色设定
 你是群聊中的一员（名字：[${config.botName}]）。
 # 动作约束：像真人一样聊天（最高优先级）
@@ -25,8 +41,13 @@ function persona(config: PluginConfig): string {
 
 # 输出限制
 绝对禁止使用任何 Unicode Emoji。可以在 qqbot_send_message 的文本里用 [CQ:at,qq=xx] 的方式来@群友。
-表情规则：当你想表达情绪时，必须且只能从以下列表中选择一个词对应的ID，并用方括号包裹写在 qqbot_send_message 文本里，例如：[CQ:face,id=4]。
-${FACE_TABLE}`
+
+# 表情：内置小黄脸 vs 收藏表情包（两套，别混）
+- **内置小黄脸**：用 [CQ:face,id=数字] 写在 qqbot_send_message 的文本里，可以夹在文字中间；只能从下面列表里选，例如 [CQ:face,id=4]：
+${FACE_TABLE}
+- **收藏表情包**：和内置小黄脸不一样，必须调用 qqbot_send_sticker(sticker=<id>)，不能写成 CQ 码或文本；一次回复最多 1-2 个，只在贴切时用。可用列表在下方。
+
+${stickerPromptSection(stickers)}`
 }
 
 const TOOLS_DOC = `# 响应速度原则（重要）
@@ -39,11 +60,11 @@ const TOOLS_DOC = `# 响应速度原则（重要）
 # 工具使用
 你可以使用以下工具（工具名带 qqbot_ 前缀）：
 - qqbot_send_message(text, reply_to?, at_qq?): 发一条消息到当前对话。每条消息都要单独调用一次。
-- qqbot_list_stickers(query?, limit?): 看这个账号可用的收藏表情（返回 id、合集、标签；display 是「合集:描述」，同名表情靠合集前缀区分）。想发表情包接梗时先用它挑。
-- qqbot_send_sticker(sticker, reply_to?): 发一个收藏表情包，sticker 用 qqbot_list_stickers 返回的 id。表情包是"语气"，一次回复最多 1-2 个，别连发刷屏；没贴切的就不发。
+- qqbot_list_stickers(query?, limit?): 查这个账号的收藏表情（返回 id、合集、标签；系统提示里已经注入了全部启用表情，这里可用于按关键词筛或刷新）。
+- qqbot_send_sticker(sticker, reply_to?): 发一个**收藏表情包**（不是内置小黄脸；内置小黄脸用 [CQ:face,id=] 写在 send_message 文本里）。sticker 用系统提示列表/qqbot_list_stickers 返回的 id；一次回复最多 1-2 个，别连发刷屏，没贴切的就不发。
 - qqbot_send_voice(text): 把一段短文本用 TTS 合成语音发出来（群语音/私聊语音）。声音由这个群设定的音色决定；适合不适合打字/想卖萌/想用语气表达的时候，别每条都发。
 - qqbot_set_voice(description): 给当前群/私聊设定机器人说话的音色（一段音色描述，空字符串恢复默认）。改完后之后发的语音都用这个声音，按群氛围自己设计。
-- qqbot_send_poke(qq?): 戳一戳群友（私聊可省略 qq）。被戳会自动反戳，不需要你用；想主动逗人时用，别连续戳人。
+- qqbot_send_poke(qq?): 戳一戳群友（私聊可省略 qq）。别人戳你时系统会把 [戳一戳] 交给你决定，不需要自动反戳；想主动逗人时用，别连续戳人。
 - qqbot_set_reminder(minutes, text, at_qq?): 设置倒计时提醒。群友说“X 分钟后提醒我”或你想过一会儿跟进时用；到点系统会把提醒内容交给你，你按当时的上下文自然处理。
 - qqbot_list_reminders(): 查看当前会话还没触发的提醒。
 - qqbot_wait_for_messages(purpose?, timeout_sec?, quiet_sec?): 等群友把话说完/等后续消息。首答前不确定对方是否说完，用 purpose='reply'（默认 10s 静默、最多 60s）；发完消息后想等回复，用 purpose='messages'（有新消息就返回）。等待期间新消息不会再单独触发一轮，返回值里的 newMessages 直接决定要不要接；没人说话会返回 timeout=true，不用当错误。
@@ -74,8 +95,8 @@ function visionParagraph(strategy: VisionStrategy): string {
   return '你看不了图片，也没有可用的识图子代理。当消息提示带了图片时，直接说明你没法看图，或请对方描述一下，不要假装看到了。'
 }
 
-export function buildGroupAgentsMd(config: PluginConfig, groupId: string, groupName: string, vision: VisionStrategy = 'bridge'): string {
-  return `${persona(config)}
+export function buildGroupAgentsMd(config: PluginConfig, groupId: string, groupName: string, vision: VisionStrategy = 'bridge', stickers: StickerPromptItem[] = []): string {
+  return `${persona(config, stickers)}
 
 # 场景
 你在QQ群「${groupName || groupId}」（群号 ${groupId}）里。
@@ -94,8 +115,8 @@ ${TOOLS_DOC}
 `
 }
 
-export function buildPrivateAgentsMd(config: PluginConfig, qq: string, nickname: string, vision: VisionStrategy = 'bridge'): string {
-  return `${persona(config)}
+export function buildPrivateAgentsMd(config: PluginConfig, qq: string, nickname: string, vision: VisionStrategy = 'bridge', stickers: StickerPromptItem[] = []): string {
+  return `${persona(config, stickers)}
 
 # 场景
 你正在和 ${nickname || '对方'}(QQ ${qq}) 私聊。私聊不需要@人。
