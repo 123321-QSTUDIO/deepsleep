@@ -5,6 +5,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod'
 import { PluginConfig } from './config'
 import { MsgDB, dayKey } from './msgdb'
+import { sanitizeOutgoingText } from './format'
 import { SessionController } from './sessions'
 import { TaskRec, TaskRegistry } from './tasks'
 import { MuteStore } from './mutes'
@@ -73,7 +74,7 @@ export class QqMcpServer {
     mcp.registerTool(
       'send_message',
       {
-        description: '发送一条消息到当前QQ对话（群或私聊）。想发几条就调几次；普通聊天尽量短，解释类可适当加长。可以用[CQ:at,qq=QQ号]@人；内置小黄脸用[CQ:face,id=数字]写在文本里（收藏表情包不能用文本/CQ码，必须用 qqbot_send_sticker）。',
+        description: '发送一条消息到当前QQ对话（群或私聊）。想发几条就调几次；普通聊天尽量短，解释类可适当加长。只发纯文本，不要用 <text> 等标签包裹或加多余换行。可以用[CQ:at,qq=QQ号]@人；内置小黄脸用[CQ:face,id=数字]写在文本里（收藏表情包不能用文本/CQ码，必须用 qqbot_send_sticker）。',
         inputSchema: {
           text: z.string().describe('消息内容；普通闲聊尽量简短，解释类可适当加长，超长会收到警告'),
           reply_to: z.string().optional().describe('要引用的消息ID（回复某条消息时用）'),
@@ -86,13 +87,15 @@ export class QqMcpServer {
         const cfg = this.deps.config
         const maxChars = Math.max(20, cfg.maxCharsPerMessage || 200)
         const maxLines = Math.max(1, cfg.maxLinesPerReply || 4)
+        const content = sanitizeOutgoingText(String(t ?? ''))
+        if (!content) return text('错误: 消息内容为空')
         const countBefore = sessions.toolSendCountOfScope(scope)
-        await sessions.sendTextToScope(scope, t, { replyTo: reply_to, atQq: at_qq })
+        await sessions.sendTextToScope(scope, content, { replyTo: reply_to, atQq: at_qq })
         sessions.markSentByScope(scope)
         // 不拦截发送，只在工具结果里提醒模型自己收敛，避免回复戛然而止
         const notes: string[] = []
-        if (t.length > maxChars) {
-          notes.push('这条消息偏长（' + t.length + ' 字，建议单条不超过 ' + maxChars + ' 字），之后请精简或拆成几条')
+        if (content.length > maxChars) {
+          notes.push('这条消息偏长（' + content.length + ' 字，建议单条不超过 ' + maxChars + ' 字），之后请精简或拆成几条')
         }
         const countAfter = countBefore + 1
         const pendingPeople = sessions.pendingCountOfScope(scope)

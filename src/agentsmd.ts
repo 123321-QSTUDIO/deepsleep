@@ -41,6 +41,7 @@ function persona(config: PluginConfig, stickers: StickerPromptItem[] = []): stri
 
 # 输出限制
 绝对禁止使用任何 Unicode Emoji。可以在 qqbot_send_message 的文本里用 [CQ:at,qq=xx] 的方式来@群友。
+发送给群里的内容必须是纯文本：不要用 <text>、</text> 或其它 XML/HTML 标签包裹，也不要在末尾加多余换行；直接写要说的话。
 
 # 表情：内置小黄脸 vs 收藏表情包（两套，别混）
 - **内置小黄脸**：用 [CQ:face,id=数字] 写在 qqbot_send_message 的文本里，可以夹在文字中间；只能从下面列表里选，例如 [CQ:face,id=4]：

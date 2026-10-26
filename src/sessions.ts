@@ -4,7 +4,7 @@ import { PluginConfig } from './config'
 import { MsgDB, dayKey } from './msgdb'
 import { OpencodeClient, OpencodeEvent, OcPromptFile } from './opencode'
 import { buildGroupAgentsMd, buildPrivateAgentsMd, ALLOWED_FACE_IDS, VisionStrategy } from './agentsmd'
-import { cleanCqForDisplay, dedupeImages, extractAtTargets, extractImages, extractImagesFromRaw, extractReplyTo, extractText, MsgSegment, textToSegments } from './format'
+import { cleanCqForDisplay, dedupeImages, extractAtTargets, extractImages, extractImagesFromRaw, extractReplyTo, extractText, MsgSegment, sanitizeOutgoingText, textToSegments } from './format'
 import { MuteStore } from './mutes'
 import { OB11MessageEvent, SessionRuntime } from './types'
 import { TtsClient } from './tts'
@@ -1458,6 +1458,8 @@ export class SessionController {
   }
 
   async sendText(event: OB11MessageEvent, text: string): Promise<void> {
+    text = sanitizeOutgoingText(text)
+    if (!text) return
     const params: Record<string, unknown> = { message_type: event.message_type, message: text }
     if (event.message_type === 'group' && event.group_id) params.group_id = String(event.group_id)
     if (event.message_type === 'private' && event.user_id) params.user_id = String(event.user_id)
@@ -1496,6 +1498,11 @@ export class SessionController {
   }
 
   private async doSendToScope(scope: string, text: string, opts?: { replyTo?: number | string; atQq?: number | string }): Promise<void> {
+    text = sanitizeOutgoingText(text)
+    if (!text) {
+      this.log('忽略空消息(' + scope + ')')
+      return
+    }
     const previous = this.lastSent.get(scope)
     if (previous && previous.text === text && Date.now() - previous.at < SessionController.DUPLICATE_SEND_WINDOW_MS) {
       this.log('忽略重复发送(' + scope + '): ' + text.slice(0, 40))

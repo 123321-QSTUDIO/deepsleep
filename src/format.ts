@@ -73,7 +73,18 @@ export function extractImagesFromRaw(raw: string): { url: string; mime: string }
   return out
 }
 
+// 模型偶尔会把消息包成 <text>...</text>（或转义成 &lt;text&gt;），还可能带尾部换行；
+// 出站前统一清掉标签和多余空白，避免把标记当正文发到群里。
+export function sanitizeOutgoingText(text: string): string {
+  return text
+    .replace(/&lt;\/?text\s*&gt;/gi, '')
+    .replace(/<\/?text(?:\s[^>]*)?>/gi, '')
+    .replace(/^[\s\u200b]+|[\s\u200b]+$/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+}
+
 export function textToSegments(text: string): Record<string, unknown>[] {
+  text = sanitizeOutgoingText(text)
   const segs: Record<string, unknown>[] = []
   const re = /\[CQ:(at|face),(\w+)=([^\],]+)\]/g
   let last = 0
