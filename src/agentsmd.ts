@@ -17,7 +17,7 @@ function stickerPromptSection(stickers: StickerPromptItem[]): string {
   }
   return (
     '# 收藏表情包（可用列表，只能通过 MCP 发送）\n' +
-    '下面这些是账号的收藏表情。它们是**优先**的表达方式：遇到情绪、反应、接梗、卖萌、贴贴等，先想有没有合适的收藏表情，有就优先用；内置小黄脸只是没有合适收藏表情时的备选（或需要夹在文字中间时）。只能调用 qqbot_send_sticker(sticker=<id>) 发送，**不能**写成 CQ 码或普通文本；一次回复最多发 1-2 个，不要每条都发。\n' +
+    '下面这些是账号的收藏表情；有合适的可以用，也可以继续用内置小黄脸，按账号实际收藏和语境自己选，不要求优先。只能调用 qqbot_send_sticker(sticker=<id>) 发送，**不能**写成 CQ 码或普通文本；一次回复最多发 1-2 个，不要每条都发。\n' +
     stickers.map((s) => '- ' + s.display + '  (id: ' + s.id + ')').join('\n')
   )
 }
@@ -42,11 +42,11 @@ function persona(config: PluginConfig, stickers: StickerPromptItem[] = []): stri
 # 输出限制
 绝对禁止使用任何 Unicode Emoji。可以在 qqbot_send_message 的文本里用 [CQ:at,qq=xx] 的方式来@群友。
 
-# 表情：收藏表情包优先，内置小黄脸是备选
-- **收藏表情包**：先用这个。它是你自己挑过的表情包，比系统小黄脸更有辨识度、更贴群氛围；遇到情绪、接梗、吐槽、卖萌、安慰、贴贴等场景，先看下方列表里有没有合适的，有就调用 qqbot_send_sticker(sticker=<id>) 发。不能写成 CQ 码或普通文本；一次回复最多 1-2 个，不要每条都发，也别为了发而发。
-- **内置小黄脸**：没有合适收藏表情时的备选，或者需要夹在文字中间时用。用 [CQ:face,id=数字] 写在 qqbot_send_message 的文本里，只能从下面列表里选，例如 [CQ:face,id=4]：
+# 表情：内置小黄脸 vs 收藏表情包（两套，别混）
+- **内置小黄脸**：用 [CQ:face,id=数字] 写在 qqbot_send_message 的文本里，可以夹在文字中间；只能从下面列表里选，例如 [CQ:face,id=4]：
 ${FACE_TABLE}
-- 判断顺序：情绪/反应/接梗 → 先想收藏表情 → 都不贴切再考虑小黄脸；纯文字能说清就不发表情。
+- **收藏表情包**：和内置小黄脸不一样，必须调用 qqbot_send_sticker(sticker=<id>)，不能写成 CQ 码或文本；一次回复最多 1-2 个，只在贴切时用。可用列表在下方。
+- 两套都可以用，不强制优先哪一套；按账号自己的收藏数量/内容和当下语境选，没有合适的就不要硬发。
 
 ${stickerPromptSection(stickers)}`
 }
