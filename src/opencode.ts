@@ -38,6 +38,14 @@ export interface OcModelInfo {
   capabilities?: { tools?: boolean; input?: string[]; output?: string[] }
 }
 
+export interface OcPromptFile {
+  data: string
+  mime: string
+  source: { type: 'inline' }
+  name?: string
+  description?: string
+}
+
 export interface OcProviderInfo {
   id: string
   name?: string
@@ -119,8 +127,11 @@ export class OpencodeClient {
     await this.request('POST', `/api/session/${sessionId}/permission/${requestId}/reply`, message ? { decision, message } : { decision })
   }
 
-  async promptAsync(sessionId: string, text: string): Promise<void> {
-    await this.requestData('POST', `/api/session/${sessionId}/prompt`, { text })
+  async promptAsync(sessionId: string, text: string, files?: OcPromptFile[]): Promise<void> {
+    const body: Record<string, unknown> = { text }
+    // OpenCode V2 Prompt 支持内联图片附件：files: [{data(base64), mime, source:{type:'inline'}}]
+    if (files && files.length > 0) body.files = files
+    await this.requestData('POST', `/api/session/${sessionId}/prompt`, body)
   }
 
   async inject(sessionId: string, text: string): Promise<void> {

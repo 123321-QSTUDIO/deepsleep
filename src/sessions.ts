@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { PluginConfig } from './config'
 import { MsgDB, dayKey } from './msgdb'
-import { OpencodeClient, OpencodeEvent } from './opencode'
+import { OpencodeClient, OpencodeEvent, OcPromptFile } from './opencode'
 import { buildGroupAgentsMd, buildPrivateAgentsMd, ALLOWED_FACE_IDS, VisionStrategy } from './agentsmd'
 import { cleanCqForDisplay, dedupeImages, extractAtTargets, extractImages, extractImagesFromRaw, extractReplyTo, extractText, MsgSegment, textToSegments } from './format'
 import { MuteStore } from './mutes'
@@ -860,8 +860,8 @@ export class SessionController {
       ...extractImagesFromRaw(event.raw_message ?? ''),
       ...(replyTo !== null ? this.quotedImages(scope, replyTo) : []),
     ])
-    const imageNote = await this.downloadImages(entry.directory, images)
-    await this.prompt(entry.sessionId, imageNote ? prompt + imageNote : prompt)
+    const { note: imageNote, files: imageFiles } = await this.downloadImages(entry.directory, images)
+    await this.prompt(entry.sessionId, imageNote ? prompt + imageNote : prompt, imageFiles)
   }
 
   private quotedImages(scope: string, replyTo: number): { url: string; mime: string }[] {
@@ -885,33 +885,55 @@ export class SessionController {
     return []
   }
 
-  private async downloadImages(directory: string, images: { url: string; mime: string }[]): Promise<string> {
-    if (images.length === 0) return ''
+  // 下载图片：native 策略直接以 Prompt.files 内联附件发给模型；bridge/none 仍落盘并在文本里指路
+  private async downloadImages(
+    directory: string,
+    images: { url: string; mime: string }[]
+  ): Promise<{ note: string; files: OcPromptFile[] }> {
+    if (images.length === 0) return { note: '', files: [] }
     const inbox = path.join(directory, 'inbox')
     fs.mkdirSync(inbox, { recursive: true })
+    const strategy = await this.visionStrategy()
     const notes: string[] = []
+    const files: OcPromptFile[] = []
+    const failures: string[] = []
     for (const [i, img] of images.entries()) {
-      const name = `${Date.now()}-${i}.jpg`
+      const fallbackName = `inbox/${Date.now()}-${i}.jpg`
       try {
         const res = await fetch(img.url, { headers: { 'user-agent': 'Mozilla/5.0' } })
         if (!res.ok) throw new Error(`http ${res.status}`)
-        fs.writeFileSync(path.join(inbox, name), Buffer.from(await res.arrayBuffer()))
-        notes.push(`inbox/${name}`)
+        const buffer = Buffer.from(await res.arrayBuffer())
+        const mime = String(res.headers.get('content-type') ?? img.mime ?? 'image/jpeg').split(';')[0].trim() || 'image/jpeg'
+        const ext = mime.includes('png') ? 'png' : mime.includes('gif') ? 'gif' : mime.includes('webp') ? 'webp' : 'jpg'
+        const name = `inbox/${Date.now()}-${i}.${ext}`
+        fs.writeFileSync(path.join(directory, name), buffer)
+        if (strategy === 'native') {
+          const maxAttach = 8 * 1024 * 1024
+          if (buffer.length <= maxAttach) {
+            files.push({ data: buffer.toString('base64'), mime, source: { type: 'inline' }, name: `qq-image-${i + 1}.${ext}` })
+          } else {
+            failures.push('图片过大，未能作为附件发送（已存 ' + name + '）')
+          }
+        } else {
+          notes.push(name)
+        }
       } catch (e) {
         this.log('图片下载失败:', e)
-        notes.push('(图片下载失败)')
+        failures.push('图片下载失败')
+        if (strategy !== 'native') notes.push(fallbackName)
       }
     }
-    const strategy = await this.visionStrategy()
     if (strategy === 'native') {
-      return `\n[系统] 这条消息带了图片，已存到工作目录：${notes.join('、')}。你的模型支持图片输入，直接用 read 工具读取图片内容。`
+      const note = failures.length > 0 ? `\n[系统] 有图片处理失败：${failures.join('、')}` : ''
+      return { note, files }
     }
+    const detail = notes.length > 0 ? notes.join('、') : '(无可用图片)'
+    const extra = failures.length > 0 ? '（部分图片处理失败）' : ''
     if (strategy === 'bridge') {
-      return `\n[系统] 这条消息带了图片，已存到工作目录：${notes.join('、')}。用 subagent 工具调 vision-bridge 子代理读取图片内容后再回答。`
+      return { note: `\n[系统] 这条消息带了图片${extra}，已存到工作目录：${detail}。用 subagent 工具调 vision-bridge 子代理读取图片内容后再回答。`, files: [] }
     }
-    return `\n[系统] 这条消息带了图片，已存到工作目录：${notes.join('、')}。你当前没有可用的看图能力，回复里直接说明看不到图或请对方描述。`
+    return { note: `\n[系统] 这条消息带了图片${extra}，已存到工作目录：${detail}。你当前没有可用的看图能力，回复里直接说明看不到图或请对方描述。`, files: [] }
   }
-
   // 让模型看到收藏表情原图：把表情图片下载到当前会话工作区 inbox/，返回相对路径
   async prepareStickerImage(scope: string, ref: string): Promise<{ relPath: string; label: string; mime: string }> {
     if (!this.stickers) throw new Error('表情库未初始化')
@@ -996,8 +1018,8 @@ export class SessionController {
     })()
   }
 
-  async prompt(sessionId: string, text: string): Promise<void> {
-    await this.oc.promptAsync(sessionId, text)
+  async prompt(sessionId: string, text: string, files?: OcPromptFile[]): Promise<void> {
+    await this.oc.promptAsync(sessionId, text, files)
     this.watch(sessionId)
   }
 

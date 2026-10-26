@@ -88,7 +88,7 @@ export type VisionStrategy = 'native' | 'bridge' | 'none'
 
 function visionParagraph(strategy: VisionStrategy): string {
   if (strategy === 'native') {
-    return '你可以直接看图。当消息提示带了图片（已存到工作目录 inbox/ 下）时，用 read 工具读取图片文件，然后自然地聊图里的内容，就像你亲眼看到了一样（不要说"根据描述"之类的话）。'
+    return '你可以直接看图。群友发图片/表情时，图片会作为对话里的图片附件直接给你，直接看并自然地聊内容，就像你亲眼看到了一样（不要说"根据描述"之类的话）。如果附件缺失或你想再看原图，也可以读工作目录 inbox/ 下的文件。'
   }
   if (strategy === 'bridge') {
     return '你自己看不了图片。当消息提示带了图片（已存到工作目录 inbox/ 下）时，先用 subagent 工具调用 vision-bridge 子代理，把图片路径交给它，它会返回图片的文字描述，你再根据描述自然地聊图里的内容，就像你亲眼看到了一样（不要说「根据描述」之类的话）。'
