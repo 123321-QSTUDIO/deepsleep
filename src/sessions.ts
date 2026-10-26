@@ -353,6 +353,10 @@ export class SessionController {
       // instructions 是 session 级快照：新会话生效；已有会话在 compact 后重新读取
       instructions: ['./' + MEMORY_FILE],
       model: this.config.hostModel,
+      // 提前放行工具权限，减少运行中弹出确认（另有 permission.asked 自动回应兜底）
+      ...(this.config.autoApprovePermissions
+        ? { permissions: [{ action: '*', resource: '*', effect: 'allow' }] }
+        : {}),
       mcp: {
         servers: {
           qqbot: {
@@ -793,6 +797,10 @@ export class SessionController {
       if (typeof ev.data.text === 'string') this.onAssistantText(sessionId, ev.data.text)
       return
     }
+    if (ev.type === 'permission.asked') {
+      await this.handlePermissionAsked(ev.data)
+      return
+    }
     if (ev.type === 'session.execution.succeeded') {
       await this.onSessionIdle(sessionId)
       return
@@ -817,6 +825,39 @@ export class SessionController {
         this.toolSendsByScope.delete(scope)
       }
       this.sentViaTool.delete(sessionId)
+    }
+  }
+
+  // OpenCode 权限请求：服务端自动批准，避免首次搜索/联网等工具把会话卡在确认弹窗
+  private async handlePermissionAsked(data: Record<string, unknown>): Promise<void> {
+    const sessionId = typeof data.sessionID === 'string' ? data.sessionID : ''
+    const requestId = typeof data.id === 'string' ? data.id : ''
+    if (!sessionId || !requestId) return
+    if (!this.config.autoApprovePermissions) {
+      this.log('权限请求未自动批准（autoApprovePermissions=false）session=' + sessionId + ' action=' + String(data.action ?? ''))
+      return
+    }
+    let managed = !!this.reverse.get(sessionId)
+    if (!managed) {
+      // 子代理（如 vision-bridge）会有独立 session，但工作区仍在本服务数据目录下
+      try {
+        const info = await this.oc.getSessionInfo(sessionId)
+        const dir = info.location?.directory ?? ''
+        managed = !!dir && path.resolve(dir).startsWith(path.resolve(this.dataPath, 'workspaces'))
+      } catch {
+        managed = false
+      }
+    }
+    if (!managed) {
+      this.log('忽略非本服务会话的权限请求 session=' + sessionId + ' action=' + String(data.action ?? ''))
+      return
+    }
+    const decision: 'once' | 'always' = this.config.permissionAutoReply === 'once' ? 'once' : 'always'
+    try {
+      await this.oc.replyPermission(sessionId, requestId, decision)
+      this.log('已自动批准权限请求 request=' + requestId + ' action=' + String(data.action ?? '') + ' decision=' + decision)
+    } catch (e) {
+      this.log('自动批准权限失败 request=' + requestId + ':', e)
     }
   }
 

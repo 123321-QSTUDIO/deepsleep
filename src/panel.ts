@@ -92,6 +92,8 @@ const FIELDS: FieldDef[] = [
   { key: 'ttsMaxChars', label: 'ttsMaxChars（语音最大字数）', group: '语音', type: 'number', min: 1 },
   { key: 'ttsTimeoutSec', label: 'ttsTimeoutSec（TTS 超时秒数）', group: '语音', type: 'number', min: 10 },
   { key: 'voiceAsrEnabled', label: 'voiceAsrEnabled（入站语音转文字）', group: '语音', type: 'boolean', help: '收到语音时尝试用网关 fetch_ptt_text 取 QQ 转写结果；失败则只显示 [语音]' },
+  { key: 'autoApprovePermissions', label: 'autoApprovePermissions（自动批准权限请求）', group: '权限与安全', type: 'boolean', help: 'OpenCode 首次调用搜索/网络等工具会弹权限确认；开启后服务端自动回应，避免会话卡住' },
+  { key: 'permissionAutoReply', label: 'permissionAutoReply（批准方式）', group: '权限与安全', type: 'string', help: 'always=记住并长期允许（默认，少弹）；once=只批准这一次' },
   { key: 'remindersEnabled', label: 'remindersEnabled（定时提醒）', group: '定时提醒', type: 'boolean', help: '允许 Agent 用 qqbot_set_reminder 设置倒计时提醒' },
   { key: 'reminderMode', label: 'reminderMode（投递模式）', group: '定时提醒', type: 'string', help: 'agent=到点唤醒模型用自己的语气提醒（默认）；static=直接发固定文案' },
   { key: 'reminderCheckSec', label: 'reminderCheckSec（检查间隔秒）', group: '定时提醒', type: 'number', min: 1, help: '调度器多久检查一次到期提醒' },

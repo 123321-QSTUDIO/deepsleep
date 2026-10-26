@@ -312,6 +312,7 @@ schtasks /create /tn "qqbot-svc" /sc onlogon /rl highest /f `
 - 本机直接打开 <http://127.0.0.1:5101/>（服务器上则用 SSH 隧道：`ssh -N -L 5101:127.0.0.1:5101 <用户>@<服务器IP>`，再在本机浏览器打开同一地址）
 - `panelToken` 非空时，页面会提示输入 token（也能用 `http://127.0.0.1:5101/?token=xxx` 直接进）
 - 功能：表单改全部配置（写回 config.json，部分字段提示需重启）、看所有群/私聊会话与 Session 状态、打开某个会话看 OpenCode 对话/QQ 消息记录/工作区文件、执行 `/reset`、`/abort`、以机器人身份发 QQ 消息、把文字作为 prompt 直接发给 Agent
+- **权限确认**：OpenCode V2 在模型首次使用搜索/联网等工具时会发权限请求（TUI 里是弹窗）。服务形态默认自动批准：workspace 配置提前放行 + `permission.asked` 事件自动回复；面板「权限与安全」组可关（`autoApprovePermissions`）或改成只批一次（`permissionAutoReply=once`）。关闭后服务端不会回应，会话可能一直等待，谨慎操作。
 - **回复长度/条数**：`normalCharsPerMessage`（默认 20 字）写进人格提示词，普通对话单条尽量不超过；`maxCharsPerMessage`（默认 200 字）与 `maxLinesPerReply`（默认 4 条）是提醒阈值——超出不会拦截发送，消息照发，但 MCP 会在工具结果里返回警告，让模型自己收尾/精简；如果这一轮同时在回复多个人（pending >= 2），条数警告会自动跳过，方便逐人回复。人格提示词保留拟人化分条，但不再强制每条都拆，模型按内容自由选择 1 到 4 条。
 - **定时提醒**：Agent 可以自己设倒计时（`qqbot_set_reminder`）。默认 `reminderMode=agent`：到点系统只把提醒内容交给模型、由它结合上下文处理；模型没调用发送工具就不发（不再兜底）；改成 `static` 则直接发固定文案。数据存 `data/reminders.json`，服务重启后仍会补发过期提醒。面板「定时提醒」组可开关、调检查间隔/单会话上限/最大天数。注意：它不是 cron 定时任务，只支持“从现在起 N 分钟后”的相对倒计时。
 - **主动参与（测试功能）**：面板顶栏有「自动回复」开关（带「测试」标记），可随时一键启停；行为可能随版本调整，建议先观察一段时间再依赖。没人@时机器人是否主动接话由「判官」先筛一遍，面板「主动参与」组可调。推荐给配置好的机器接本地小模型：Ollama 拉一个 0.6B 级模型（如 `ollama pull qwen3:0.6b`），`proactiveJudgeBaseUrl=http://127.0.0.1:11434/v1`、`proactiveJudgeModel=qwen3:0.6b`、`proactiveJudgeMode=auto`；llama.cpp server 的 `/v1` 同样可用。跑不动 0.6B 的机器把 `proactiveJudgeModel` 留空即可，自动使用零依赖启发式规则（问句/求助/提到机器人等加权），不会报错。节流参数：最少新消息数、冷却秒数、每小时上限、候选概率，默认 3 条/180s/6 次每小时。

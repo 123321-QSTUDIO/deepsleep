@@ -50,6 +50,9 @@ export interface PluginConfig {
   proactiveJudgeModel: string
   proactiveJudgeApiKey: string
   proactiveJudgeTimeoutSec: number
+  // 权限：OpenCode 首次调用搜索/网络等工具会请求确认，服务端自动批准避免卡住
+  autoApprovePermissions: boolean
+  permissionAutoReply: string
   // 定时提醒：机器人可自设倒计时，系统到点投递
   remindersEnabled: boolean
   reminderMode: string
@@ -121,6 +124,8 @@ export const defaultConfig: PluginConfig = {
   proactiveJudgeModel: '',
   proactiveJudgeApiKey: '',
   proactiveJudgeTimeoutSec: 3,
+  autoApprovePermissions: true,
+  permissionAutoReply: 'always',
   remindersEnabled: true,
   reminderMode: 'agent',
   reminderCheckSec: 5,

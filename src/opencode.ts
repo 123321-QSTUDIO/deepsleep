@@ -114,6 +114,11 @@ export class OpencodeClient {
     return this.requestData('GET', `/api/session/${sessionId}/message?limit=${limit}`)
   }
 
+  // 回应 OpenCode 的权限请求（permission.asked 事件）：decision = once | always | reject
+  async replyPermission(sessionId: string, requestId: string, decision: 'once' | 'always' | 'reject', message?: string): Promise<void> {
+    await this.request('POST', `/api/session/${sessionId}/permission/${requestId}/reply`, message ? { decision, message } : { decision })
+  }
+
   async promptAsync(sessionId: string, text: string): Promise<void> {
     await this.requestData('POST', `/api/session/${sessionId}/prompt`, { text })
   }
