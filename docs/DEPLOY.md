@@ -238,6 +238,23 @@ schtasks /create /tn "qqbot-svc" /sc onlogon /rl highest /f `
 
 【验证】`Get-Content C:\qqbot-svc\svc.log -Tail 5` 看到 `启动完成 ... (在线)` 与 `OneBot WS 已连接`；群里 @机器人 有回复。
 
+## 7c. 上下文大版本升级前：Compact 所有 Session
+
+涉及对话上下文组装方式的版本升级（例如批量窗口、梦境复用上下文等），建议在**停掉机器人服务后、启动新版本前**把所有托管 Session Compact 一次，让摘要接管旧上下文，避免新旧两套上下文语义混在一起。
+
+```powershell
+# Windows（data 目录按实际路径；opencode serve 保持运行）
+$env:QQBOT_DATA='C:\qqbot-svc\data'
+node scripts\compact-all.mjs
+
+# Linux
+QQBOT_DATA=/opt/deepsleep/data node scripts/compact-all.mjs
+```
+
+- 脚本读取 `data/sessions.json`，逐个调 `POST /api/session/:id/compact`，并等到 compaction 完成；不会修改 MEMORY.md、不会删除对话数据
+- 需要 `data/config.json` 里的 `opencodeUrl`/`opencodePassword` 正确，且 `opencode serve` 在线；超时可用 `--timeout 300` 调大
+- 有失败项会返回非 0，检查 OpenCode 后重跑即可；全部成功后启动新版本服务
+
 ## 7b. 从旧部署迁移
 
 - **从 NapCat 网关迁移**：SnowLuma 和 NapCat 都是 OneBot v11，默认 WS 端口都是 3001。装好 SnowLuma、配好同端口和 token 后，服务配置 `onebotUrl`/`onebotToken` 可以不变；消息库、会话、任务数据都在服务自己的数据目录里，无需迁移。
