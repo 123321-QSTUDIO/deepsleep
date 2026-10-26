@@ -113,6 +113,8 @@ export class SessionController {
   private groupBatchWindows = new Map<string, GroupBatchWindow>()
   private groupBatchRunning = new Set<string>()
   private groupBatchLast = new Map<string, { time: number; msgId: number }>()
+  // 即时 prompt 的上下文下界（秒）：只带下界之后的新消息，避免每次 @ 都把历史积压分块重发
+  private contextSince = new Map<string, number>()
 
   constructor(
     private config: PluginConfig,
@@ -551,6 +553,7 @@ export class SessionController {
       this.waitScopes.delete(scope)
       // 等待期间的消息已经作为工具结果交给模型，批量投喂不要再重复灌一遍
       this.groupBatchLast.set(scope, { time: Math.floor(Date.now() / 1000), msgId: 0 })
+      this.contextSince.set(scope, Math.floor(Date.now() / 1000))
       this.clearGroupBatchWindow(scope)
     }
   }
@@ -729,6 +732,7 @@ export class SessionController {
     const contextLimit = this.config.groupContextBatchEnabled
       ? Math.max(1, Math.min(300, Number(this.config.groupContextBatchMaxMessages) || 80))
       : this.config.contextMessageCount
+    const since = this.contextSince.get(scope) ?? 0
     const candidates: { mid: number; line: string }[] = []
     const seen = new Set<number>()
     for (const day of [dayKey(now - 86400), dayKey(now)]) {
@@ -743,6 +747,7 @@ export class SessionController {
           const pk = Number(r.msg_pk)
           if (seen.has(pk)) continue
           seen.add(pk)
+          if (since && Number(r.time) < since) continue
           const mid = Number(r.message_id)
           if (!proactive && currentId !== null && mid === currentId) continue
           if (sent.has(mid)) continue
@@ -826,6 +831,7 @@ export class SessionController {
     // 任何一次真实 prompt 都视为已经「看」到当前时刻之前的消息，批量投喂从此刻之后继续；
     // 同时关闭该群窗口（这次的即时 prompt 已经覆盖了窗口里积攒的消息）
     this.groupBatchLast.set(scope, { time: now, msgId: currentId ?? 0 })
+    this.contextSince.set(scope, now)
     if (scope.startsWith('group-')) this.clearGroupBatchWindow(scope)
     return parts.join('\n')
   }
@@ -836,6 +842,8 @@ export class SessionController {
     const segments = (Array.isArray(event.message) ? event.message : []) as MsgSegment[]
     const scope = event.message_type === 'group' ? `group-${event.group_id}` : `private-${event.user_id}`
     if (event.message_type === 'group') this.groupScopes.add(scope)
+    // 任何 scope 的第一次消息都建立上下文下界：旧消息不再被后续即时 prompt 分块重发
+    if (!this.contextSince.has(scope)) this.contextSince.set(scope, Math.floor(Date.now() / 1000) - 2)
     if (event.user_id && this.mutes.isMuted(scope, String(event.user_id))) return
     const raw = (event.raw_message ?? '').trim().replace(/\[CQ:[^\]]+\]/g, '').trim()
 
@@ -1194,6 +1202,7 @@ export class SessionController {
       this.markSent(scope, rows.map((r) => (r.message_id == null ? null : Number(r.message_id))))
       const lastRow = rows[rows.length - 1]
       this.groupBatchLast.set(scope, { time: Number(lastRow.time), msgId: lastRow.message_id == null ? 0 : Number(lastRow.message_id) })
+      this.contextSince.set(scope, Math.floor(Date.now() / 1000))
       this.log('群聊上下文批量投喂 scope=' + scope + ' messages=' + rows.length + (omitted ? ' omitted=' + omitted : ''))
       return true
     } catch (e) {
@@ -1265,6 +1274,7 @@ export class SessionController {
   private async reset(scope: string) {
     this.clearPending(scope)
     this.clearGroupBatchWindow(scope)
+    this.contextSince.delete(scope)
     const entry = this.map.get(scope)
     if (!entry) return
     await this.oc.deleteSession(entry.sessionId).catch(() => undefined)
