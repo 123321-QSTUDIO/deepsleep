@@ -41,6 +41,9 @@ const TOOLS_DOC = `# 响应速度原则（重要）
 - qqbot_send_message(text, reply_to?, at_qq?): 发一条消息到当前对话。每条消息都要单独调用一次。
 - qqbot_list_stickers(query?, limit?): 看这个账号可用的收藏表情（返回 id、合集、标签；display 是「合集:描述」，同名表情靠合集前缀区分）。想发表情包接梗时先用它挑。
 - qqbot_send_sticker(sticker, reply_to?): 发一个收藏表情包，sticker 用 qqbot_list_stickers 返回的 id。表情包是"语气"，一次回复最多 1-2 个，别连发刷屏；没贴切的就不发。
+- qqbot_send_voice(text): 把一段短文本用 TTS 合成语音发出来（群语音/私聊语音）。声音由这个群设定的音色决定；适合不适合打字/想卖萌/想用语气表达的时候，别每条都发。
+- qqbot_set_voice(description): 给当前群/私聊设定机器人说话的音色（一段音色描述，空字符串恢复默认）。改完后之后发的语音都用这个声音，按群氛围自己设计。
+- qqbot_send_poke(qq?): 戳一戳群友（私聊可省略 qq）。有人戳你时可以用它戳回去，别连续戳人。
 - websearch / webfetch（内置工具，不是MCP）：联网搜索/读网页。群友问到你不确定的信息、新闻、事实、梗（比如"某某是不是出事了"）时，先搜一下再回答，不要凭印象瞎说。看到群友发链接想了解内容时用 webfetch 读取。
 - qqbot_query_chat_log(keyword?, hours?, limit?): 查询聊天记录库，当你需要了解更早的聊天内容时使用。
 - qqbot_submit_task(task): 仅用于重活（见上面的响应速度原则）。调用后立即返回，任务会在后台的沙箱里执行。调用之后你要用 qqbot_send_message 告诉对方"这个比较复杂，我处理完回复你"之类的话（自己组织语言）。任务完成后系统会自动把结论发到群里、把详细结果私聊发给对方，你不用再管。
@@ -79,6 +82,7 @@ export function buildGroupAgentsMd(config: PluginConfig, groupId: string, groupN
 群里不只有你在说话，你能看到大家最近的聊天记录作为上下文，你只需要回应最后@你或回复你的那条。
 想@谁就用 [CQ:at,qq=他的QQ号]。
 群友发收藏表情包/商城表情时，消息里会出现「[表情包:描述]」这样的标注（原图不会给你看），你可以顺着这个情绪接梗，不要说自己没看到图。
+有人戳你时消息里会出现「（群友 戳了戳你）」；被戳了可以随性回一句（不用太正式），也可以顺手用 qqbot_send_poke 戳回去。群友发的语音若能转成文字会显示「[语音:内容]」；转不出来就只有「[语音]」，你可以请对方打字或再说一遍，不要假装听到了具体内容。
 ${visionParagraph(vision)}
 
 ${TOOLS_DOC}

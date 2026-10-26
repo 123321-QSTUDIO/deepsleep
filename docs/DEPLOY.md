@@ -289,7 +289,7 @@ schtasks /create /tn "qqbot-svc" /sc onlogon /rl highest /f `
 
 - `hostModel`：host 层每个工作区的默认模型，默认 `opencode/deepseek-v4.1-flash-free`；已知旧模型 ID 会在配置加载时自动迁移，旧 session 存了弃用模型则 `/reset`
 - `visionModel`：视觉桥接 subagent（vision-bridge）用的识图模型，默认 `opencode/mimo-v2.6-flash-free`。图片消息会下载到工作目录 `inbox/`，由纯文本主模型通过 **subagent** 工具调桥接代理读图，**不是**直接切换主模型
-- 工作区 opencode.json 使用 `agents` + `system`、`mcp.servers` 和 `codemode: false`。MCP 共 10 个工具，模型可见名带 `qqbot_` 前缀（如 `qqbot_send_message`、`qqbot_list_stickers`/`qqbot_send_sticker`（收藏表情包）、`qqbot_query_chat_log`、`qqbot_submit_task`），MCP 服务注册名不变
+- 工作区 opencode.json 使用 `agents` + `system`、`mcp.servers` 和 `codemode: false`。MCP 共 13 个工具，模型可见名带 `qqbot_` 前缀（如 `qqbot_send_message`、`qqbot_list_stickers`/`qqbot_send_sticker`（收藏表情包）、`qqbot_query_chat_log`、`qqbot_submit_task`），MCP 服务注册名不变
 - `mcpHost`：MCP 服务绑定地址，默认 `127.0.0.1`（回环）。**服务器有公网 IP 直绑网卡时切勿改成 0.0.0.0**；方式 B（WSL2 docker）确需容器访问时才改为 `0.0.0.0` 并配合防火墙只放行容器网段
 - `opencodePassword` 必须等于第 2 步显式设置的 `OPENCODE_PASSWORD`，不能为空或写成可选项
 - `dockerHost`：留空 = 本机 docker；方式 C 填 `tcp://127.0.0.1:2375`（走持久 SSH 隧道，见方式 C-1）
@@ -312,6 +312,7 @@ schtasks /create /tn "qqbot-svc" /sc onlogon /rl highest /f `
 - 本机直接打开 <http://127.0.0.1:5101/>（服务器上则用 SSH 隧道：`ssh -N -L 5101:127.0.0.1:5101 <用户>@<服务器IP>`，再在本机浏览器打开同一地址）
 - `panelToken` 非空时，页面会提示输入 token（也能用 `http://127.0.0.1:5101/?token=xxx` 直接进）
 - 功能：表单改全部配置（写回 config.json，部分字段提示需重启）、看所有群/私聊会话与 Session 状态、打开某个会话看 OpenCode 对话/QQ 消息记录/工作区文件、执行 `/reset`、`/abort`、以机器人身份发 QQ 消息、把文字作为 prompt 直接发给 Agent
+- **语音（TTS / 语音转文字）**：面板「语音」组填入 MiMo API Key（`ttsApiKey`，来自 MiMo 开放平台）并打开 `ttsEnabled`；默认地址 `https://api.xiaomimimo.com/v1`、模型 `mimo-v2.5-tts-voicedesign`。配置好后 Agent 可用 `qqbot_send_voice` 发语音、用 `qqbot_set_voice` 给每个群设定不同音色（存在 `data/voices.json`）。入站语音默认尝试让网关做 QQ 语音转文字（SnowLuma `fetch_ptt_text`），失败则上下文里显示 `[语音]`；可用 `voiceAsrEnabled` 关闭。语音发送依赖网关（SnowLuma）把本地音频转成 QQ 所需的 silk 格式，网关需与机器人服务在同一台机器（`record` 传的是本地路径）。
 - **模型（「模型」页）**：直接读 OpenCode 的 `/api/model` 动态目录，免费模型（provider `opencode`、cost 全 0）标「免费」并排在前面；模型列表会随 OpenCode 更新/下架，**免费模型失效时刷新页面选一个新免费模型即可**。
   - 「切换到所有 Session」= 更新默认配置 + 逐会话调用 `POST /api/session/:id/model`，**保留已有对话上下文**，不会清空会话；之后新建会话也用新默认模型
   - 识图模型（vision-bridge 子代理）只在**主模型没有声明图片输入能力**时启用；主模型本身是多模态（`/api/model` 的 capabilities 含 image）时会直接读图，vision-bridge 不注册、识图模型设置会被拒绝。识图模型切换只更新配置和工作区，不改已有会话

@@ -23,7 +23,7 @@ export function extractText(segments: MsgSegment[]): string {
           return '[图片]'
         }
         case 'record':
-          return '[语音]'
+          return d.text ? `[语音:${String(d.text)}]` : '[语音]'
         case 'video':
           return '[视频]'
         case 'file':

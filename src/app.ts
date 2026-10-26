@@ -11,6 +11,8 @@ import { QqMcpServer } from './mcp'
 import { ControlPanel } from './panel'
 import { DreamMemory } from './dream'
 import { StickerStore } from './stickers'
+import { TtsClient } from './tts'
+import { VoiceStore } from './voices'
 import { AppLogger, OB11MessageEvent, OutboundActions } from './types'
 
 // 独立服务形态的组装层：main.ts（CLI 入口）与冒烟测试共用
@@ -39,6 +41,8 @@ export interface App {
   dataPath: string
   /** 处理一条 OneBot 消息（入库 + 触发判定 + 交给 OpenCode） */
   onMessage: (event: OB11MessageEvent) => Promise<void>
+  /** OneBot 事件入口：message 交给 onMessage，戳一戳等 notice 单独处理 */
+  onEvent: (event: Record<string, unknown>) => Promise<void>
   /** 停止所有后台组件并落盘 */
   stop: () => Promise<void>
 }
@@ -87,6 +91,9 @@ export async function createApp(options: AppOptions): Promise<App> {
   })
   dream.start()
   const stickers = new StickerStore(options.dataPath, (m, ...x) => logger.warn(m, ...x))
+  const tts = new TtsClient(config, (m, ...x) => logger.warn(m, ...x))
+  const voices = new VoiceStore(options.dataPath, (m, ...x) => logger.warn(m, ...x))
+  sessions.attachVoice(tts, voices)
   const mcp = new QqMcpServer({
     config,
     db,
@@ -149,6 +156,11 @@ export async function createApp(options: AppOptions): Promise<App> {
       }
     }
     try {
+      await sessions.enrichVoiceEvent(event)
+    } catch (e) {
+      logErr('语音转写失败', e)
+    }
+    try {
       storeMessage(db, event)
     } catch (e) {
       logErr('写消息库失败', e)
@@ -158,6 +170,50 @@ export async function createApp(options: AppOptions): Promise<App> {
     } catch (e) {
       logErr('处理消息失败', e)
     }
+  }
+
+  // 戳一戳：别人戳机器人时，构造一条 synthetic 消息走正常触发链路（可被 mute/上下文合并）
+  let pokeSeq = 0
+  const handlePoke = async (notice: Record<string, unknown>): Promise<void> => {
+    const selfId = Number(notice.self_id ?? 0)
+    const poker = Number(notice.user_id ?? notice.sender_id ?? 0)
+    const target = Number(notice.target_id ?? 0)
+    if (!selfId || !poker || poker === selfId) return
+    // 只处理戳机器人自己的；戳别人不触发
+    if (target && target !== selfId) return
+    const groupId = notice.group_id != null ? Number(notice.group_id) : null
+    const now = Math.floor(Date.now() / 1000)
+    const seq = ++pokeSeq
+    const fake: OB11MessageEvent = {
+      post_type: 'message',
+      message_type: groupId ? 'group' : 'private',
+      time: now,
+      self_id: selfId,
+      user_id: poker,
+      group_id: groupId ?? undefined,
+      message_id: -(Date.now() * 1000 + seq),
+      raw_message: '[CQ:poke] 戳了戳你',
+      message: [{ type: 'text', data: { text: '（' + (groupId ? '群友' : '对方') + ' 戳了戳你）' } }],
+      sender: { user_id: poker, nickname: groupId ? '群友' : '对方' },
+    }
+    try {
+      storeMessage(db, fake)
+    } catch (e) {
+      logErr('写戳一戳消息失败', e)
+    }
+    try {
+      await sessions.handleMessage(fake, { forceTrigger: true })
+    } catch (e) {
+      logErr('处理戳一戳失败', e)
+    }
+  }
+
+  const onEvent = async (event: Record<string, unknown>): Promise<void> => {
+    if (event.post_type === 'notice' && event.notice_type === 'notify' && event.sub_type === 'poke') {
+      await handlePoke(event)
+      return
+    }
+    await onMessage(event as unknown as OB11MessageEvent)
   }
 
   const stop = async (): Promise<void> => {
@@ -175,6 +231,7 @@ export async function createApp(options: AppOptions): Promise<App> {
   return {
     config,
     db,
+    onEvent,
     oc,
     sessions,
     tasks,

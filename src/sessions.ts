@@ -7,6 +7,18 @@ import { buildGroupAgentsMd, buildPrivateAgentsMd, ALLOWED_FACE_IDS, VisionStrat
 import { cleanCqForDisplay, dedupeImages, extractAtTargets, extractImages, extractImagesFromRaw, extractReplyTo, extractText, MsgSegment, textToSegments } from './format'
 import { MuteStore } from './mutes'
 import { OB11MessageEvent, SessionRuntime } from './types'
+import { TtsClient } from './tts'
+import { VoiceStore } from './voices'
+
+function extractPttText(result: unknown): string {
+  if (!result) return ''
+  if (typeof result === 'string') return result.trim()
+  const obj = result as Record<string, unknown>
+  if (typeof obj.text === 'string') return obj.text.trim()
+  const data = obj.data as Record<string, unknown> | undefined
+  if (data && typeof data.text === 'string') return data.text.trim()
+  return ''
+}
 
 interface SessionEntry {
   sessionId: string
@@ -61,12 +73,14 @@ export class SessionController {
   private lastSent = new Map<string, { text: string; at: number }>()
   private static readonly DUPLICATE_SEND_WINDOW_MS = 8000
   private runtime!: SessionRuntime
+  private tts: TtsClient | null = null
+  private voices: VoiceStore | null = null
 
   constructor(
     private config: PluginConfig,
     private db: MsgDB,
     private oc: OpencodeClient,
-    dataPath: string,
+    private dataPath: string,
     private log: (msg: string, ...args: unknown[]) => void,
     public mutes: MuteStore = new MuteStore(dataPath)
   ) {
@@ -79,6 +93,41 @@ export class SessionController {
     this.runtime = runtime
   }
 
+  attachVoice(tts: TtsClient, voices: VoiceStore) {
+    this.tts = tts
+    this.voices = voices
+  }
+
+  // 入站语音：优先取网关自带转写；否则调用 OneBot fetch_ptt_text（SnowLuma 支持）；都失败则存 [语音]
+  async enrichVoiceEvent(event: OB11MessageEvent): Promise<void> {
+    const segments = (Array.isArray(event.message) ? event.message : []) as MsgSegment[]
+    const records = segments.filter((seg) => seg.type === 'record')
+    if (records.length === 0) return
+    const hasText = records.some((seg) => typeof seg.data?.text === 'string' && String(seg.data.text).trim())
+    if (this.config.voiceAsrEnabled && !hasText) {
+      const mid = typeof event.message_id === 'number' ? event.message_id : Number(event.message_id)
+      if (Number.isFinite(mid)) {
+        try {
+          const result = await Promise.race([
+            this.runtime.actions.call('fetch_ptt_text', { message_id: mid }),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 15_000)),
+          ])
+          const text = extractPttText(result)
+          if (text) {
+            for (const seg of records) {
+              if (!seg.data?.text) seg.data = { ...(seg.data ?? {}), text }
+            }
+            this.log('语音转文字成功: ' + text.slice(0, 40))
+          }
+        } catch (e) {
+          this.log('语音转文字不可用: ' + String((e as Error)?.message ?? e))
+        }
+      }
+    }
+    // 语音消息统一用可读文本入库/进上下文（避免 raw_message 只剩 [CQ:record,...]）
+    const readable = extractText(segments)
+    if (readable) event.raw_message = readable
+  }
   private load() {
     try {
       if (fs.existsSync(this.mapFile)) {
@@ -446,7 +495,7 @@ export class SessionController {
     return parts.join('\n')
   }
 
-  async handleMessage(event: OB11MessageEvent): Promise<void> {
+  async handleMessage(event: OB11MessageEvent, opts?: { forceTrigger?: boolean }): Promise<void> {
     if (event.self_id) this.selfId = event.self_id
     if (event.user_id && event.self_id && event.user_id === event.self_id) return
     const segments = (Array.isArray(event.message) ? event.message : []) as MsgSegment[]
@@ -466,7 +515,7 @@ export class SessionController {
       return
     }
 
-    if (!this.isTriggered(event, segments)) return
+    if (!opts?.forceTrigger && !this.isTriggered(event, segments)) return
 
     const mid = typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null
     const pendingNow = this.pendingRequests.get(scope) ?? []
@@ -753,6 +802,67 @@ export class SessionController {
     this.recordSent(scope, text)
     this.lastSent.set(scope, { text, at: Date.now() })
     await this.delay()
+  }
+
+  // ---- 语音：TTS 生成后以 record 段发送；每个 scope 可设置独立音色描述 ----
+  voiceOf(scope: string): string {
+    return this.voices?.get(scope) ?? this.config.ttsDefaultVoice
+  }
+
+  setVoiceForScope(scope: string, description: string): string | null {
+    if (!this.voices) throw new Error('VoiceStore 未初始化')
+    return this.voices.set(scope, description)
+  }
+
+  async sendVoiceToScope(scope: string, text: string): Promise<void> {
+    const prev = this.sendQueues.get(scope) ?? Promise.resolve()
+    const next = prev.then(() => this.doSendVoice(scope, text)).catch((e) => {
+      this.log('发送语音失败:', e)
+    })
+    this.sendQueues.set(scope, next)
+    return next
+  }
+
+  private async doSendVoice(scope: string, text: string): Promise<void> {
+    if (!this.tts) throw new Error('TTS 未初始化')
+    const trimmed = text.trim()
+    if (!trimmed) throw new Error('语音文本为空')
+    const max = Math.max(1, this.config.ttsMaxChars || 200)
+    if (trimmed.length > max) throw new Error('语音文本过长（最多 ' + max + ' 字，当前 ' + trimmed.length + ' 字）')
+    const voice = this.voiceOf(scope)
+    const { buffer, format } = await this.tts.synthesize(trimmed, voice)
+    const dir = path.join(this.dataPath, 'tts-tmp')
+    fs.mkdirSync(dir, { recursive: true })
+    const file = path.join(dir, 'tts-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + format)
+    fs.writeFileSync(file, buffer)
+    const params: Record<string, unknown> = { message: [{ type: 'record', data: { file } }] }
+    if (scope.startsWith('group-')) {
+      params.message_type = 'group'
+      params.group_id = scope.slice(6)
+    } else {
+      params.message_type = 'private'
+      params.user_id = scope.slice(8)
+    }
+    try {
+      await this.runtime.actions.call('send_msg', params)
+      this.recordSent(scope, '[语音]')
+      this.lastSent.set(scope, { text: '[语音]', at: Date.now() })
+      await this.delay()
+    } finally {
+      try {
+        fs.unlinkSync(file)
+      } catch {
+        // 临时音频清理失败不影响已发送
+      }
+    }
+  }
+
+  async sendPokeToScope(scope: string, qq: string): Promise<void> {
+    if (scope.startsWith('group-')) {
+      await this.runtime.actions.call('group_poke', { group_id: scope.slice(6), user_id: qq })
+    } else {
+      await this.runtime.actions.call('friend_poke', { user_id: qq })
+    }
   }
 
   // ---- 收藏表情（SnowLuma / NapCat：fetch_custom_face_detail + send_custom_face）----

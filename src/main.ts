@@ -2,7 +2,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createApp } from './app'
 import { OneBotClient } from './onebot'
-import { OB11MessageEvent } from './types'
 
 // 独立服务入口：OneBot v11 WS 连 NapCat（仅作为 QQ 消息网关），全部业务在 app.ts
 const dataDir = process.env.QQBOT_DATA ?? path.join(process.cwd(), 'data')
@@ -23,7 +22,7 @@ const app = await createApp({
 })
 
 ob = new OneBotClient(app.config.onebotUrl, app.config.onebotToken, (ev) => {
-  void app.onMessage(ev as unknown as OB11MessageEvent)
+  void app.onEvent(ev)
 }, log)
 ob.start(() => running)
 

@@ -37,6 +37,16 @@ export interface PluginConfig {
   panelHost: string
   panelPort: number
   panelToken: string
+  // 语音：TTS（MiMo，OpenAI 兼容接口）+ 入站语音转文字
+  ttsEnabled: boolean
+  ttsBaseUrl: string
+  ttsApiKey: string
+  ttsModel: string
+  ttsFormat: string
+  ttsDefaultVoice: string
+  ttsMaxChars: number
+  ttsTimeoutSec: number
+  voiceAsrEnabled: boolean
   // 梦境记忆：每晚 fork 会话整理 MEMORY.md，然后压缩原 session
   dreamMemoryEnabled: boolean
   dreamMemoryHour: number
@@ -80,6 +90,15 @@ export const defaultConfig: PluginConfig = {
   panelHost: '127.0.0.1',
   panelPort: 5101,
   panelToken: '',
+  ttsEnabled: false,
+  ttsBaseUrl: 'https://api.xiaomimimo.com/v1',
+  ttsApiKey: '',
+  ttsModel: 'mimo-v2.5-tts-voicedesign',
+  ttsFormat: 'mp3',
+  ttsDefaultVoice: '青年女性，语气轻快自然，像群聊里熟络的朋友，语速稍快，情绪松弛。',
+  ttsMaxChars: 200,
+  ttsTimeoutSec: 90,
+  voiceAsrEnabled: true,
   dreamMemoryEnabled: true,
   dreamMemoryHour: 4,
   dreamMemoryMinute: 30,

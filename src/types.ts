@@ -36,3 +36,18 @@ export interface OB11MessageEvent {
   message?: unknown
   sender?: OB11Sender
 }
+
+/** OneBot v11 戳一戳通知（SnowLuma: notice_type=notify, sub_type=poke） */
+export interface OB11PokeNotice {
+  post_type?: string
+  notice_type?: string
+  sub_type?: string
+  time?: number
+  self_id?: number
+  user_id?: number
+  sender_id?: number
+  target_id?: number
+  group_id?: number
+  action?: string
+  suffix?: string
+}

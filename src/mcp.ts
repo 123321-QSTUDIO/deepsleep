@@ -139,6 +139,64 @@ export class QqMcpServer {
     )
 
     mcp.registerTool(
+      'send_voice',
+      {
+        description: '把一段话用 TTS 合成语音发到当前对话（群里就是语音消息）。适合想用声音表达时；文本尽量短（默认最多 200 字）。音色由本群/本会话设定的声音决定。',
+        inputSchema: { text: z.string().describe('要念出来的文本，尽量口语化、简短') },
+      },
+      async ({ text: t }) => {
+        if (!scope) return text('错误: 未知对话上下文')
+        if (taskMode) return text('错误: 沙箱任务中不能发消息')
+        const content = String(t ?? '').trim()
+        if (!content) return text('错误: 语音文本为空')
+        try {
+          await sessions.sendVoiceToScope(scope, content)
+          return text('已发送语音')
+        } catch (e) {
+          return text('发送语音失败: ' + String((e as Error)?.message ?? e))
+        }
+      }
+    )
+
+    mcp.registerTool(
+      'set_voice',
+      {
+        description: '设置当前群/私聊里机器人说话的声音（用一段音色描述）。传空字符串恢复默认声音。设置后之后发的语音都用这个声音；建议结合群氛围/角色来写。',
+        inputSchema: { description: z.string().describe('音色描述（年龄/性别/音色质感/语速/情绪底色），空字符串=恢复默认') },
+      },
+      async ({ description }) => {
+        if (!scope) return text('错误: 未知对话上下文')
+        if (taskMode) return text('错误: 沙箱任务中不能改声音')
+        try {
+          const saved = sessions.setVoiceForScope(scope, String(description ?? ''))
+          return text(saved ? '已设置这个会话的声音：' + saved : '已恢复默认声音')
+        } catch (e) {
+          return text('设置声音失败: ' + String((e as Error)?.message ?? e))
+        }
+      }
+    )
+
+    mcp.registerTool(
+      'send_poke',
+      {
+        description: '戳一戳某个群友（或私聊里的对方）。被戳的人会收到 QQ 的戳一戳提示；适合回应别人戳你或开玩笑。',
+        inputSchema: { qq: z.string().optional().describe('要戳的 QQ 号；私聊里可省略（默认戳对方）') },
+      },
+      async ({ qq }) => {
+        if (!scope) return text('错误: 未知对话上下文')
+        if (taskMode) return text('错误: 沙箱任务中不能发消息')
+        const target = qq ? String(qq) : scope.startsWith('private-') ? scope.slice(8) : ''
+        if (!target) return text('错误: 群聊里需要指定要戳的 QQ 号')
+        try {
+          await sessions.sendPokeToScope(scope, target)
+          return text('已戳一戳 ' + target)
+        } catch (e) {
+          return text('戳一戳失败: ' + String((e as Error)?.message ?? e))
+        }
+      }
+    )
+
+    mcp.registerTool(
       'query_chat_log',
       {
         description: '查询当前对话的聊天记录库',
