@@ -178,6 +178,14 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0}
 .nav-item:hover{background:rgba(255,255,255,0.04);color:var(--fg-2)}
 .nav-item.active{background:rgba(255,255,255,0.06);color:var(--fg)}
 .nav-count{font-family:var(--font-mono);font-size:11px;color:var(--muted);background:rgba(255,255,255,0.07);border-radius:var(--radius-pill);padding:0 6px;line-height:16px;min-width:16px;text-align:center}
+.auto-toggle{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);cursor:pointer;user-select:none;white-space:nowrap}
+.auto-toggle input{position:absolute;opacity:0;pointer-events:none}
+.auto-toggle-track{position:relative;width:30px;height:17px;border-radius:999px;background:rgba(255,255,255,.12);transition:background .15s ease;flex:none}
+.auto-toggle-track::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;transition:transform .15s ease}
+.auto-toggle input:checked+.auto-toggle-track{background:var(--accent)}
+.auto-toggle input:checked+.auto-toggle-track::after{transform:translateX(13px)}
+.auto-toggle input:focus-visible+.auto-toggle-track{outline:2px solid var(--accent);outline-offset:2px}
+.auto-toggle-text em{font-style:normal;font-size:9px;padding:1px 5px;margin-left:2px;border-radius:999px;background:rgba(234,179,8,.12);border:1px solid rgba(234,179,8,.35);color:var(--warn)}
 .topbar-spacer{flex:1}
 .healths{display:flex;align-items:center;gap:14px}
 .health{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:510;white-space:nowrap}
@@ -1380,6 +1388,11 @@ body.modal-open{overflow:hidden}
           <span class="health" id="health-api" data-name="面板" title="面板 · 连接中"><span class="dot dim"></span><span class="health-label">面板 · 连接中</span></span>
         </div>
         <span class="clock" id="clock">--:--:--</span>
+        <label class="auto-toggle" id="auto-reply-wrap" title="自动回复（测试功能）：没人@时由判官决定是否主动接话，行为可能随版本调整；可在配置页细调节流">
+          <input type="checkbox" id="auto-reply-toggle">
+          <span class="auto-toggle-track"></span>
+          <span class="auto-toggle-text">自动回复 <em>测试</em></span>
+        </label>
         <span class="pill warn-tint" id="demo-pill" data-od-id="demo-badge" hidden><span class="dot warn"></span>演示数据</span>
         <button class="btn btn-icon topbar-token" type="button" data-action="token" title="设置面板 Token" aria-label="设置面板 Token">
           <svg class="svg-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
@@ -1562,7 +1575,7 @@ var modalFocus=[];
 function buildMock(){
   var NOW=Math.floor(Date.now()/1000);
   var BOT="DeepSleep", BOTQQ='999999';
-  var cfg={"botName":"DeepSleep","onebotUrl":"ws://127.0.0.1:3001","onebotToken":"","hostModel":"opencode/deepseek-v4.1-flash-free","visionModel":"opencode/mimo-v2.6-flash-free","opencodeUrl":"http://127.0.0.1:4096","opencodePassword":"","mcpPort":5100,"mcpHost":"127.0.0.1","mcpToken":"","mcpUrl":"http://127.0.0.1:5100/mcp","mcpUrlForDocker":"http://host.docker.internal:5100/mcp","dockerImage":"qqbot-opencode-task:latest","dockerHost":"","remoteSsh":"","remoteSshKey":"","remoteWorkRoot":"/opt/qqbot-users","archiveRetentionDays":5,"storageQuotaMB":500,"artifactBaseUrl":"","artifactToken":"","linkTtlMinutes":10,"dockerEnv":{},"taskTimeoutSec":900,"taskConcurrency":3,"turnTimeoutSec":240,"contextMessageCount":15,"replyDelayMinMs":1200,"replyDelayMaxMs":3000,"maxLinesPerReply":4,"panelEnabled":true,"panelHost":"127.0.0.1","panelPort":5101,"panelToken":"","dreamMemoryEnabled":true,"dreamMemoryHour":4,"dreamMemoryMinute":30,"dreamMaxTranscriptChars":120000,"dreamMemoryMaxChars":8000};
+  var cfg={proactiveEnabled:true,"botName":"DeepSleep","onebotUrl":"ws://127.0.0.1:3001","onebotToken":"","hostModel":"opencode/deepseek-v4.1-flash-free","visionModel":"opencode/mimo-v2.6-flash-free","opencodeUrl":"http://127.0.0.1:4096","opencodePassword":"","mcpPort":5100,"mcpHost":"127.0.0.1","mcpToken":"","mcpUrl":"http://127.0.0.1:5100/mcp","mcpUrlForDocker":"http://host.docker.internal:5100/mcp","dockerImage":"qqbot-opencode-task:latest","dockerHost":"","remoteSsh":"","remoteSshKey":"","remoteWorkRoot":"/opt/qqbot-users","archiveRetentionDays":5,"storageQuotaMB":500,"artifactBaseUrl":"","artifactToken":"","linkTtlMinutes":10,"dockerEnv":{},"taskTimeoutSec":900,"taskConcurrency":3,"turnTimeoutSec":240,"contextMessageCount":15,"replyDelayMinMs":1200,"replyDelayMaxMs":3000,"maxLinesPerReply":4,"panelEnabled":true,"panelHost":"127.0.0.1","panelPort":5101,"panelToken":"","dreamMemoryEnabled":true,"dreamMemoryHour":4,"dreamMemoryMinute":30,"dreamMaxTranscriptChars":120000,"dreamMemoryMaxChars":8000};
   var FIELDS=[{"key":"botName","label":"botName（机器人自称）","group":"基础","type":"string","help":"写入群/私聊工作区的人设，下一条消息触发时重建 AGENTS.md"},{"key":"hostModel","label":"hostModel（主模型）","group":"模型","type":"string"},{"key":"visionModel","label":"visionModel（识图子代理模型）","group":"模型","type":"string"},{"key":"opencodeUrl","label":"opencodeUrl","group":"连接","type":"string","help":"host opencode V2 地址"},{"key":"opencodePassword","label":"opencodePassword","group":"连接","type":"password","help":"必须与 serve 的 OPENCODE_PASSWORD 一致"},{"key":"onebotUrl","label":"onebotUrl（OneBot WS 地址）","group":"连接","type":"string","help":"SnowLuma/NapCat 等 OneBot v11 网关的 WebSocket 地址，默认 ws://127.0.0.1:3001"},{"key":"onebotToken","label":"onebotToken（独立服务模式）","group":"连接","type":"password"},{"key":"contextMessageCount","label":"contextMessageCount（上下文条数）","group":"消息与回复","type":"number","min":1},{"key":"replyDelayMinMs","label":"replyDelayMinMs（兜底分句最小间隔）","group":"消息与回复","type":"number","min":0},{"key":"replyDelayMaxMs","label":"replyDelayMaxMs（兜底分句最大间隔）","group":"消息与回复","type":"number","min":0},{"key":"maxLinesPerReply","label":"maxLinesPerReply（兜底最大分句数）","group":"消息与回复","type":"number","min":1},{"key":"turnTimeoutSec","label":"turnTimeoutSec（单轮超时秒数）","group":"消息与回复","type":"number","min":10},{"key":"mcpHost","label":"mcpHost（MCP 绑定地址）","group":"MCP","type":"string"},{"key":"mcpPort","label":"mcpPort","group":"MCP","type":"number","min":1,"max":65535},{"key":"mcpToken","label":"mcpToken","group":"MCP","type":"password"},{"key":"mcpUrl","label":"mcpUrl（host 侧工作区注入）","group":"MCP","type":"string"},{"key":"mcpUrlForDocker","label":"mcpUrlForDocker（容器内地址）","group":"MCP","type":"string"},{"key":"taskConcurrency","label":"taskConcurrency（任务并发）","group":"任务沙箱","type":"number","min":1},{"key":"taskTimeoutSec","label":"taskTimeoutSec（任务超时秒数）","group":"任务沙箱","type":"number","min":30},{"key":"dockerImage","label":"dockerImage","group":"任务沙箱","type":"string"},{"key":"dockerHost","label":"dockerHost（远程 docker 主机）","group":"任务沙箱","type":"string"},{"key":"dockerEnv","label":"dockerEnv（容器环境变量 JSON）","group":"任务沙箱","type":"json","help":"给容器注入的 API key 等，形如 {\"KEY\":\"value\"}"},{"key":"remoteSsh","label":"remoteSsh（远程文件操作 SSH）","group":"任务沙箱","type":"string"},{"key":"remoteSshKey","label":"remoteSshKey（SSH 私钥路径）","group":"任务沙箱","type":"string"},{"key":"remoteWorkRoot","label":"remoteWorkRoot","group":"任务沙箱","type":"string"},{"key":"archiveRetentionDays","label":"archiveRetentionDays（产物留存天数）","group":"任务沙箱","type":"number","min":1},{"key":"storageQuotaMB","label":"storageQuotaMB（每 QQ 配额 MB）","group":"任务沙箱","type":"number","min":10},{"key":"artifactBaseUrl","label":"artifactBaseUrl（产物下载服务）","group":"产物下载","type":"string"},{"key":"artifactToken","label":"artifactToken","group":"产物下载","type":"password"},{"key":"linkTtlMinutes","label":"linkTtlMinutes（下载链接有效期）","group":"产物下载","type":"number","min":1},{"key":"panelEnabled","label":"panelEnabled（启用控制面板）","group":"控制面板","type":"boolean"},{"key":"panelHost","label":"panelHost（绑定地址）","group":"控制面板","type":"string","help":"默认 127.0.0.1，只允许本机访问"},{"key":"panelPort","label":"panelPort","group":"控制面板","type":"number","min":1,"max":65535},{"key":"panelToken","label":"panelToken（访问 Token）","group":"控制面板","type":"password","help":"非空时 API 需要 Authorization: Bearer <token> 或 URL ?token="},{"key":"dreamMemoryEnabled","label":"dreamMemoryEnabled（启用梦境记忆）","group":"梦境记忆","type":"boolean","help":"每天凌晨 fork 会话更新 MEMORY.md，然后压缩原 session"},{"key":"dreamMemoryHour","label":"dreamMemoryHour（整理开始小时）","group":"梦境记忆","type":"number","min":0,"max":23},{"key":"dreamMemoryMinute","label":"dreamMemoryMinute（整理开始分钟）","group":"梦境记忆","type":"number","min":0,"max":59},{"key":"dreamMaxTranscriptChars","label":"dreamMaxTranscriptChars（喂给梦境的聊天记录上限字符数）","group":"梦境记忆","type":"number","min":1000},{"key":"dreamMemoryMaxChars","label":"dreamMemoryMaxChars（MEMORY.md 建议上限字符数）","group":"梦境记忆","type":"number","min":500}];
   var RESTART=["opencodeUrl","opencodePassword","onebotUrl","onebotToken","mcpHost","mcpPort","panelEnabled","panelHost","panelPort"];
   var mkSticker=function(id,label,tags,enabled,desc,color,collection){
@@ -1689,6 +1702,7 @@ function buildMock(){
         onebot:{connected:true},
         mcp:{host:'127.0.0.1', port:cfg.mcpPort, tokenSet:!!cfg.mcpToken},
         panel:{host:cfg.panelHost, port:cfg.panelPort, tokenSet:!!cfg.panelToken},
+        autoReplyEnabled:!!cfg.proactiveEnabled,
         tasks:{queued:0, running:1, done:47, error:2, total:50},
         sessions:{total:Object.keys(details).length}
       };
@@ -2153,6 +2167,8 @@ function updateHealth(st){
     sideHealth.className='dot '+(S.demo?'warn':bad?'err':good?'ok':'dim');
     sideHealth.title=S.demo?'演示数据':bad?'存在连接异常':good?'运行正常':'状态未知';
   }
+  var ar=$('#auto-reply-toggle');
+  if(ar&&typeof st.autoReplyEnabled==='boolean'){ ar.checked=st.autoReplyEnabled; }
   var sv=$('#side-version');
   if(sv) sv.textContent='v'+(st.version||'—');
   var sin=$('#side-instance-name');
@@ -3815,6 +3831,15 @@ document.addEventListener('change', function(e){
   var t=e.target;
   if(t&&t.matches&&t.matches('[data-st-coll-toggle]')){
     toggleCollection(t.getAttribute('data-st-coll-toggle'), t.checked);
+  }else if(t&&t.id==='auto-reply-toggle'){
+    var autoEnabled=t.checked
+    api('/config',{method:'PUT',body:{config:{proactiveEnabled:autoEnabled}}}).then(function(){
+      toast(autoEnabled?'自动回复已开启（测试功能）':'自动回复已关闭','success',2400)
+      refreshOverview(false)
+    }).catch(function(err){
+      t.checked=!autoEnabled
+      toast(friendlyError(err),'error',4200)
+    })
   }else if(t&&t.id==='md-host-select'){
     S.models.hostSelect=t.value;
   }else if(t&&t.id==='md-vision-select'){
