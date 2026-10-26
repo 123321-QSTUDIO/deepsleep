@@ -95,6 +95,7 @@ node smoke17.mjs         # 冒烟：主动参与判官 / SILENT / 启发式兜�
 node smoke18.mjs         # 冒烟：定时提醒持久化 / 到点投递 / 列表取消（mock opencode，离线）
 node smoke19.mjs         # 冒烟：回复单条长度/单轮条数限制（mock opencode，离线）
 node smoke20.mjs         # 冒烟：OpenCode 权限请求自动批准（mock opencode，离线）
+node smoke21.mjs         # 冒烟：被戳后/机器人发言后的语境自动回复（mock opencode，离线）
 node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 ```
 

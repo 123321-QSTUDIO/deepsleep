@@ -208,6 +208,7 @@ export async function createApp(options: AppOptions): Promise<App> {
     if (target !== selfId) return
     const groupId = notice.group_id != null ? Number(notice.group_id) : null
     const scope = groupId ? 'group-' + groupId : 'private-' + poker
+    sessions.recordPoke(scope, poker)
     try {
       await sessions.sendPokeToScope(scope, String(poker))
       log('已反戳 ' + poker + ' (' + scope + ')')

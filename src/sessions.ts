@@ -82,6 +82,9 @@ export class SessionController {
   private proactiveNewCount = new Map<string, number>()
   private proactiveLastAt = new Map<string, number>()
   private proactiveAttempts = new Map<string, number[]>()
+  // 语境自动回复：最近戳机器人的人 / 最近一次语境触发时间
+  private recentPokes = new Map<string, { userId: number; at: number }>()
+  private contextLastAt = new Map<string, number>()
 
   constructor(
     private config: PluginConfig,
@@ -107,6 +110,11 @@ export class SessionController {
 
   attachJudge(judge: ProactiveJudge) {
     this.judge = judge
+  }
+
+  // 记录谁戳了机器人：之后一小段时间内该用户的消息直接交给模型判断
+  recordPoke(scope: string, userId: number) {
+    this.recentPokes.set(scope, { userId: Number(userId), at: Date.now() })
   }
 
   // 入站语音：优先取网关自带转写；否则调用 OneBot fetch_ptt_text（SnowLuma 支持）；都失败则存 [语音]
@@ -469,6 +477,38 @@ export class SessionController {
     this.sentMsgIds.set(scope, set)
   }
 
+  // 语境自动回复：被戳后/机器人刚发言后的窗口内，直接交给模型判断要不要回（不走判官）
+  private tryContextReply(scope: string, event: OB11MessageEvent, segments: MsgSegment[]): { note: string } | null {
+    const cfg = this.config
+    if (!cfg.proactiveEnabled) return null
+    if (event.message_type !== 'group') return null
+    if ((this.pendingRequests.get(scope) ?? []).length > 0) return null
+    const now = Date.now()
+    const lastCtx = this.contextLastAt.get(scope) ?? 0
+    if (now - lastCtx < Math.max(0, cfg.contextReplyCooldownSec) * 1000) return null
+    const text = extractText(segments).trim()
+    if (!text && !segments.some((seg) => seg.type === 'image')) return null
+    const attempts = (this.proactiveAttempts.get(scope) ?? []).filter((t) => now - t < 3_600_000)
+    if (attempts.length >= Math.max(1, cfg.proactiveMaxPerHour)) return null
+    const nick = event.sender?.card || event.sender?.nickname || String(event.user_id ?? '')
+    let note = ''
+    const poke = this.recentPokes.get(scope)
+    if (poke && poke.userId === Number(event.user_id) && now - poke.at <= Math.max(1, cfg.pokeFollowUpSec) * 1000) {
+      note = '刚才 ' + nick + '(' + (event.user_id ?? '') + ') 戳了你一下，现在 TA 接着发了上面这条消息'
+      this.recentPokes.delete(scope)
+    } else {
+      const last = this.lastSent.get(scope)
+      if (last && now - last.at <= Math.max(1, cfg.botReplyWindowSec) * 1000 && String(event.user_id) !== String(this.selfId)) {
+        const snippet = (last.text || '').replace(/\s+/g, ' ').trim().slice(0, 60)
+        note = '你刚才发过「' + snippet + '」，现在 ' + nick + '(' + (event.user_id ?? '') + ') 接着发了上面这条消息'
+      }
+    }
+    if (!note) return null
+    this.contextLastAt.set(scope, now)
+    this.proactiveAttempts.set(scope, [...attempts, now])
+    return { note }
+  }
+
   // 主动参与：节流检查 → 调轻量判官决定是否让主模型判断/接话
   private async tryProactive(scope: string, event: OB11MessageEvent, segments: MsgSegment[]): Promise<boolean> {
     const cfg = this.config
@@ -524,7 +564,8 @@ export class SessionController {
     return out.slice(-limit).map((x) => x.line)
   }
 
-  private buildPrompt(event: OB11MessageEvent, proactive = false): string {
+  private buildPrompt(event: OB11MessageEvent, mode: 'normal' | 'proactive' | 'context' = 'normal', contextNote = ''): string {
+    const proactive = mode !== 'normal'
     const scope = event.message_type === 'group' ? `group-${event.group_id}` : `private-${event.user_id}`
     const now = Math.floor(Date.now() / 1000)
     const currentId = typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null
@@ -593,7 +634,13 @@ export class SessionController {
     const week = '日一二三四五六'[d.getDay()]
     parts.push(`[当前时间] ${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())} 星期${week}（以此为准，下面消息前面的方括号是它们的发送时间）`)
     if (context.length > 0) parts.push('[新的聊天记录]\n' + context.map((c) => c.line).join('\n'))
-    if (proactive) {
+    if (mode === 'context') {
+      parts.unshift(
+        '[系统] 这条消息没有@你，但系统注意到：' + contextNote + '。' +
+          '判断一下是不是在跟你说话/接你的话：如果是、想说就正常调用发送工具回复；' +
+          '如果对方不是在回你、或者你不想接，只输出 [SILENT]，系统不会发任何消息。'
+      )
+    } else if (mode === 'proactive') {
       parts.unshift(
         '[系统] 这条消息没有@你，也不是在回复你。你可以根据最近的群聊自己判断要不要主动接一句：' +
           '只有真的有趣、有梗、能帮上忙或者适合插话的时候，才用 qqbot_send_message 发言；' +
@@ -629,10 +676,18 @@ export class SessionController {
     }
 
     const triggered = this.isTriggered(event, segments)
-    let proactive = false
+    let promptMode: 'normal' | 'proactive' | 'context' = 'normal'
+    let contextNote = ''
     if (!triggered) {
-      if (!(await this.tryProactive(scope, event, segments))) return
-      proactive = true
+      const ctx = this.tryContextReply(scope, event, segments)
+      if (ctx) {
+        promptMode = 'context'
+        contextNote = ctx.note
+      } else if (await this.tryProactive(scope, event, segments)) {
+        promptMode = 'proactive'
+      } else {
+        return
+      }
     } else {
       // 正常被叫到后重置主动参与节流，避免刚回复完又主动插话
       this.proactiveNewCount.set(scope, 0)
@@ -643,7 +698,7 @@ export class SessionController {
     const pendingNow = this.pendingRequests.get(scope) ?? []
     if (mid !== null && pendingNow.some((p) => p.id === mid)) return
 
-    this.log((proactive ? '主动参与 ' : '触发 ') + `scope=${scope} msg_id=${event.message_id} user=${event.user_id}`)
+    this.log((promptMode === 'context' ? '语境自动回复 ' : promptMode === 'proactive' ? '主动参与 ' : '触发 ') + `scope=${scope} msg_id=${event.message_id} user=${event.user_id}`)
 
     this.lastTrigger.set(scope, {
       userId: event.user_id ?? 0,
@@ -656,7 +711,7 @@ export class SessionController {
       await this.sendText(event, '我现在脑子有点转不动，稍后再找我吧')
       return
     }
-    const prompt = this.buildPrompt(event, proactive)
+    const prompt = this.buildPrompt(event, promptMode, contextNote)
     if (!prompt) return
     const replyTo = extractReplyTo(segments)
     // 商城/收藏表情在 SnowLuma 里是带 emoji_id 的 image 段：交给视觉模型没意义，

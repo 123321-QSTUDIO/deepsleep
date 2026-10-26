@@ -50,6 +50,10 @@ export interface PluginConfig {
   proactiveJudgeModel: string
   proactiveJudgeApiKey: string
   proactiveJudgeTimeoutSec: number
+  // 语境自动回复：被戳后/机器人发言后的窗口内，直接交给模型判断要不要回
+  pokeFollowUpSec: number
+  botReplyWindowSec: number
+  contextReplyCooldownSec: number
   // 权限：OpenCode 首次调用搜索/网络等工具会请求确认，服务端自动批准避免卡住
   autoApprovePermissions: boolean
   permissionAutoReply: string
@@ -124,6 +128,9 @@ export const defaultConfig: PluginConfig = {
   proactiveJudgeModel: '',
   proactiveJudgeApiKey: '',
   proactiveJudgeTimeoutSec: 3,
+  pokeFollowUpSec: 120,
+  botReplyWindowSec: 90,
+  contextReplyCooldownSec: 20,
   autoApprovePermissions: true,
   permissionAutoReply: 'always',
   remindersEnabled: true,
