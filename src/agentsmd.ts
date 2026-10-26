@@ -55,7 +55,19 @@ const TOOLS_DOC = `# 响应速度原则（重要）
 - qqbot_get_task_detail(task_id): 查看某个任务的详细状态和结果（只能看自己发起的任务）。
 - qqbot_get_download_link(task_id 可省略): 生成你某个任务产物的临时下载链接（私聊用，链接有过期时间，过期了再来要一个新的就行）。只有对方主动索要下载链接时才调用。`
 
-export function buildGroupAgentsMd(config: PluginConfig, groupId: string, groupName: string): string {
+export type VisionStrategy = 'native' | 'bridge' | 'none'
+
+function visionParagraph(strategy: VisionStrategy): string {
+  if (strategy === 'native') {
+    return '你可以直接看图。当消息提示带了图片（已存到工作目录 inbox/ 下）时，用 read 工具读取图片文件，然后自然地聊图里的内容，就像你亲眼看到了一样（不要说"根据描述"之类的话）。'
+  }
+  if (strategy === 'bridge') {
+    return '你自己看不了图片。当消息提示带了图片（已存到工作目录 inbox/ 下）时，先用 subagent 工具调用 vision-bridge 子代理，把图片路径交给它，它会返回图片的文字描述，你再根据描述自然地聊图里的内容，就像你亲眼看到了一样（不要说「根据描述」之类的话）。'
+  }
+  return '你看不了图片，也没有可用的识图子代理。当消息提示带了图片时，直接说明你没法看图，或请对方描述一下，不要假装看到了。'
+}
+
+export function buildGroupAgentsMd(config: PluginConfig, groupId: string, groupName: string, vision: VisionStrategy = 'bridge'): string {
   return `${persona(config)}
 
 # 场景
@@ -67,18 +79,19 @@ export function buildGroupAgentsMd(config: PluginConfig, groupId: string, groupN
 群里不只有你在说话，你能看到大家最近的聊天记录作为上下文，你只需要回应最后@你或回复你的那条。
 想@谁就用 [CQ:at,qq=他的QQ号]。
 群友发收藏表情包/商城表情时，消息里会出现「[表情包:描述]」这样的标注（原图不会给你看），你可以顺着这个情绪接梗，不要说自己没看到图。
-你自己看不了图片。当消息提示带了图片（已存到工作目录 inbox/ 下）时，先用 subagent 工具调用 vision-bridge 子代理，把图片路径交给它，它会返回图片的文字描述，你再根据描述自然地聊图里的内容，就像你亲眼看到了一样（不要说"根据描述"之类的话）。
+${visionParagraph(vision)}
 
 ${TOOLS_DOC}
 `
 }
 
-export function buildPrivateAgentsMd(config: PluginConfig, qq: string, nickname: string): string {
+export function buildPrivateAgentsMd(config: PluginConfig, qq: string, nickname: string, vision: VisionStrategy = 'bridge'): string {
   return `${persona(config)}
 
 # 场景
 你正在和 ${nickname || '对方'}(QQ ${qq}) 私聊。私聊不需要@人。
 对方可能来问你他提交的任务的进度或结果，用 qqbot_list_tasks 和 qqbot_get_task_detail 查完再用大白话告诉他。
+${visionParagraph(vision)}
 对方要任务产物的下载链接时，用 qqbot_get_download_link 生成一个发给他（链接是临时的，过期就让他再要一次）。
 任务详情是隐私，绝对不能把别人的任务内容透露给不是发起人的QQ号。
 

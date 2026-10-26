@@ -3,7 +3,7 @@ import path from 'node:path'
 import { PluginConfig } from './config'
 import { MsgDB, dayKey } from './msgdb'
 import { OpencodeClient, OpencodeEvent } from './opencode'
-import { buildGroupAgentsMd, buildPrivateAgentsMd, ALLOWED_FACE_IDS } from './agentsmd'
+import { buildGroupAgentsMd, buildPrivateAgentsMd, ALLOWED_FACE_IDS, VisionStrategy } from './agentsmd'
 import { cleanCqForDisplay, dedupeImages, extractAtTargets, extractImages, extractImagesFromRaw, extractReplyTo, extractText, MsgSegment, textToSegments } from './format'
 import { MuteStore } from './mutes'
 import { OB11MessageEvent, SessionRuntime } from './types'
@@ -55,6 +55,7 @@ export class SessionController {
   private lastText = new Map<string, string>()
   private lastTrigger = new Map<string, { userId: number; messageId: number; groupId: number | null }>()
   private selfId = 0
+  private hostVisionCache: { model: string; vision: boolean; at: number } | null = null
   private sendQueues = new Map<string, Promise<void>>()
   private runtime!: SessionRuntime
 
@@ -160,15 +161,17 @@ export class SessionController {
   }
 
   // 把模型写入单个工作区 opencode.json（默认模型 / vision-bridge 子代理模型）
-  private patchWorkspaceModel(scope: string, hostModel?: string, visionModel?: string): boolean {
+  // visionModel: string=更新；null=移除 vision-bridge；undefined=不动
+  private patchWorkspaceModel(scope: string, hostModel?: string, visionModel?: string | null): boolean {
     const file = path.join(this.workspaceFor(scope), 'opencode.json')
     try {
       if (!fs.existsSync(file)) return false
       const json = JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, unknown>
       if (hostModel) json.model = hostModel
-      if (visionModel) {
+      if (visionModel !== undefined) {
         const agents = (json.agents ?? {}) as Record<string, Record<string, unknown>>
-        agents['vision-bridge'] = { ...(agents['vision-bridge'] ?? {}), model: visionModel }
+        if (visionModel === null) delete agents['vision-bridge']
+        else agents['vision-bridge'] = { ...(agents['vision-bridge'] ?? {}), model: visionModel }
         json.agents = agents
       }
       fs.writeFileSync(file, JSON.stringify(json, null, 2))
@@ -185,9 +188,11 @@ export class SessionController {
     const providerID = parts.shift() ?? ''
     const id = parts.join('/')
     if (!providerID || !id) throw new Error('模型 ID 格式应为 provider/model')
+    this.hostVisionCache = null
+    const native = await this.hostSupportsVision()
     const result = { switched: 0, failed: [] as { scope: string; error: string }[] }
     for (const [scope, entry] of this.map.entries()) {
-      this.patchWorkspaceModel(scope, modelId)
+      this.patchWorkspaceModel(scope, modelId, native ? null : this.config.visionModel)
       try {
         await this.oc.switchSessionModel(entry.sessionId, { providerID, id })
         result.switched++
@@ -200,7 +205,8 @@ export class SessionController {
   }
 
   // 更新所有工作区的识图子代理模型（新会话/子代理调用生效）
-  updateAllWorkspaceVisionModel(modelId: string): number {
+  async updateAllWorkspaceVisionModel(modelId: string): Promise<number> {
+    if (await this.hostSupportsVision()) return 0
     let updated = 0
     for (const scope of this.map.keys()) {
       if (this.patchWorkspaceModel(scope, undefined, modelId)) updated++
@@ -212,48 +218,78 @@ export class SessionController {
     return path.join(this.workspacesDir, scope)
   }
 
-  private ensureWorkspaceFiles(scope: string, event: OB11MessageEvent) {
+  // 主模型是否声明了图片输入能力（多模态）；查 OpenCode 模型目录并缓存 5 分钟
+  async hostSupportsVision(): Promise<boolean> {
+    const modelId = this.config.hostModel
+    const now = Date.now()
+    if (this.hostVisionCache && this.hostVisionCache.model === modelId && now - this.hostVisionCache.at < 5 * 60_000) {
+      return this.hostVisionCache.vision
+    }
+    let vision = false
+    try {
+      const parts = modelId.split('/')
+      const providerID = parts.shift() ?? ''
+      const id = parts.join('/')
+      const models = await this.oc.listModels()
+      const found = models.find((m) => m.providerID === providerID && (m.modelID ?? m.id) === id)
+      vision = !!found && Array.isArray(found.capabilities?.input) && found.capabilities.input.includes('image')
+    } catch (e) {
+      this.log('读取主模型能力失败（按纯文本处理，识图子代理兜底）:', e)
+      vision = false
+    }
+    this.hostVisionCache = { model: modelId, vision, at: now }
+    return vision
+  }
+
+  // 图片处理策略：主模型多模态→直接读图；否则配置了 visionModel 就用 vision-bridge；否则看图不可用
+  async visionStrategy(): Promise<VisionStrategy> {
+    if (await this.hostSupportsVision()) return 'native'
+    return this.config.visionModel ? 'bridge' : 'none'
+  }
+
+  private async ensureWorkspaceFiles(scope: string, event: OB11MessageEvent) {
     const directory = this.workspaceFor(scope)
     fs.mkdirSync(directory, { recursive: true })
+    const vision = await this.visionStrategy()
     const agentsMd =
       event.message_type === 'group'
-        ? buildGroupAgentsMd(this.config, String(event.group_id), event.group_name ?? '')
-        : buildPrivateAgentsMd(this.config, String(event.user_id), event.sender?.nickname ?? '')
-    const ocJson = JSON.stringify(
-      {
-        $schema: 'https://opencode.ai/config.json',
-        // instructions 是 session 级快照：新会话生效；已有会话在 compact 后重新读取
-        instructions: ['./' + MEMORY_FILE],
-        model: this.config.hostModel,
-        agents: {
-          'vision-bridge': {
-            description: '视觉跳板：读取图片/视频文件并输出详细文字描述，供纯文本模型调用',
-            model: this.config.visionModel,
-            mode: 'subagent',
-            system:
-              '你是视觉跳板。用户会给你一个图片或视频的文件路径（在工作目录下，如 inbox/xxx.jpg）。用 read 工具读取该文件，然后用中文输出详细、客观的内容描述（画面主体、文字、细节、氛围）。只输出描述本身，不要评价、不要回答用户其他问题。',
-          },
-        },
-        mcp: {
-          servers: {
-            qqbot: {
-              type: 'remote',
-              url: this.config.mcpUrl,
-              disabled: false,
-              codemode: false,
-              oauth: false,
-              timeout: { startup: 8000, catalog: 8000, execution: 8000 },
-              headers: {
-                authorization: `Bearer ${this.config.mcpToken}`,
-                'x-qqbot-scope': scope,
-              },
+        ? buildGroupAgentsMd(this.config, String(event.group_id), event.group_name ?? '', vision)
+        : buildPrivateAgentsMd(this.config, String(event.user_id), event.sender?.nickname ?? '', vision)
+    // 只有主模型没有视觉能力时才注册 vision-bridge 子代理；多模态主模型直接读图
+    const ocConfig: Record<string, unknown> = {
+      $schema: 'https://opencode.ai/config.json',
+      // instructions 是 session 级快照：新会话生效；已有会话在 compact 后重新读取
+      instructions: ['./' + MEMORY_FILE],
+      model: this.config.hostModel,
+      mcp: {
+        servers: {
+          qqbot: {
+            type: 'remote',
+            url: this.config.mcpUrl,
+            disabled: false,
+            codemode: false,
+            oauth: false,
+            timeout: { startup: 8000, catalog: 8000, execution: 8000 },
+            headers: {
+              authorization: `Bearer ${this.config.mcpToken}`,
+              'x-qqbot-scope': scope,
             },
           },
         },
       },
-      null,
-      2
-    )
+    }
+    if (vision === 'bridge') {
+      ocConfig.agents = {
+        'vision-bridge': {
+          description: '视觉跳板：读取图片/视频文件并输出详细文字描述，供纯文本模型调用',
+          model: this.config.visionModel,
+          mode: 'subagent',
+          system:
+            '你是视觉跳板。用户会给你一个图片或视频的文件路径（在工作目录下，如 inbox/xxx.jpg）。用 read 工具读取该文件，然后用中文输出详细、客观的内容描述（画面主体、文字、细节、氛围）。只输出描述本身，不要评价、不要回答用户其他问题。',
+        },
+      }
+    }
+    const ocJson = JSON.stringify(ocConfig, null, 2)
     // 记忆文件只做"不存在则创建"，永不覆盖（梦境整理会原子替换它）
     try {
       const memoryPath = path.join(directory, MEMORY_FILE)
@@ -280,7 +316,7 @@ export class SessionController {
   }
 
   private async ensureSession(scope: string, event: OB11MessageEvent): Promise<SessionEntry | null> {
-    this.ensureWorkspaceFiles(scope, event)
+    await this.ensureWorkspaceFiles(scope, event)
     const existing = this.map.get(scope)
     if (existing) return existing
     const directory = this.workspaceFor(scope)
@@ -503,7 +539,14 @@ export class SessionController {
         notes.push('(图片下载失败)')
       }
     }
-    return `\n[系统] 这条消息带了图片，已存到工作目录：${notes.join('、')}。用 subagent 工具调 vision-bridge 子代理读取图片内容后再回答。`
+    const strategy = await this.visionStrategy()
+    if (strategy === 'native') {
+      return `\n[系统] 这条消息带了图片，已存到工作目录：${notes.join('、')}。你的模型支持图片输入，直接用 read 工具读取图片内容。`
+    }
+    if (strategy === 'bridge') {
+      return `\n[系统] 这条消息带了图片，已存到工作目录：${notes.join('、')}。用 subagent 工具调 vision-bridge 子代理读取图片内容后再回答。`
+    }
+    return `\n[系统] 这条消息带了图片，已存到工作目录：${notes.join('、')}。你当前没有可用的看图能力，回复里直接说明看不到图或请对方描述。`
   }
 
   private async reset(scope: string) {

@@ -1290,6 +1290,9 @@ body.modal-open{overflow:hidden}
 .md-badge{font-size:10px;padding:2px 7px;border-radius:999px;border:1px solid var(--border);color:var(--muted);background:rgba(255,255,255,.04)}
 .md-badge.free{color:var(--success);border-color:rgba(39,166,68,.35);background:rgba(39,166,68,.08)}
 .md-badge.paid{color:var(--warn);border-color:rgba(234,179,8,.3);background:rgba(234,179,8,.06)}
+.md-note{display:flex;gap:9px;align-items:flex-start;margin-top:8px;padding:10px 12px;border:1px solid rgba(94,106,210,.28);background:rgba(94,106,210,.07);border-radius:8px;font-size:12px;line-height:1.65;color:var(--fg-2)}
+.md-note svg{width:14px;height:14px;flex:none;margin-top:2px;color:var(--accent)}
+.md-note b{color:var(--fg);font-weight:560}
 .md-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px}
 .md-row .input{flex:1;min-width:280px}
 .md-free-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
@@ -1778,13 +1781,14 @@ function buildMock(){
       stickers.forEach(function(s){ if(s.collection===name){ s.collection=''; s.updatedAt=NOW; changed++; } });
       return {ok:true,changed:changed,stats:stickerStats(),collections:this.listCollections(),items:deepCopy(stickers)};
     },
-    models:function(){ return {items:deepCopy(MODELS),current:{hostModel:cfg.hostModel,visionModel:cfg.visionModel},defaultModel:cfg.hostModel,providers:[{id:'opencode',name:'OpenCode'},{id:'deepseek',name:'DeepSeek'}]}; },
+    models:function(){ var hv=false; MODELS.forEach(function(m){ if(m.id===cfg.hostModel) hv=!!m.vision; }); return {items:deepCopy(MODELS),hostVision:hv,current:{hostModel:cfg.hostModel,visionModel:cfg.visionModel},defaultModel:cfg.hostModel,providers:[{id:'opencode',name:'OpenCode'},{id:'deepseek',name:'DeepSeek'}]}; },
     switchModel:function(body){
       var model=String((body&&body.model)||'');
       var target=(body&&body.target)==='vision'?'vision':'host';
       if(target==='vision') cfg.visionModel=model; else cfg.hostModel=model;
       MODELS.forEach(function(m){ m.currentHost=(m.id===cfg.hostModel); m.currentVision=(m.id===cfg.visionModel); });
-      return {ok:true,target:target,model:model,switched:target==='host'?3:0,failed:[],workspaces:target==='vision'?3:0,current:{hostModel:cfg.hostModel,visionModel:cfg.visionModel}};
+      var hv=false; MODELS.forEach(function(m){ if(m.id===cfg.hostModel) hv=!!m.vision; });
+      return {ok:true,target:target,model:model,hostVision:hv,switched:target==='host'?3:0,failed:[],workspaces:target==='vision'?3:0,current:{hostModel:cfg.hostModel,visionModel:cfg.visionModel}};
     },
     batchStickers:function(ids,body){
       var changed=0;
@@ -2933,6 +2937,7 @@ function renderModels(){
   else if(!data||!data.items||data.items.length===0){ body='<div class="panel"><div class="panel-body"><div class="empty-title">没有可用模型</div><div class="empty-text">OpenCode 未返回模型目录，检查 provider / auth 配置。</div></div></div>'; }
   else {
     var host=modelById(cur.hostModel), vision=modelById(cur.visionModel);
+    var hostVision=(data.hostVision===true)||!(host)&&false||!!(host&&host.vision);
     var currentHTML='<div class="md-current">'
       +'<div class="md-card"><div class="md-card-label">主模型（hostModel）</div><div class="md-card-value mono">'+esc(cur.hostModel||'—')+'</div><div class="md-card-meta">'+(host?esc(host.name+' · '+host.providerName):'不在当前目录')+'</div><div class="md-card-badges">'+(host?(host.free?'<span class="md-badge free">免费</span>':'<span class="md-badge paid">付费</span>'):'')+(host&&host.vision?'<span class="md-badge">支持图片输入</span>':'')+'</div></div>'
       +'<div class="md-card"><div class="md-card-label">识图模型（vision-bridge）</div><div class="md-card-value mono">'+esc(cur.visionModel||'—')+'</div><div class="md-card-meta">'+(vision?esc(vision.name+' · '+vision.providerName):'不在当前目录')+'</div><div class="md-card-badges">'+(vision&&vision.free?'<span class="md-badge free">免费</span>':'')+'</div></div>'
@@ -2944,10 +2949,13 @@ function renderModels(){
       +'<p class="field-help">切换会更新默认模型，并把所有已登记 Session 切到新模型（保留上下文）；之后新建的会话也用它。</p>'
       +'<div class="md-row"><select id="md-host-select" class="input" aria-label="选择主模型">'+modelOptionsHTML(S.models.hostSelect||cur.hostModel)+'</select>'
       +'<button class="btn btn-primary" type="button" data-action="md-switch-host" '+(S.models.switching?'disabled':'')+'>'+(S.models.switching?'切换中…':'应用到所有 Session')+'</button></div>'
-      +'<div class="cfg-group-title" style="margin-top:22px">识图模型</div>'
-      +'<p class="field-help">vision-bridge 子代理读取图片用；只更新配置和工作区，不改动已有会话。</p>'
-      +'<div class="md-row"><select id="md-vision-select" class="input" aria-label="选择识图模型">'+modelOptionsHTML(S.models.visionSelect||cur.visionModel)+'</select>'
-      +'<button class="btn" type="button" data-action="md-save-vision" '+(S.models.switching?'disabled':'')+'>保存识图模型</button></div>'
+      +(hostVision
+        ? '<div class="cfg-group-title" style="margin-top:22px">识图模型</div>'
+          +'<div class="md-note">'+icon('info')+'<span>当前主模型已声明图片输入能力（多模态），会直接看图，<b>不需要也不启用 vision-bridge 识图子代理</b>；识图模型只有在主模型不支持看图时才会启用。</span></div>'
+        : '<div class="cfg-group-title" style="margin-top:22px">识图模型</div>'
+          +'<p class="field-help">主模型没有声明视觉模态，图片会交给 vision-bridge 子代理读取；这里选择识图模型。</p>'
+          +'<div class="md-row"><select id="md-vision-select" class="input" aria-label="选择识图模型">'+modelOptionsHTML(S.models.visionSelect||cur.visionModel)+'</select>'
+          +'<button class="btn" type="button" data-action="md-save-vision" '+(S.models.switching?'disabled':'')+'>保存识图模型</button></div>')
       +'</div></div>'
       +'<div class="panel"><div class="panel-body"><div class="cfg-group-title">当前可用的免费模型（'+freeList.length+'）</div>'
       +'<p class="field-help">免费模型由 OpenCode 动态提供，可能新增或下架；这里直接读取 OpenCode 的模型目录，不写死。</p>'

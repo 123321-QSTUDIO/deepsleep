@@ -221,8 +221,10 @@ export class ControlPanel {
             }
           })
           .sort((a, b) => Number(b.free) - Number(a.free) || a.providerName.localeCompare(b.providerName) || a.name.localeCompare(b.name))
+        const hostVision = await this.deps.sessions.hostSupportsVision()
         this.sendJson(res, 200, {
           items,
+          hostVision,
           current: { hostModel: this.deps.config.hostModel, visionModel: this.deps.config.visionModel },
           defaultModel: defaultModel ? defaultModel.providerID + '/' + modelIdOf(defaultModel) : null,
           providers: providers.map((x) => ({ id: x.id, name: x.name ?? x.id })),
@@ -262,10 +264,12 @@ export class ControlPanel {
         const result = applySessions
           ? await this.deps.sessions.switchModelForAll(model)
           : { switched: 0, failed: [] as { scope: string; error: string }[] }
+        const hostVision = await this.deps.sessions.hostSupportsVision()
         this.sendJson(res, 200, {
           ok: true,
           target,
           model,
+          hostVision,
           switched: result.switched,
           failed: result.failed,
           sessions: this.deps.sessions.listScopes().length,
@@ -273,12 +277,16 @@ export class ControlPanel {
         })
         return
       }
+      if (await this.deps.sessions.hostSupportsVision()) {
+        this.sendJson(res, 400, { error: '当前主模型已声明图片输入能力（多模态），识图模型不会启用；等主模型不支持看图时再来设置' })
+        return
+      }
       const upd = this.updateConfig({ visionModel: model })
       if (typeof upd.error === 'string') {
         this.sendJson(res, 400, upd)
         return
       }
-      const workspaces = this.deps.sessions.updateAllWorkspaceVisionModel(model)
+      const workspaces = await this.deps.sessions.updateAllWorkspaceVisionModel(model)
       this.sendJson(res, 200, {
         ok: true,
         target,
