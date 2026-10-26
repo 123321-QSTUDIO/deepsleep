@@ -73,9 +73,9 @@ export class QqMcpServer {
     mcp.registerTool(
       'send_message',
       {
-        description: '发送一条消息到当前QQ对话（群或私聊）。每说一句话调用一次。可以用[CQ:at,qq=QQ号]@人、[CQ:face,id=数字]发表情。',
+        description: '发送一条消息到当前QQ对话（群或私聊）。想发几条就调几次；普通聊天尽量短，解释类可适当加长。可以用[CQ:at,qq=QQ号]@人、[CQ:face,id=数字]发表情。',
         inputSchema: {
-          text: z.string().describe('消息内容，尽量不超过30个字'),
+          text: z.string().describe('消息内容；普通闲聊尽量简短，解释类可适当加长，超长会收到警告'),
           reply_to: z.string().optional().describe('要引用的消息ID（回复某条消息时用）'),
           at_qq: z.string().optional().describe('要@的人的QQ号'),
         },
@@ -84,23 +84,23 @@ export class QqMcpServer {
         if (!scope) return text('错误: 未知对话上下文')
         if (taskMode) return text('错误: 沙箱任务中不能发消息')
         const cfg = this.deps.config
-        const maxChars = Math.max(20, cfg.maxCharsPerMessage || 120)
-        if (t.length > maxChars) {
-          return text('错误: 单条消息太长（上限 ' + maxChars + ' 字，当前 ' + t.length + ' 字），请精简或合并成更少的消息')
-        }
+        const maxChars = Math.max(20, cfg.maxCharsPerMessage || 200)
         const maxLines = Math.max(1, cfg.maxLinesPerReply || 4)
-        if (sessions.toolSendCountOfScope(scope) >= maxLines) {
-          return text('错误: 本轮消息条数已达上限（' + maxLines + ' 条），不要再发，把需要说的精简掉')
-        }
+        const countBefore = sessions.toolSendCountOfScope(scope)
         await sessions.sendTextToScope(scope, t, { replyTo: reply_to, atQq: at_qq })
         sessions.markSentByScope(scope)
-        const atTargets = [...t.matchAll(/\[CQ:at,qq=(\w+)\]/g)].map((m) => m[1])
-        if (at_qq) atTargets.push(at_qq)
-        sessions.markAnsweredByAt(scope, atTargets)
-        return text('已发送')
+        // 不拦截发送，只在工具结果里提醒模型自己收敛，避免回复戛然而止
+        const notes: string[] = []
+        if (t.length > maxChars) {
+          notes.push('这条消息偏长（' + t.length + ' 字，建议单条不超过 ' + maxChars + ' 字），之后请精简或拆成几条')
+        }
+        const countAfter = countBefore + 1
+        if (countAfter > maxLines) {
+          notes.push('本轮已经发了 ' + countAfter + ' 条，超过建议的 ' + maxLines + ' 条，接下来请收尾，不要再刷屏')
+        }
+        return text('已发送' + (notes.length > 0 ? '。警告：' + notes.join('；') : ''))
       }
     )
-
     mcp.registerTool(
       'list_stickers',
       {
