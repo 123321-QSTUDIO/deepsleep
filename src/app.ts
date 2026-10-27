@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { loadConfig, PluginConfig } from './config'
-import { extractReplyTo, extractText, MsgSegment } from './format'
+import { cleanCqForDisplay, extractReplyTo, extractText, MsgSegment } from './format'
 import { MsgDB } from './msgdb'
 import { OpencodeClient } from './opencode'
 import { SessionController } from './sessions'
@@ -268,6 +268,8 @@ function storeMessage(db: MsgDB, event: OB11MessageEvent): void {
     .map((seg) => `[表情包${seg.data?.summary ? ':' + String(seg.data.summary) : ''}]`)
   let text = typeof event.raw_message === 'string' && event.raw_message ? event.raw_message : extractText(segments)
   if (stickerNotes.length > 0) text += ' ' + stickerNotes.join('')
+  // 纯 @/空白 raw 在后续展示时会被洗成空行，存一个可读兜底
+  if (!cleanCqForDisplay(text).trim()) text = extractText(segments) || '[空白消息]'
   db.insert(scope, {
     message_id: typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null,
     user_id: event.user_id ?? null,

@@ -4,7 +4,7 @@ import { PluginConfig } from './config'
 import { MsgDB, dayKey } from './msgdb'
 import { OpencodeClient, OpencodeEvent, OcPromptFile } from './opencode'
 import { buildGroupAgentsMd, buildPrivateAgentsMd, ALLOWED_FACE_IDS, VisionStrategy } from './agentsmd'
-import { cleanCqForDisplay, dedupeImages, extractAtTargets, extractImages, extractImagesFromRaw, extractReplyTo, extractText, MsgSegment, sanitizeOutgoingText, textToSegments } from './format'
+import { cleanCqForDisplay, dedupeImages, extractAtTargets, extractImages, extractImagesFromRaw, extractReplyTo, extractText, MsgSegment, sanitizeOutgoingText, textToSegments, visibleMessageText } from './format'
 import { MuteStore } from './mutes'
 import { OB11MessageEvent, SessionRuntime } from './types'
 import { TtsClient } from './tts'
@@ -760,7 +760,7 @@ export class SessionController {
         const rows = this.db.query(
           scope,
           day,
-          'SELECT msg_pk, message_id, time, nickname, user_id, text FROM message ORDER BY msg_pk DESC LIMIT ?',
+          'SELECT msg_pk, message_id, time, nickname, user_id, text, segments FROM message ORDER BY msg_pk DESC LIMIT ?',
           [contextLimit * 3]
         )
         for (const r of rows.reverse()) {
@@ -773,7 +773,9 @@ export class SessionController {
           if (sent.has(mid)) continue
           if (pending.some((p) => p.id === mid)) continue
           const nick = String(r.nickname || r.user_id)
-          candidates.push({ mid, line: `[${hhmm(Number(r.time))}] ${nick}(${r.user_id}): ${cleanCqForDisplay(String(r.text ?? ''))}` })
+          let segs: MsgSegment[] = []
+          try { segs = JSON.parse(String(r.segments ?? '[]')) as MsgSegment[] } catch { /* ignore */ }
+          candidates.push({ mid, line: `[${hhmm(Number(r.time))}] ${nick}(${r.user_id}): ${visibleMessageText(String(r.text ?? ''), segs)}` })
         }
       } catch {
         // no db for that day
@@ -784,8 +786,9 @@ export class SessionController {
 
     const segments = (Array.isArray(event.message) ? event.message : []) as MsgSegment[]
     const nick = event.sender?.card || event.sender?.nickname || String(event.user_id ?? '')
-    let currentText = cleanCqForDisplay(
-      typeof event.raw_message === 'string' && event.raw_message ? event.raw_message : extractText(segments)
+    let currentText = visibleMessageText(
+      typeof event.raw_message === 'string' ? event.raw_message : '',
+      segments
     )
     // 收藏/商城表情的 image 段带 emoji_id/summary：当前消息也要带上可读描述，
     // 否则只有 [CQ:image] 或 [图片]，模型不知道这是个表情包
@@ -1231,7 +1234,9 @@ export class SessionController {
       const requiredIds = this.groupBatchRequired.get(scope) ?? new Set<number>()
       const allLines = rows.map((r) => {
         const mid = r.message_id == null ? null : Number(r.message_id)
-        const text = cleanCqForDisplay(String(r.text ?? '')).replace(/\s+/g, ' ').trim()
+        let rowSegs: MsgSegment[] = []
+        try { rowSegs = JSON.parse(String(r.segments ?? '[]')) as MsgSegment[] } catch { /* ignore */ }
+        const text = visibleMessageText(String(r.text ?? ''), rowSegs)
         const prefix = mid !== null && requiredIds.has(mid) ? '[须回应] ' : ''
         return { id: mid, line: prefix + '[' + mmddhhmm(Number(r.time)) + '] ' + String(r.nickname || r.user_id) + '(' + r.user_id + '): ' + text }
       }).filter((x) => x.line.length > 20)

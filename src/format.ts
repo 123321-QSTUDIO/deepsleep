@@ -83,6 +83,16 @@ export function sanitizeOutgoingText(text: string): string {
     .replace(/\n{3,}/g, '\n\n')
 }
 
+// 给模型看的消息正文：raw 可能是纯 [CQ:at]（清洗后为空），此时回退到 segments 的可读文本；
+// 纯表情/图片/空白消息也至少给一个可读占位，避免 prompt 出现 "用户:" 空行。
+export function visibleMessageText(text: string, segments?: MsgSegment[]): string {
+  let out = cleanCqForDisplay(String(text ?? '')).replace(/\s+/g, ' ').trim()
+  if (!out && segments && segments.length > 0) {
+    out = cleanCqForDisplay(extractText(segments)).replace(/\s+/g, ' ').trim()
+  }
+  return out || '[空白消息]'
+}
+
 export function textToSegments(text: string): Record<string, unknown>[] {
   text = sanitizeOutgoingText(text)
   const segs: Record<string, unknown>[] = []
