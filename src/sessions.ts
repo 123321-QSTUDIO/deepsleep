@@ -118,7 +118,6 @@ export class SessionController {
   private groupBatchRequired = new Map<string, Set<number>>()
   // @ 到达时立即 flush 当前窗口；正在投喂时等本轮结束后再补一次
   private groupBatchForce = new Set<string>()
-  private mentionNameCache = new Map<string, string>()
   // 即时 prompt 的上下文下界（秒）：只带下界之后的新消息，避免每次 @ 都把历史积压分块重发
   private contextSince = new Map<string, number>()
   // 批量投喂下载的图片：native 模式请求接受后即删；bridge/none 模式等回合结束再删
@@ -551,12 +550,13 @@ export class SessionController {
         const messages = rows.map((r) => {
           let segs: MsgSegment[] = []
           try { segs = JSON.parse(String(r.segments ?? '[]')) as MsgSegment[] } catch { /* ignore */ }
+          const replyTo = extractReplyTo(segs)
           return {
             message_id: r.message_id == null ? null : Number(r.message_id),
             user_id: Number(r.user_id),
-            nickname: String(r.nickname ?? ''),
+            nickname: this.displayName(r.card, r.nickname, r.user_id),
             time: Number(r.time),
-            text: this.promptText(scope, String(r.text ?? ''), segs),
+            text: this.promptText(scope, String(r.text ?? ''), segs) + (replyTo !== null ? this.quoteSuffix(scope, replyTo) : ''),
           }
         })
         const triggered = this.waitTriggered.get(scope)
@@ -602,7 +602,7 @@ export class SessionController {
     return max
   }
 
-  private messagesSince(scope: string, afterPk: number, limit: number): { message_id: number | null; user_id: number; nickname: string; time: number; text: string; segments: string }[] {
+  private messagesSince(scope: string, afterPk: number, limit: number): { message_id: number | null; user_id: number; card: string; nickname: string; time: number; text: string; segments: string }[] {
     const now = Math.floor(Date.now() / 1000)
     const rows: Record<string, unknown>[] = []
     for (const day of [dayKey(now - 86400), dayKey(now)]) {
@@ -610,7 +610,7 @@ export class SessionController {
         const part = this.db.query(
           scope,
           day,
-          'SELECT msg_pk, message_id, user_id, nickname, time, text, segments FROM message WHERE msg_pk > ? ORDER BY msg_pk ASC LIMIT ?',
+          'SELECT msg_pk, message_id, user_id, card, nickname, time, text, segments FROM message WHERE msg_pk > ? ORDER BY msg_pk ASC LIMIT ?',
           [afterPk, limit]
         ) as Record<string, unknown>[]
         rows.push(...part)
@@ -621,7 +621,7 @@ export class SessionController {
     return rows
       .filter((r) => String(r.user_id) !== String(this.selfId))
       .sort((a, b) => Number(a.msg_pk) - Number(b.msg_pk))
-      .slice(-limit) as { message_id: number | null; user_id: number; nickname: string; time: number; text: string; segments: string }[]
+      .slice(-limit) as { message_id: number | null; user_id: number; card: string; nickname: string; time: number; text: string; segments: string }[]
   }
 
   // 戳一戳：像一条普通消息一样入库并交给模型，模型自己决定回话/回拍/不理
@@ -748,6 +748,29 @@ export class SessionController {
     return out.slice(-limit).map((x) => x.line)
   }
 
+  private displayName(card: unknown, nickname: unknown, userId: unknown): string {
+    return String(card ?? '').trim() || String(nickname ?? '').trim() || String(userId ?? '')
+  }
+
+  // 引用消息：批量记录/即时 prompt 都要带上被引用内容，否则只知道在回复但不知道回复谁
+  private quoteSuffix(scope: string, replyTo: number, maxLen = 200): string {
+    const now = Math.floor(Date.now() / 1000)
+    for (const day of [dayKey(now), dayKey(now - 86400)]) {
+      try {
+        const rows = this.db.query(scope, day, 'SELECT card, nickname, user_id, text, segments FROM message WHERE message_id = ? LIMIT 1', [replyTo]) as Record<string, unknown>[]
+        if (rows.length === 0) continue
+        let segs: MsgSegment[] = []
+        try { segs = JSON.parse(String(rows[0].segments ?? '[]')) as MsgSegment[] } catch { /* ignore */ }
+        const who = this.displayName(rows[0].card, rows[0].nickname, rows[0].user_id)
+        const body = this.promptText(scope, String(rows[0].text ?? ''), segs).slice(0, maxLen)
+        return '\n  > 引用 ' + who + '(' + String(rows[0].user_id) + '): ' + body
+      } catch {
+        // day db missing
+      }
+    }
+    return ''
+  }
+
   // 给模型看的消息正文：把 CQ/segment 里的 @ 映射成 @昵称（@自己=@你），
   // 不再用 cleanCqForDisplay 把用户之间的 @ 全部抹掉。
   private promptText(scope: string, text: string, segments?: MsgSegment[]): string {
@@ -757,9 +780,6 @@ export class SessionController {
       if (id === 'all') return '@全体成员'
       if (id === String(this.selfId)) return '@你'
       if (explicit && explicit.trim()) return '@' + explicit.trim()
-      const key = scope + ':' + id
-      const cached = this.mentionNameCache.get(key)
-      if (cached) return '@' + cached
       const now = Math.floor(Date.now() / 1000)
       let name = ''
       for (const day of [dayKey(now), dayKey(now - 86400)]) {
@@ -774,10 +794,7 @@ export class SessionController {
           // day db missing
         }
       }
-      if (name) {
-        this.mentionNameCache.set(key, name)
-        return '@' + name
-      }
+      if (name) return '@' + name
       return '@' + id
     }
     const segs = Array.isArray(segments) ? segments : []
@@ -797,6 +814,12 @@ export class SessionController {
       out = out.replace(/\[CQ:at,qq=([^,\]]+)/g, (_m, qq) => mention(String(qq)))
     }
     return cleanCqForDisplay(out).replace(/\s+/g, ' ').trim() || '[空白消息]'
+  }
+
+  // MCP 的 query_chat_log 等外部入口复用同一套展示：群昵称 + @映射 + 引用
+  formatForAgent(scope: string, text: string, segments?: unknown): string {
+    const segs = Array.isArray(segments) ? (segments as MsgSegment[]) : undefined
+    return this.promptText(scope, text, segs)
   }
 
   private buildPrompt(event: OB11MessageEvent, mode: 'normal' | 'proactive' | 'context' | 'poke' = 'normal', contextNote = ''): string {
@@ -819,7 +842,7 @@ export class SessionController {
         const rows = this.db.query(
           scope,
           day,
-          'SELECT msg_pk, message_id, time, nickname, user_id, text, segments FROM message ORDER BY msg_pk DESC LIMIT ?',
+          'SELECT msg_pk, message_id, time, card, nickname, user_id, text, segments FROM message ORDER BY msg_pk DESC LIMIT ?',
           [contextLimit * 3]
         )
         for (const r of rows.reverse()) {
@@ -831,7 +854,7 @@ export class SessionController {
           if (currentId !== null && mid === currentId) continue
           if (sent.has(mid)) continue
           if (pending.some((p) => p.id === mid)) continue
-          const nick = String(r.nickname || r.user_id)
+          const nick = this.displayName(r.card, r.nickname, r.user_id)
           let segs: MsgSegment[] = []
           try { segs = JSON.parse(String(r.segments ?? '[]')) as MsgSegment[] } catch { /* ignore */ }
           candidates.push({ mid, line: `[${hhmm(Number(r.time))}] ${nick}(${r.user_id}): ${this.promptText(scope, String(r.text ?? ''), segs)}` })
@@ -848,21 +871,7 @@ export class SessionController {
     const currentText = this.promptText(scope, typeof event.raw_message === 'string' ? event.raw_message : '', segments)
     let currentLine = `[${hhmm(event.time ?? now)}] ${nick}(${event.user_id}): ${currentText}`
     const replyTo = extractReplyTo(segments)
-    if (replyTo !== null) {
-      for (const day of [dayKey(now), dayKey(now - 86400)]) {
-        try {
-          const rows = this.db.query(scope, day, 'SELECT nickname, user_id, text, segments FROM message WHERE message_id = ? LIMIT 1', [replyTo]) as Record<string, unknown>[]
-          if (rows.length > 0) {
-            let quotedSegs: MsgSegment[] = []
-            try { quotedSegs = JSON.parse(String(rows[0].segments ?? '[]')) as MsgSegment[] } catch { /* ignore */ }
-            currentLine += `\n  > 引用 ${rows[0].nickname || rows[0].user_id}(${rows[0].user_id}): ${this.promptText(scope, String(rows[0].text ?? ''), quotedSegs).slice(0, 200)}`
-            break
-          }
-        } catch {
-          // ignore
-        }
-      }
-    }
+    if (replyTo !== null) currentLine += this.quoteSuffix(scope, replyTo)
     if (proactive) {
       // 主动参与/语境/戳一戳：当前消息只是普通聊天记录，不进入「待回应清单」
       // 戳一戳是虚拟事件（已入库，message_id 为空），不能把空行塞进上下文
@@ -1305,8 +1314,10 @@ export class SessionController {
         let rowSegs: MsgSegment[] = []
         try { rowSegs = JSON.parse(String(r.segments ?? '[]')) as MsgSegment[] } catch { /* ignore */ }
         const text = this.promptText(scope, String(r.text ?? ''), rowSegs)
+        const replyTo = extractReplyTo(rowSegs)
+        const quote = replyTo !== null ? this.quoteSuffix(scope, replyTo) : ''
         const prefix = mid !== null && requiredIds.has(mid) ? '[须回应] ' : ''
-        return { id: mid, line: prefix + '[' + mmddhhmm(Number(r.time)) + '] ' + String(r.nickname || r.user_id) + '(' + r.user_id + '): ' + text }
+        return { id: mid, line: prefix + '[' + mmddhhmm(Number(r.time)) + '] ' + this.displayName(r.card, r.nickname, r.user_id) + '(' + r.user_id + '): ' + text + quote }
       }).filter((x) => x.line.length > 20)
       if (allLines.length === 0) return false
       let lines = allLines.map((x) => x.line)
@@ -1374,16 +1385,16 @@ export class SessionController {
     return images.slice(-max)
   }
 
-  private collectGroupBatchRows(scope: string, sinceSec: number, last?: { time: number; msgId: number }): { message_id: number | null; user_id: number; nickname: string; time: number; text: string; segments: string }[] {
+  private collectGroupBatchRows(scope: string, sinceSec: number, last?: { time: number; msgId: number }): { message_id: number | null; user_id: number; card: string; nickname: string; time: number; text: string; segments: string }[] {
     const now = Math.floor(Date.now() / 1000)
     const seen = new Set<string>()
-    const out: { message_id: number | null; user_id: number; nickname: string; time: number; text: string; segments: string; pk: number; day: string }[] = []
+    const out: { message_id: number | null; user_id: number; card: string; nickname: string; time: number; text: string; segments: string; pk: number; day: string }[] = []
     for (const day of [dayKey(now - 86400), dayKey(now)]) {
       try {
         const rows = this.db.query(
           scope,
           day,
-          'SELECT msg_pk, message_id, nickname, user_id, time, text, segments FROM message WHERE time >= ? ORDER BY time ASC, msg_pk ASC LIMIT 400',
+          'SELECT msg_pk, message_id, card, nickname, user_id, time, text, segments FROM message WHERE time >= ? ORDER BY time ASC, msg_pk ASC LIMIT 400',
           [Math.max(0, sinceSec)]
         ) as Record<string, unknown>[]
         for (const r of rows) {
@@ -1400,6 +1411,7 @@ export class SessionController {
           out.push({
             message_id: mid,
             user_id: Number(r.user_id),
+            card: String(r.card ?? ''),
             nickname: String(r.nickname ?? ''),
             time,
             text: String(r.text ?? ''),

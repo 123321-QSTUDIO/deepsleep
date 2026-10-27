@@ -102,13 +102,13 @@ export class QqMcpServer {
     const since = now - hours * 3600
     const sinceDay = dayKey(since)
     const days = this.deps.db.listDays(scope).filter((d) => d >= sinceDay)
-    const rows: { time: number; nickname: string; user_id: number; text: string }[] = []
+    const rows: { time: number; card: string; nickname: string; user_id: number; text: string; segments: string }[] = []
     for (const day of days) {
       try {
         const r = this.deps.db.query(
           scope,
           day,
-          `SELECT time, nickname, user_id, text FROM message
+          `SELECT time, card, nickname, user_id, text, segments FROM message
            WHERE time >= ? ${keyword ? 'AND text LIKE ?' : ''}
            ORDER BY msg_pk DESC LIMIT ?`,
           keyword ? [since, `%${keyword}%`, limit] : [since, limit]
@@ -121,7 +121,12 @@ export class QqMcpServer {
     rows.sort((a, b) => a.time - b.time)
     const sliced = rows.slice(-limit)
     if (sliced.length === 0) return '没有找到符合条件的聊天记录'
-    return sliced.map((r) => `[${hhmm(r.time)}] ${r.nickname || r.user_id}(${r.user_id}): ${r.text}`).join('\n')
+    return sliced.map((r) => {
+      let segs: unknown = []
+      try { segs = JSON.parse(String(r.segments ?? '[]')) } catch { /* ignore */ }
+      const name = String(r.card || '').trim() || String(r.nickname || '').trim() || String(r.user_id)
+      return `[${hhmm(r.time)}] ${name}(${r.user_id}): ${this.deps.sessions.formatForAgent(scope, String(r.text ?? ''), segs)}`
+    }).join('\n')
   }
 
   private buildServer(scope: string, taskMode: boolean): McpServer {
