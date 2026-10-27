@@ -114,6 +114,8 @@ export class SessionController {
   private groupBatchWindows = new Map<string, GroupBatchWindow>()
   private groupBatchRunning = new Set<string>()
   private groupBatchLast = new Map<string, { time: number; msgId: number }>()
+  // 批次里被 @/回复的消息 id：投喂时在对应行前加 [须回应]
+  private groupBatchRequired = new Map<string, Set<number>>()
   // 即时 prompt 的上下文下界（秒）：只带下界之后的新消息，避免每次 @ 都把历史积压分块重发
   private contextSince = new Map<string, number>()
   // 批量投喂下载的图片：native 模式请求接受后即删；bridge/none 模式等回合结束再删
@@ -826,7 +828,7 @@ export class SessionController {
     if (mode === 'poke') parts.unshift('[系统] 刚刚 ' + contextNote + ' 戳了你一下')
     else if (mode === 'context') parts.unshift('[系统] ' + contextNote)
     // 必须回应的消息打标；普通群聊记录不加标记
-    if (!proactive) parts.push(pending.map((p) => '[必须回应] ' + p.line).join('\n'))
+    if (!proactive) parts.push(pending.map((p) => '[须回应] ' + p.line).join('\n'))
     // 任何一次真实 prompt 都视为已经「看」到当前时刻之前的消息，批量投喂从此刻之后继续；
     // 同时关闭该群窗口（这次的即时 prompt 已经覆盖了窗口里积攒的消息）
     this.groupBatchLast.set(scope, { time: now, msgId: currentId ?? 0 })
@@ -859,12 +861,29 @@ export class SessionController {
     }
 
     const triggered = this.isTriggered(event, segments)
+    const mid = typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null
+    // 群聊统一走批量：@/回复机器人的消息也只入库，投喂时在对应记录前加 [须回应]
+    if (event.message_type === 'group' && this.config.groupContextBatchEnabled) {
+      if (this.waitScopes.has(scope)) {
+        if (triggered) {
+          if (mid !== null) {
+            const set = this.groupBatchRequired.get(scope) ?? new Set<number>()
+            set.add(mid)
+            this.groupBatchRequired.set(scope, set)
+          }
+          this.waitTriggered.set(scope, { messageId: mid, userId: Number(event.user_id ?? 0), line: cleanCqForDisplay(String(event.raw_message ?? '')).trim() })
+        }
+        return
+      }
+      this.noteGroupMessage(scope, triggered ? mid : null)
+      return
+    }
     // 模型正在用 qqbot_wait_for_messages 等消息：普通消息只入库；
     // 但如果有人 @/回复机器人，不能吞掉——记下触发，让等待立刻返回并提示模型优先回应
     if (this.waitScopes.has(scope)) {
       if (triggered) {
         this.waitTriggered.set(scope, {
-          messageId: typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null,
+          messageId: mid,
           userId: Number(event.user_id ?? 0),
           line: cleanCqForDisplay(String(event.raw_message ?? '')).trim(),
         })
@@ -874,11 +893,6 @@ export class SessionController {
     let promptMode: 'normal' | 'proactive' | 'context' = 'normal'
     let contextNote = ''
     if (!triggered) {
-      // 群聊批量投喂模式：不@的消息先只入库，并开始/续期该群窗口；由窗口到点或冷场提前交给模型
-      if (this.config.groupContextBatchEnabled) {
-        this.noteGroupMessage(scope)
-        return
-      }
       const ctx = this.tryContextReply(scope, event, segments)
       if (ctx) {
         promptMode = 'context'
@@ -893,8 +907,6 @@ export class SessionController {
       this.proactiveNewCount.set(scope, 0)
       this.proactiveLastAt.set(scope, Date.now())
     }
-
-    const mid = typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null
     const pendingNow = this.pendingRequests.get(scope) ?? []
     if (mid !== null && pendingNow.some((p) => p.id === mid)) return
 
@@ -1079,9 +1091,14 @@ export class SessionController {
   }
 
   // 非@群消息到达：没有窗口就开窗；有窗口就更新最后消息时间并重置冷场计时
-  private noteGroupMessage(scope: string) {
+  private noteGroupMessage(scope: string, requiredMessageId?: number | null) {
     if (!this.config.groupContextBatchEnabled) return
     if (!scope.startsWith('group-')) return
+    if (requiredMessageId !== null && requiredMessageId !== undefined) {
+      const set = this.groupBatchRequired.get(scope) ?? new Set<number>()
+      set.add(requiredMessageId)
+      this.groupBatchRequired.set(scope, set)
+    }
     const now = Date.now()
     let w = this.groupBatchWindows.get(scope)
     if (!w) {
@@ -1209,9 +1226,12 @@ export class SessionController {
       }
       const maxMsgs = Math.max(1, Math.min(300, Number(cfg.groupContextBatchMaxMessages) || 80))
       const maxChars = Math.max(500, Math.min(60000, Number(cfg.groupContextBatchMaxChars) || 16000))
+      const requiredIds = this.groupBatchRequired.get(scope) ?? new Set<number>()
       const allLines = rows.map((r) => {
+        const mid = r.message_id == null ? null : Number(r.message_id)
         const text = cleanCqForDisplay(String(r.text ?? '')).replace(/\s+/g, ' ').trim()
-        return { id: r.message_id == null ? null : Number(r.message_id), line: '[' + mmddhhmm(Number(r.time)) + '] ' + String(r.nickname || r.user_id) + '(' + r.user_id + '): ' + text }
+        const prefix = mid !== null && requiredIds.has(mid) ? '[须回应] ' : ''
+        return { id: mid, line: prefix + '[' + mmddhhmm(Number(r.time)) + '] ' + String(r.nickname || r.user_id) + '(' + r.user_id + '): ' + text }
       }).filter((x) => x.line.length > 20)
       if (allLines.length === 0) return false
       let lines = allLines.map((x) => x.line)
@@ -1246,6 +1266,7 @@ export class SessionController {
       this.markSent(scope, rows.map((r) => (r.message_id == null ? null : Number(r.message_id))))
       const lastRow = rows[rows.length - 1]
       this.groupBatchLast.set(scope, { time: Number(lastRow.time), msgId: lastRow.message_id == null ? 0 : Number(lastRow.message_id) })
+      this.groupBatchRequired.delete(scope)
       this.contextSince.set(scope, Math.floor(Date.now() / 1000))
       this.log('群聊上下文批量投喂 scope=' + scope + ' messages=' + rows.length + (omitted ? ' omitted=' + omitted : ''))
       return true
@@ -1335,6 +1356,7 @@ export class SessionController {
     this.clearPending(scope)
     this.clearGroupBatchWindow(scope)
     this.contextSince.delete(scope)
+    this.groupBatchRequired.delete(scope)
     const entry = this.map.get(scope)
     if (!entry) return
     this.cleanupBatchImages(entry.sessionId)
