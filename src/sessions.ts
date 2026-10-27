@@ -1180,7 +1180,7 @@ export class SessionController {
     this.cleanupPaths(paths)
   }
 
-  // 下载图片：native 策略直接以 Prompt.files 内联附件发给模型；bridge/none 仍落盘并在文本里指路
+  // 下载图片：native 策略以 Prompt.files 的 data URI 附件发给模型；bridge/none 仍落盘并在文本里指路
   private async downloadImages(
     directory: string,
     images: { url: string; mime: string }[]
@@ -1208,7 +1208,7 @@ export class SessionController {
         if (strategy === 'native') {
           const maxAttach = 8 * 1024 * 1024
           if (buffer.length <= maxAttach) {
-            files.push({ data: buffer.toString('base64'), mime, source: { type: 'inline' }, name: `qq-image-${i + 1}.${ext}` })
+            files.push({ uri: 'data:' + mime + ';base64,' + buffer.toString('base64'), name: `qq-image-${i + 1}.${ext}` })
           } else {
             failures.push('图片过大，未能作为附件发送（已存 ' + name + '）')
           }

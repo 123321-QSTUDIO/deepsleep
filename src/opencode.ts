@@ -38,10 +38,9 @@ export interface OcModelInfo {
   capabilities?: { tools?: boolean; input?: string[]; output?: string[] }
 }
 
+// 请求体 PromptInput.FileAttachment 只接受 { uri }（响应体 Prompt.FileAttachment 才是 data/mime/source）
 export interface OcPromptFile {
-  data: string
-  mime: string
-  source: { type: 'inline' }
+  uri: string
   name?: string
   description?: string
 }
@@ -129,7 +128,8 @@ export class OpencodeClient {
 
   async promptAsync(sessionId: string, text: string, files?: OcPromptFile[]): Promise<void> {
     const body: Record<string, unknown> = { text }
-    // OpenCode V2 Prompt 支持内联图片附件：files: [{data(base64), mime, source:{type:'inline'}}]
+    // OpenCode V2 Prompt 请求的 files 是 PromptInput.FileAttachment，只接受 { uri }；
+    // 传 data URI（data:image/png;base64,...）或 file:// URI，不能传响应体的 data/mime/source 结构。
     if (files && files.length > 0) body.files = files
     await this.requestData('POST', `/api/session/${sessionId}/prompt`, body)
   }
