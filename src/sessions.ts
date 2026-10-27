@@ -78,6 +78,14 @@ function mmddhhmm(timeSec: number): string {
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
+function replyMatchKey(input: string): string {
+  return String(input ?? '')
+    .replace(/\[CQ:[^\]]+\]/g, '')
+    .replace(/\s+/g, '')
+    .trim()
+    .toLowerCase()
+}
+
 function sentMessageId(raw: unknown): number | null {
   if (!raw || typeof raw !== 'object') return null
   const obj = raw as Record<string, unknown>
@@ -861,6 +869,49 @@ export class SessionController {
   formatForAgent(scope: string, text: string, segments?: unknown): string {
     const segs = Array.isArray(segments) ? (segments as MsgSegment[]) : undefined
     return this.promptText(scope, text, segs)
+  }
+
+  // 回复解析：模型不用知道 message_id，给「QQ号 + 原文（可选）」即可。
+  // 优先最新一条完全匹配；没有完全匹配时退而求其次取最新包含匹配；只查最近两天。
+  findReplyTarget(scope: string, qq?: string, text?: string): { messageId: number; userId: number; nickname: string; text: string } | null {
+    const qqNum = qq && String(qq).trim() ? Number(qq) : null
+    if (qqNum !== null && !Number.isFinite(qqNum)) return null
+    const wanted = replyMatchKey(text ?? '')
+    const now = Math.floor(Date.now() / 1000)
+    let contains: { messageId: number; userId: number; nickname: string; text: string } | null = null
+    for (const day of [dayKey(now), dayKey(now - 86400)]) {
+      let rows: Record<string, unknown>[] = []
+      try {
+        rows = this.db.query(
+          scope,
+          day,
+          'SELECT message_id, user_id, card, nickname, text, segments FROM message WHERE message_id IS NOT NULL' +
+            (qqNum !== null ? ' AND user_id = ?' : '') +
+            ' ORDER BY msg_pk DESC LIMIT 200',
+          qqNum !== null ? [qqNum] : []
+        ) as Record<string, unknown>[]
+      } catch {
+        continue
+      }
+      for (const r of rows) {
+        const mid = Number(r.message_id)
+        if (!Number.isFinite(mid) || mid <= 0) continue
+        let segs: MsgSegment[] = []
+        try { segs = JSON.parse(String(r.segments ?? '[]')) as MsgSegment[] } catch { /* ignore */ }
+        const display = this.promptText(scope, String(r.text ?? ''), segs)
+        const target = {
+          messageId: mid,
+          userId: Number(r.user_id ?? 0),
+          nickname: this.displayName(r.card, r.nickname, r.user_id),
+          text: display,
+        }
+        if (!wanted) return target
+        const key = replyMatchKey(display)
+        if (key === wanted) return target
+        if (!contains && key.includes(wanted)) contains = target
+      }
+    }
+    return contains
   }
 
   private buildPrompt(event: OB11MessageEvent, mode: 'normal' | 'proactive' | 'context' | 'poke' = 'normal', contextNote = ''): string {

@@ -97,6 +97,17 @@ export class QqMcpServer {
 
   constructor(private deps: McpDeps) {}
 
+  // 模型通常看不到 message_id：允许用「发送人 QQ + 原文片段」解析最近匹配的消息；
+  // reply_to 精确 ID 仍保留给已知 ID 的场景。
+  private resolveReply(scope: string, id?: string, qq?: string, text?: string): { replyTo?: string; note?: string } {
+    if (id) return { replyTo: String(id) }
+    if (!qq && !text) return {}
+    const target = this.deps.sessions.findReplyTarget(scope, qq, text)
+    if (!target) return { note: '没有找到匹配的引用消息，本条未带引用发送' }
+    const preview = target.text.length > 40 ? target.text.slice(0, 40) + '…' : target.text
+    return { replyTo: String(target.messageId), note: '已引用 ' + target.nickname + ' 的消息：' + preview }
+  }
+
   private searchChatLog(scope: string, keyword: string | undefined, hours: number, limit: number): string {
     const now = Math.floor(Date.now() / 1000)
     const since = now - hours * 3600
@@ -136,14 +147,16 @@ export class QqMcpServer {
     mcp.registerTool(
       'send_message',
       {
-        description: '发送一条消息到当前QQ对话（群或私聊）。想发几条就调几次；普通聊天尽量短，解释类可适当加长。只发纯文本，不要用 <text> 等标签包裹或加多余换行。可以用[CQ:at,qq=QQ号]@人；内置小黄脸用[CQ:face,id=数字]写在文本里（收藏表情包不能用文本/CQ码，必须用 qqbot_send_sticker）。',
+        description: '发送一条消息到当前QQ对话（群或私聊）。想发几条就调几次；普通聊天尽量短，解释类可适当加长。只发纯文本，不要用 <text> 等标签包裹或加多余换行。可以用[CQ:at,qq=QQ号]@人；内置小黄脸用[CQ:face,id=数字]写在文本里（收藏表情包不能用文本/CQ码，必须用 qqbot_send_sticker）。要回复/引用某条消息时，优先填 reply_to_qq + reply_to_text，不需要知道 message_id。',
         inputSchema: {
           text: z.string().describe('消息内容；普通闲聊尽量简短，解释类可适当加长，超长会收到警告'),
-          reply_to: z.string().optional().describe('要引用的消息ID（回复某条消息时用）'),
+          reply_to: z.string().optional().describe('精确消息ID；一般不用填，优先用 reply_to_qq + reply_to_text'),
+          reply_to_qq: z.string().optional().describe('要回复/引用谁的QQ号；和 reply_to_text 搭配，服务端自动找最近匹配的消息'),
+          reply_to_text: z.string().optional().describe('要引用消息的原文或片段；留空则引用该QQ最近一条消息'),
           at_qq: z.string().optional().describe('要@的人的QQ号'),
         },
       },
-      async ({ text: t, reply_to, at_qq }) => {
+      async ({ text: t, reply_to, reply_to_qq, reply_to_text, at_qq }) => {
         if (!scope) return text('错误: 未知对话上下文')
         if (taskMode) return text('错误: 沙箱任务中不能发消息')
         const cfg = this.deps.config
@@ -152,10 +165,12 @@ export class QqMcpServer {
         const content = sanitizeOutgoingText(String(t ?? ''))
         if (!content) return text('错误: 消息内容为空')
         const countBefore = sessions.toolSendCountOfScope(scope)
-        await sessions.sendTextToScope(scope, content, { replyTo: reply_to, atQq: at_qq })
+        const reply = this.resolveReply(scope, reply_to, reply_to_qq, reply_to_text)
+        await sessions.sendTextToScope(scope, content, { replyTo: reply.replyTo, atQq: at_qq })
         sessions.markSentByScope(scope)
         // 不拦截发送，只在工具结果里提醒模型自己收敛，避免回复戛然而止
         const notes: string[] = []
+        if (reply.note) notes.push(reply.note)
         if (content.length > maxChars) {
           notes.push('这条消息偏长（' + content.length + ' 字，建议单条不超过 ' + maxChars + ' 字），之后请精简或拆成几条')
         }
@@ -195,20 +210,23 @@ export class QqMcpServer {
         description: '发送一个**收藏表情包**（不是内置小黄脸；内置小黄脸用 [CQ:face,id=] 写在 send_message 文本里）。id 见系统提示的收藏表情列表或 qqbot_list_stickers；一次回复最多 1-2 个，别刷屏。',
         inputSchema: {
           sticker: z.string().describe('收藏表情的 emoji_id（来自 qqbot_list_stickers）或 32 位 MD5'),
-          reply_to: z.string().optional().describe('要引用的消息ID，可选'),
+          reply_to: z.string().optional().describe('精确消息ID；一般不用填'),
+          reply_to_qq: z.string().optional().describe('要回复/引用谁的QQ号，可配合 reply_to_text'),
+          reply_to_text: z.string().optional().describe('要引用消息的原文或片段，可留空=该QQ最近一条'),
         },
       },
-      async ({ sticker, reply_to }) => {
+      async ({ sticker, reply_to, reply_to_qq, reply_to_text }) => {
         if (!scope) return text('错误: 未知对话上下文')
         if (taskMode) return text('错误: 沙箱任务中不能发消息')
+        const reply = this.resolveReply(scope, reply_to, reply_to_qq, reply_to_text)
         const record = this.deps.stickers.findEnabled(sticker)
         if (!record) {
           return text('这个表情不在可用列表里：请先 qqbot_list_stickers 挑一个已打标/启用的表情（id 或 MD5）')
         }
         try {
-          await sessions.sendStickerToScope(scope, record.id, { replyTo: reply_to })
+          await sessions.sendStickerToScope(scope, record.id, { replyTo: reply.replyTo })
           sessions.markSentByScope(scope)
-          return text('已发送收藏表情: ' + record.label)
+          return text('已发送收藏表情: ' + record.label + (reply.note ? '。' + reply.note : ''))
         } catch (e) {
           return text('发送收藏表情失败: ' + String((e as Error)?.message ?? e))
         }

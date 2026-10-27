@@ -309,7 +309,7 @@ QQBOT_DATA=/opt/deepsleep/data node scripts/compact-all.mjs
 
 - `hostModel`：host 层每个工作区的默认模型，默认 `opencode/deepseek-v4.1-flash-free`；已知旧模型 ID 会在配置加载时自动迁移，旧 session 存了弃用模型则 `/reset`
 - `visionModel`：视觉桥接 subagent（vision-bridge）用的识图模型，默认 `opencode/mimo-v2.6-flash-free`。图片消息会下载到工作目录 `inbox/`，由纯文本主模型通过 **subagent** 工具调桥接代理读图，**不是**直接切换主模型
-- 工作区 opencode.json 使用 `agents` + `system`、`mcp.servers` 和 `codemode: false`。MCP 共 17 个工具，模型可见名带 `qqbot_` 前缀（如 `qqbot_send_message`、`qqbot_list_stickers`/`qqbot_send_sticker`（收藏表情包）、`qqbot_query_chat_log`、`qqbot_submit_task`），MCP 服务注册名不变
+- 工作区 opencode.json 使用 `agents` + `system`、`mcp.servers` 和 `codemode: false`。MCP 共 19 个工具，模型可见名带 `qqbot_` 前缀（如 `qqbot_send_message`（支持 `reply_to_qq` + `reply_to_text` 引用解析）、`qqbot_list_stickers`/`qqbot_send_sticker`（收藏表情包）、`qqbot_query_chat_log`、`qqbot_submit_task`），MCP 服务注册名不变
 - `mcpHost`：MCP 服务绑定地址，默认 `127.0.0.1`（回环）。**服务器有公网 IP 直绑网卡时切勿改成 0.0.0.0**；方式 B（WSL2 docker）确需容器访问时才改为 `0.0.0.0` 并配合防火墙只放行容器网段
 - `opencodePassword` 必须等于第 2 步显式设置的 `OPENCODE_PASSWORD`，不能为空或写成可选项
 - `dockerHost`：留空 = 本机 docker；方式 C 填 `tcp://127.0.0.1:2375`（走持久 SSH 隧道，见方式 C-1）
