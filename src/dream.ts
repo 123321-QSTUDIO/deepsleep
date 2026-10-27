@@ -67,9 +67,9 @@ export class DreamMemory {
       return
     }
     this.timer = setInterval(() => void this.tick(), TICK_MS)
-    const h = String(config.dreamMemoryHour).padStart(2, '0')
-    const m = String(config.dreamMemoryMinute).padStart(2, '0')
-    log(`梦境记忆已启用: 每天 ${h}:${m} 起整理（错过会在 3 小时内补跑）`)
+    const s = windowLabel(config.dreamMemoryWindowStartHour, config.dreamMemoryWindowStartMinute)
+    const e = windowLabel(config.dreamMemoryWindowEndHour, config.dreamMemoryWindowEndMinute)
+    log(`梦境记忆已启用: 每天 ${s}–${e} 内随机挑选时间，群内 ${Math.max(0, Number(config.dreamMemoryIdleMinutes) || 0)} 分钟无消息才整理；到 ${e} 强制整理（错过会在 3 小时内补跑）`)
   }
 
   stop() {
@@ -87,34 +87,68 @@ export class DreamMemory {
 
   // ---- 调度 ----
 
-  private scheduledAt(now = new Date()): number {
-    const { dreamMemoryHour, dreamMemoryMinute } = this.deps.config
-    const d = new Date(now)
-    d.setHours(dreamMemoryHour, dreamMemoryMinute, 0, 0)
-    return d.getTime()
+  // 当天记忆窗口 [start,end)；结束时间小于开始时间按跨天处理
+  private windowFor(nowMs: number): { start: number; end: number } {
+    const cfg = this.deps.config
+    const base = new Date(nowMs)
+    const start = new Date(base)
+    start.setHours(Math.max(0, Math.min(23, Number(cfg.dreamMemoryWindowStartHour) || 0)), Math.max(0, Math.min(59, Number(cfg.dreamMemoryWindowStartMinute) || 0)), 0, 0)
+    const end = new Date(base)
+    end.setHours(Math.max(0, Math.min(23, Number(cfg.dreamMemoryWindowEndHour) || 0)), Math.max(0, Math.min(59, Number(cfg.dreamMemoryWindowEndMinute) || 0)), 0, 0)
+    if (end.getTime() <= start.getTime()) end.setDate(end.getDate() + 1)
+    return { start: start.getTime(), end: end.getTime() }
+  }
+
+  // 每个群/会话在窗口内的随机开始时间：按 date+scope 生成确定性 hash，重启不会换时间
+  private attemptAt(scope: string, date: string, start: number, end: number): number {
+    let h = 2166136261
+    for (const ch of date + ':' + scope) {
+      h ^= ch.charCodeAt(0)
+      h = Math.imul(h, 16777619)
+    }
+    const span = Math.max(60_000, end - start)
+    const slots = Math.max(1, Math.floor(span / 60_000))
+    return start + ((h >>> 0) % slots) * 60_000
   }
 
   private async tick() {
+    await this.checkSchedule()
+  }
+
+  // 公开给测试/面板调试：按给定时间检查一次调度；tick 每 60s 调用一次
+  async checkSchedule(nowMs = Date.now()): Promise<number> {
     const { config, sessions, log } = this.deps
-    if (!config.dreamMemoryEnabled || this.ticking) return
-    const now = Date.now()
-    const scheduled = this.scheduledAt()
-    if (now < scheduled) return
-    if (now - scheduled > CATCH_UP_MS) return // 错过窗口太久，等明天
-    const today = dayKey(Math.floor(now / 1000))
+    if (!config.dreamMemoryEnabled || this.ticking) return 0
+    const { start, end } = this.windowFor(nowMs)
+    if (nowMs < start) return 0
+    // 5 点后仍允许补跑 3 小时；错过太久等明天
+    const force = nowMs >= end
+    if (force && nowMs - end > CATCH_UP_MS) return 0
+    const today = dayKey(Math.floor(nowMs / 1000))
     const scopes = sessions.listScopes().filter((e) => e.sessionId)
-    if (scopes.length === 0) return
+    if (scopes.length === 0) return 0
     const todo = scopes.filter((e) => this.state[e.scope]?.date !== today)
-    if (todo.length === 0) return
+    if (todo.length === 0) return 0
+    const idleMs = Math.max(0, Number(config.dreamMemoryIdleMinutes) || 0) * 60_000
+    const eligible = todo.filter((e) => {
+      if (force) return true
+      if (nowMs < this.attemptAt(e.scope, today, start, end)) return false
+      const last = sessions.lastInboundAt(e.scope)
+      return last <= 0 || nowMs - last * 1000 >= idleMs
+    })
+    if (eligible.length === 0) return 0
     this.ticking = true
+    const startedWindow = force ? '强制' : '定时'
     try {
-      for (const entry of todo) {
+      for (const entry of eligible) {
+        log(`梦境整理 ${entry.scope}: ${startedWindow}触发（距上条消息 ${sessions.lastInboundAt(entry.scope) ? Math.round((nowMs - sessions.lastInboundAt(entry.scope) * 1000) / 60000) + ' 分钟' : '无记录'}）`)
         const result = await this.runForScope(entry.scope).catch((e) => ({ ok: false, scope: entry.scope, error: String(e?.message ?? e) } as DreamResult))
         log(`梦境整理 ${entry.scope}: ${result.ok ? '完成' : result.skipped ? '跳过(' + result.skipped + ')' : '失败(' + (result.error ?? '?') + ')'}`)
       }
     } finally {
       this.ticking = false
     }
+    return eligible.length
   }
 
   // ---- 单个会话的梦境整理（面板可手动触发） ----
@@ -128,6 +162,9 @@ export class DreamMemory {
     const workspace = entry.directory
     const started = Date.now()
     this.runningScopes.add(scope)
+    // 整段梦境（fork/写记忆/compact）期间群消息先不投喂，compact 完成后再放行
+    const pausable = scope.startsWith('group-')
+    if (pausable) sessions.pauseGroupDream(scope)
     const state = this.state[scope]
     const now = Math.floor(Date.now() / 1000)
     const since = Math.max((state?.at ?? now - 86400), now - 48 * 3600)
@@ -180,6 +217,7 @@ export class DreamMemory {
       log(`梦境整理 ${scope} 失败:`, err)
       return { ok: false, scope, error: err, dreamSessionId }
     } finally {
+      if (pausable) sessions.resumeGroupDream(scope)
       // 无论成败都删掉临时 fork 会话
       if (dreamSessionId) await oc.deleteSession(dreamSessionId).catch(() => undefined)
       try {
@@ -375,6 +413,10 @@ export class DreamMemory {
 ${useContext ? `本时段的群聊记录已经作为 user prompt 在你从原会话 fork 继承的上下文中（宿主每 ${Math.max(1, Math.round((this.deps.config.groupContextBatchIntervalSec || 600) / 60))} 分钟批量投喂一次）。直接结合这些上下文和现有记忆整理；不要再去读数据库或用 read 找聊天记录。` : '~~~\n' + transcript + '\n~~~'}
 `
   }
+}
+
+function windowLabel(hour: number, minute: number): string {
+  return String(Math.max(0, Math.min(23, Number(hour) || 0))).padStart(2, '0') + ':' + String(Math.max(0, Math.min(59, Number(minute) || 0))).padStart(2, '0')
 }
 
 function sleep(ms: number) {

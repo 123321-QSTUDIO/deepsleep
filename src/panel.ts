@@ -122,8 +122,11 @@ const FIELDS: FieldDef[] = [
   { key: 'contextReplyCooldownSec', label: 'contextReplyCooldownSec（语境回复冷却秒）', group: '主动参与（测试）', type: 'number', min: 0, help: '两次语境自动回复之间的最小间隔' },
   { key: 'proactiveJudgeTimeoutSec', label: 'proactiveJudgeTimeoutSec（判官超时）', group: '主动参与（测试）', type: 'number', min: 1 },
   { key: 'dreamMemoryEnabled', label: 'dreamMemoryEnabled（启用梦境记忆）', group: '梦境记忆', type: 'boolean', help: '每天凌晨 fork 会话更新 MEMORY.md，然后压缩原 session' },
-  { key: 'dreamMemoryHour', label: 'dreamMemoryHour（整理开始小时）', group: '梦境记忆', type: 'number', min: 0, max: 23 },
-  { key: 'dreamMemoryMinute', label: 'dreamMemoryMinute（整理开始分钟）', group: '梦境记忆', type: 'number', min: 0, max: 59 },
+  { key: 'dreamMemoryWindowStartHour', label: 'dreamMemoryWindowStartHour（记忆窗口开始小时）', group: '梦境记忆', type: 'number', min: 0, max: 23 },
+  { key: 'dreamMemoryWindowStartMinute', label: 'dreamMemoryWindowStartMinute（窗口开始分钟）', group: '梦境记忆', type: 'number', min: 0, max: 59 },
+  { key: 'dreamMemoryWindowEndHour', label: 'dreamMemoryWindowEndHour（记忆窗口结束小时，到点强制）', group: '梦境记忆', type: 'number', min: 0, max: 23 },
+  { key: 'dreamMemoryWindowEndMinute', label: 'dreamMemoryWindowEndMinute（窗口结束分钟）', group: '梦境记忆', type: 'number', min: 0, max: 59 },
+  { key: 'dreamMemoryIdleMinutes', label: 'dreamMemoryIdleMinutes（群内无消息多久才整理）', group: '梦境记忆', type: 'number', min: 0, max: 240 },
   { key: 'dreamMaxTranscriptChars', label: 'dreamMaxTranscriptChars（喂给梦境的聊天记录上限字符数）', group: '梦境记忆', type: 'number', min: 1000 },
   { key: 'dreamMemoryMaxChars', label: 'dreamMemoryMaxChars（MEMORY.md 建议上限字符数）', group: '梦境记忆', type: 'number', min: 500 },
 ]
@@ -514,7 +517,14 @@ export class ControlPanel {
       panel: { host: config.panelHost, port: config.panelPort, tokenSet: !!config.panelToken },
       tasks: { queued, running: count('running'), done: count('done'), error: count('error'), total: all.length },
       sessions: { total: sessions.listScopes().length },
-      dream: { enabled: config.dreamMemoryEnabled, hour: config.dreamMemoryHour, minute: config.dreamMemoryMinute },
+      dream: {
+      enabled: config.dreamMemoryEnabled,
+      windowStartHour: config.dreamMemoryWindowStartHour,
+      windowStartMinute: config.dreamMemoryWindowStartMinute,
+      windowEndHour: config.dreamMemoryWindowEndHour,
+      windowEndMinute: config.dreamMemoryWindowEndMinute,
+      idleMinutes: config.dreamMemoryIdleMinutes,
+    },
     }
   }
 

@@ -297,8 +297,11 @@ QQBOT_DATA=/opt/deepsleep/data node scripts/compact-all.mjs
   "panelPort": 5101,
   "panelToken": "CHANGE_ME_PANEL_TOKEN",
   "dreamMemoryEnabled": true,
-  "dreamMemoryHour": 4,
-  "dreamMemoryMinute": 30,
+  "dreamMemoryWindowStartHour": 2,
+  "dreamMemoryWindowStartMinute": 0,
+  "dreamMemoryWindowEndHour": 5,
+  "dreamMemoryWindowEndMinute": 0,
+  "dreamMemoryIdleMinutes": 30,
   "dreamMaxTranscriptChars": 120000,
   "dreamMemoryMaxChars": 8000
 }
@@ -317,7 +320,7 @@ QQBOT_DATA=/opt/deepsleep/data node scripts/compact-all.mjs
 - `archiveRetentionDays`：产物归档留存天数（默认 5），**每次该 QQ 的 session 被激活会自动刷新最近归档的过期时间**
 - `replyDelayMinMs` / `replyDelayMaxMs` 默认 `1200` / `3000` 毫秒，`maxLinesPerReply` 默认 `4`
 - `panelEnabled` / `panelHost` / `panelPort` / `panelToken`：控制面板（见 8.1 节）。默认开启、只绑 `127.0.0.1:5101`；**远程访问必须设 `panelToken`**
-- `dreamMemoryEnabled` / `dreamMemoryHour` / `dreamMemoryMinute`：梦境记忆（见 8.2 节）。默认每天 4:30（服务器本地时区）整理 MEMORY.md 并压缩会话；`dreamMaxTranscriptChars` 限单次喂入的聊天记录字符数，`dreamMemoryMaxChars` 限 MEMORY.md 目标字数
+- `dreamMemoryEnabled` / `dreamMemoryWindowStartHour` / `dreamMemoryWindowStartMinute` / `dreamMemoryWindowEndHour` / `dreamMemoryWindowEndMinute` / `dreamMemoryIdleMinutes`：梦境记忆（见 8.2 节）。默认窗口 02:00–05:00（服务器本地时区），窗口内按群随机挑时间，群内 30 分钟无新消息才整理；到 05:00 强制整理。`dreamMaxTranscriptChars` 限单次喂入的聊天记录字符数，`dreamMemoryMaxChars` 限 MEMORY.md 目标字数
 - `dockerEnv`：**用免费模型时留空 `{}` 即可**；要给容器换付费模型时才填 key（如 `ANTHROPIC_API_KEY`），同时调整 qqbot-hk-runner 的模型配置并重新 build 镜像
 - 方式 B（WSL2 docker）时 `mcpUrlForDocker` 改为 `http://<Windows主机IP>:5100/mcp`；方式 C 改为 `http://<本机IP>:5100/mcp`
 - 改完重启机器人服务生效
@@ -352,7 +355,7 @@ QQBOT_DATA=/opt/deepsleep/data node scripts/compact-all.mjs
 
 ## 8.2 梦境记忆（默认已开启）
 
-每个工作区有一个 `MEMORY.md` 作为长期记忆，通过 workspace `opencode.json` 的 `instructions` 注入，不再让 session 上下文无限增长。每天凌晨（默认 4:30 本地时间）：
+每个工作区有一个 `MEMORY.md` 作为长期记忆，通过 workspace `opencode.json` 的 `instructions` 注入，不再让 session 上下文无限增长。每天在 02:00–05:00 窗口（本地时间）：
 
 1. `fork` 原 session（继承上下文，不动原 session）
 2. 把最近 24 小时群聊记录喂给梦境会话，让它读取旧 MEMORY.md 并写出 `MEMORY.new.md`
@@ -360,7 +363,7 @@ QQBOT_DATA=/opt/deepsleep/data node scripts/compact-all.mjs
 4. 删除临时梦境会话
 5. `compact` 原 session（摘要接管旧上下文，并让新 instructions 生效）
 
-- 服务进程需要跑着；在整理窗口（4:30 起 3 小时内）重启也会补跑，错过则等第二天
+- 服务进程需要跑着；窗口结束（05:00）后 3 小时内重启也会补跑，错过则等第二天
 - 失败不会破坏旧记忆（不动 MEMORY.md、不 compact），原因记录在数据目录 `dream.json` 与面板会话详情「梦境记忆」卡片
 - 面板「会话详情 → 梦境记忆」有「立即整理」按钮可手动触发；工作区文件标签可直接查看 MEMORY.md
 - **instructions 是 session 级快照**：手动改 MEMORY.md 对已存在 session 不会立即生效，需 compact（或 /reset 重建、或等下一次梦境整理）

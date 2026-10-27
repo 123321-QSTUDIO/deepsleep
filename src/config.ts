@@ -89,8 +89,11 @@ export interface PluginConfig {
   voiceAsrEnabled: boolean
   // 梦境记忆：每晚 fork 会话整理 MEMORY.md，然后压缩原 session
   dreamMemoryEnabled: boolean
-  dreamMemoryHour: number
-  dreamMemoryMinute: number
+  dreamMemoryWindowStartHour: number
+  dreamMemoryWindowStartMinute: number
+  dreamMemoryWindowEndHour: number
+  dreamMemoryWindowEndMinute: number
+  dreamMemoryIdleMinutes: number
   dreamMaxTranscriptChars: number
   dreamMemoryMaxChars: number
 }
@@ -173,8 +176,11 @@ export const defaultConfig: PluginConfig = {
   voiceSendBase64: true,
   voiceAsrEnabled: true,
   dreamMemoryEnabled: true,
-  dreamMemoryHour: 4,
-  dreamMemoryMinute: 30,
+  dreamMemoryWindowStartHour: 2,
+  dreamMemoryWindowStartMinute: 0,
+  dreamMemoryWindowEndHour: 5,
+  dreamMemoryWindowEndMinute: 0,
+  dreamMemoryIdleMinutes: 30,
   dreamMaxTranscriptChars: 120000,
   dreamMemoryMaxChars: 8000,
 }

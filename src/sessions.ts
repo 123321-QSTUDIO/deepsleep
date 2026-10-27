@@ -78,6 +78,15 @@ function mmddhhmm(timeSec: number): string {
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
+function sentMessageId(raw: unknown): number | null {
+  if (!raw || typeof raw !== 'object') return null
+  const obj = raw as Record<string, unknown>
+  const value = obj.message_id ?? (obj.data && typeof obj.data === 'object' ? (obj.data as Record<string, unknown>).message_id : undefined)
+  if (value === undefined || value === null || value === '') return null
+  const id = Number(value)
+  return Number.isFinite(id) && id > 0 ? id : null
+}
+
 export class SessionController {
   private map = new Map<string, SessionEntry>()
   private reverse = new Map<string, string>()
@@ -118,6 +127,7 @@ export class SessionController {
   private groupBatchRequired = new Map<string, Set<number>>()
   // @ 到达时立即 flush 当前窗口；正在投喂时等本轮结束后再补一次
   private groupBatchForce = new Set<string>()
+  private dreamPaused = new Set<string>()
   // 即时 prompt 的上下文下界（秒）：只带下界之后的新消息，避免每次 @ 都把历史积压分块重发
   private contextSince = new Map<string, number>()
   // 批量投喂下载的图片：native 模式请求接受后即删；bridge/none 模式等回合结束再删
@@ -255,6 +265,37 @@ export class SessionController {
 
   listScopes(): { scope: string; sessionId: string; directory: string }[] {
     return [...this.map.entries()].map(([scope, entry]) => ({ scope, ...entry }))
+  }
+
+  // 梦境整理期间暂停群聊消息投喂：消息照常入库，等主 session compact 完成后再一次性推送
+  pauseGroupDream(scope: string): void {
+    if (!scope.startsWith('group-')) return
+    if (!this.config.groupContextBatchEnabled) return // 非批量模式没有可暂停的投喂队列
+    this.dreamPaused.add(scope)
+    this.clearGroupBatchWindow(scope)
+    this.log('梦境整理暂停群消息投喂 scope=' + scope)
+  }
+
+  resumeGroupDream(scope: string): void {
+    if (!this.dreamPaused.delete(scope)) return
+    this.log('梦境整理结束恢复群消息投喂 scope=' + scope)
+    if (this.hasPendingGroupBatchRows(scope)) this.requestGroupBatchFlush(scope)
+  }
+
+  // 最近一条「别人发来的」消息时间（秒），用于梦境前检查群是否 30 分钟没动静；0=没有记录
+  lastInboundAt(scope: string): number {
+    const now = Math.floor(Date.now() / 1000)
+    let max = 0
+    for (const day of [dayKey(now), dayKey(now - 86400)]) {
+      try {
+        const rows = this.db.query(scope, day, 'SELECT MAX(time) AS t FROM message WHERE user_id != ?', [this.selfId || 0]) as { t?: unknown }[]
+        const t = Number(rows[0]?.t ?? 0)
+        if (Number.isFinite(t) && t > max) max = t
+      } catch {
+        // day db missing
+      }
+    }
+    return max
   }
 
   workspaceOf(scope: string): string | null {
@@ -926,6 +967,15 @@ export class SessionController {
 
     const triggered = this.isTriggered(event, segments)
     const mid = typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null
+    // 梦境整理/compact 期间：消息已入库，但先不投喂；@ 只记 required，压缩完成后统一推送
+    if (this.dreamPaused.has(scope)) {
+      if (triggered && mid !== null) {
+        const set = this.groupBatchRequired.get(scope) ?? new Set<number>()
+        set.add(mid)
+        this.groupBatchRequired.set(scope, set)
+      }
+      return
+    }
     // 群聊统一走批量：@/回复机器人的消息也只入库，投喂时在对应记录前加 [须回应]
     if (event.message_type === 'group' && this.config.groupContextBatchEnabled) {
       if (this.waitScopes.has(scope)) {
@@ -1160,6 +1210,7 @@ export class SessionController {
 
   // @ 到达：仍在同一个批量窗口里，只是立即把当前窗口 flush 掉（不做单独即时 prompt）
   private requestGroupBatchFlush(scope: string) {
+    if (this.dreamPaused.has(scope)) return
     this.groupBatchForce.add(scope)
     if (this.groupBatchRunning.has(scope) || this.waitScopes.has(scope)) return
     if (!this.groupBatchWindows.has(scope)) this.noteGroupMessage(scope)
@@ -1169,6 +1220,7 @@ export class SessionController {
 
   // 非@群消息到达：没有窗口就开窗；有窗口就更新最后消息时间并重置冷场计时
   private noteGroupMessage(scope: string, requiredMessageId?: number | null) {
+    if (this.dreamPaused.has(scope)) return
     if (!this.config.groupContextBatchEnabled) return
     if (!scope.startsWith('group-')) return
     if (requiredMessageId !== null && requiredMessageId !== undefined) {
@@ -1207,6 +1259,7 @@ export class SessionController {
 
   // 窗口到点/冷场到点：session 忙则短重试；否则立即投喂并关闭窗口
   private async onGroupBatchDue(scope: string, reason: 'normal' | 'idle' | 'retry') {
+    if (this.dreamPaused.has(scope)) return
     const w = this.groupBatchWindows.get(scope)
     if (!w) return
     if (!this.config.groupContextBatchEnabled) {
@@ -1288,6 +1341,7 @@ export class SessionController {
   // 单个群：收「上次投喂后」的新消息，作为一次 user prompt 发给模型；没有新消息就不触发
   async flushGroupContextBatch(scope: string): Promise<boolean> {
     const cfg = this.config
+    if (this.dreamPaused.has(scope)) return false
     if (!cfg.groupContextBatchEnabled || !scope.startsWith('group-')) return false
     if (this.groupBatchRunning.has(scope) || this.waitScopes.has(scope)) return false
     this.groupBatchRunning.add(scope)
@@ -1445,6 +1499,7 @@ export class SessionController {
     this.contextSince.delete(scope)
     this.groupBatchRequired.delete(scope)
     this.groupBatchForce.delete(scope)
+    this.dreamPaused.delete(scope)
     const entry = this.map.get(scope)
     if (!entry) return
     this.cleanupBatchImages(entry.sessionId)
@@ -1637,22 +1692,23 @@ export class SessionController {
     const params: Record<string, unknown> = { message_type: event.message_type, message: text }
     if (event.message_type === 'group' && event.group_id) params.group_id = String(event.group_id)
     if (event.message_type === 'private' && event.user_id) params.user_id = String(event.user_id)
-    await this.runtime.actions.call('send_msg', params)
+    const res = await this.runtime.actions.call('send_msg', params)
     this.recordSent(
       event.message_type === 'group' ? `group-${event.group_id}` : `private-${event.user_id}`,
-      text
+      text,
+      sentMessageId(res)
     )
   }
 
-  private recordSent(scope: string, text: string) {
+  private recordSent(scope: string, text: string, messageId: number | null = null, replyTo: number | null = null) {
     try {
       this.db.insert(scope, {
-        message_id: null,
+        message_id: messageId,
         user_id: this.selfId || 0,
         nickname: this.config.botName,
         card: '',
         time: Math.floor(Date.now() / 1000),
-        reply_to: null,
+        reply_to: replyTo,
         text,
         segments: JSON.stringify([{ type: 'text', data: { text } }]),
       })
@@ -1702,8 +1758,9 @@ export class SessionController {
       params.message_type = 'private'
       params.user_id = scope.slice(8)
     }
-    await this.runtime.actions.call('send_msg', params)
-    this.recordSent(scope, text)
+    const res = await this.runtime.actions.call('send_msg', params)
+    const replyId = opts?.replyTo == null ? null : Number(opts.replyTo) || null
+    this.recordSent(scope, text, sentMessageId(res), replyId)
     this.lastSent.set(scope, { text, at: Date.now() })
     await this.delay()
   }
@@ -1756,8 +1813,8 @@ export class SessionController {
       params.user_id = scope.slice(8)
     }
     try {
-      await this.runtime.actions.call('send_msg', params)
-      this.recordSent(scope, '[语音]')
+      const res = await this.runtime.actions.call('send_msg', params)
+      this.recordSent(scope, '[语音]', sentMessageId(res))
       this.lastSent.set(scope, { text: '[语音]', at: Date.now() })
       await this.delay()
     } finally {
@@ -1817,8 +1874,9 @@ export class SessionController {
       params.user_id = scope.slice(8)
     }
     if (opts?.replyTo) params.reply_to = String(opts.replyTo)
-    await this.runtime.actions.call('send_custom_face', params)
-    this.recordSent(scope, '[表情]')
+    const res = await this.runtime.actions.call('send_custom_face', params)
+    const replyId = opts?.replyTo == null ? null : Number(opts.replyTo) || null
+    this.recordSent(scope, '[表情]', sentMessageId(res), replyId)
     await this.delay()
   }
 }

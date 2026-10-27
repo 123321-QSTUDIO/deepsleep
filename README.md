@@ -150,7 +150,9 @@ node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 | `panelHost` / `panelPort` | `127.0.0.1` / `5101` | 控制面板监听地址与端口（默认只允许本机访问） |
 | `panelToken` | 空 | 面板访问 Token；非空时 API 需要 `Authorization: Bearer <token>` 或 URL `?token=` |
 | `dreamMemoryEnabled` | `true` | 启用梦境记忆（每晚整理 MEMORY.md 并压缩会话） |
-| `dreamMemoryHour` / `dreamMemoryMinute` | `4` / `30` | 每日整理开始时间（服务器本地时区，4:30 起；错过 3 小时内会补跑） |
+| `dreamMemoryWindowStartHour` / `dreamMemoryWindowStartMinute` | `2` / `0` | 梦境记忆窗口开始（服务器本地时区） |
+| `dreamMemoryWindowEndHour` / `dreamMemoryWindowEndMinute` | `5` / `0` | 窗口结束；到点还没满足条件也强制整理（错过 3 小时内补跑） |
+| `dreamMemoryIdleMinutes` | `30` | 群内至少多少分钟无新消息才允许开始整理 |
 | `dreamMaxTranscriptChars` | `120000` | 单次喂给梦境会话的群聊记录字符上限（超出截断保留最近部分） |
 | `dreamMemoryMaxChars` | `8000` | 要求梦境产出的 MEMORY.md 建议字数上限（超过 2 倍视为无效输出） |
 
@@ -163,7 +165,7 @@ node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 
 长期记忆不靠无限增长的上下文，而是外置到每个工作区的 `MEMORY.md`：通过 workspace `opencode.json` 的 `instructions` 注入系统提示，结构是人可读的 Markdown（群聊概况 / 长期事实 / 群成员 / 话题与偏好 / 未完成的事 / 更新时间）。
 
-每天凌晨（默认 4:30，本地时区）自动执行：
+每天在 02:00–05:00（本地时区）窗口内自动执行：先按每个群随机挑选开始时间，只有群内 30 分钟无新消息才整理；到 05:00 还没满足就强制整理。整理期间群消息只入库不投喂，等主 session 压缩完成后统一补投喂：
 
 1. `fork` 原会话（继承对话上下文，不影响原会话）
 2. 把最近 24 小时的群聊记录喂给 fork 出的「梦境会话」，要求它读取旧 MEMORY.md、写出完整的 `MEMORY.new.md`
