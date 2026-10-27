@@ -38,7 +38,7 @@ Docker opencode（下层）：一次性容器跑重活；结果 → 私聊全文
 ## 消息流
 
 1. 群消息全部写入消息库
-2. **不@机器人的群聊**：首条不@消息开一个窗口，最多攒 `groupContextBatchIntervalSec`（默认 600s）或最后一条消息后 `groupContextBatchIdleFlushSec`（默认 120s）冷场就作为一次 user prompt 交给模型（每条带发送时间；8 分钟后不再冷场跳出），模型可以挑想接的回复，也可以 `[SILENT]` 安静；没有新消息不触发
+2. **不@机器人的群聊**：首条不@消息开一个窗口，最多攒 `groupContextBatchIntervalSec`（默认 600s）或最后一条消息后 `groupContextBatchIdleFlushSec`（默认 60s）冷场就作为一次 user prompt 交给模型（每条带发送时间；8 分钟后不再冷场跳出），模型可以挑想接的回复，也可以 `[SILENT]` 安静；没有新消息不触发
 3. **群聊所有消息（含 @/回复机器人）** → 进批量窗口，@/回复机器人的记录行加 `[须回应]`；**私聊 / 戳一戳** → 立即组装 prompt（最近 N 条上下文 + 引用还原 + 图片附件）
 4. Agent 用 `qqbot_send_message` 分句回复（每条一次调用，像真人打字）；没调用发送工具 = 选择沉默，不做兜底
 3b. 收藏表情包：先在控制面板「表情」页从当前 QQ 同步收藏、按合集归组并打标启用；Agent 之后会用 `qqbot_list_stickers` 挑（显示为「合集:描述」）、`qqbot_send_sticker` 发（未打标/未启用的不会暴露给 Agent）

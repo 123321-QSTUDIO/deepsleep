@@ -116,6 +116,8 @@ export class SessionController {
   private groupBatchLast = new Map<string, { time: number; msgId: number }>()
   // 批次里被 @/回复的消息 id：投喂时在对应行前加 [须回应]
   private groupBatchRequired = new Map<string, Set<number>>()
+  // @ 到达时立即 flush 当前窗口；正在投喂时等本轮结束后再补一次
+  private groupBatchForce = new Set<string>()
   // 即时 prompt 的上下文下界（秒）：只带下界之后的新消息，避免每次 @ 都把历史积压分块重发
   private contextSince = new Map<string, number>()
   // 批量投喂下载的图片：native 模式请求接受后即删；bridge/none 模式等回合结束再删
@@ -571,6 +573,7 @@ export class SessionController {
     } finally {
       this.waitScopes.delete(scope)
       this.waitTriggered.delete(scope)
+      if (this.groupBatchForce.has(scope)) this.requestGroupBatchFlush(scope)
       // 等待期间的消息已经作为工具结果交给模型，批量投喂不要再重复灌一遍
       this.groupBatchLast.set(scope, { time: Math.floor(Date.now() / 1000), msgId: 0 })
       this.contextSince.set(scope, Math.floor(Date.now() / 1000))
@@ -878,9 +881,11 @@ export class SessionController {
         }
         // 等待期间的消息也要进批量窗口，避免等待返回后没有窗口、@ 消息被漏掉
         this.noteGroupMessage(scope, triggered ? mid : null)
+        if (triggered) this.requestGroupBatchFlush(scope)
         return
       }
       this.noteGroupMessage(scope, triggered ? mid : null)
+      if (triggered) this.requestGroupBatchFlush(scope)
       return
     }
     // 模型正在用 qqbot_wait_for_messages 等消息：普通消息只入库；
@@ -1095,6 +1100,15 @@ export class SessionController {
     return Math.max(this.groupBatchIdleFlushMs(), (Number(this.config.groupContextBatchIdleCutoffSec) || 480) * 1000)
   }
 
+  // @ 到达：仍在同一个批量窗口里，只是立即把当前窗口 flush 掉（不做单独即时 prompt）
+  private requestGroupBatchFlush(scope: string) {
+    this.groupBatchForce.add(scope)
+    if (this.groupBatchRunning.has(scope) || this.waitScopes.has(scope)) return
+    if (!this.groupBatchWindows.has(scope)) this.noteGroupMessage(scope)
+    if (!this.groupBatchWindows.has(scope)) return
+    void this.onGroupBatchDue(scope, 'normal')
+  }
+
   // 非@群消息到达：没有窗口就开窗；有窗口就更新最后消息时间并重置冷场计时
   private noteGroupMessage(scope: string, requiredMessageId?: number | null) {
     if (!this.config.groupContextBatchEnabled) return
@@ -1180,6 +1194,11 @@ export class SessionController {
       this.clearGroupBatchWindow(scope)
     } finally {
       w.flushing = false
+      // flush 期间/等待期间又来了 @：本轮结束后补一次，避免消息留在窗口里
+      if (this.groupBatchForce.delete(scope) && this.hasPendingGroupBatchRows(scope)) {
+        this.noteGroupMessage(scope)
+        void this.onGroupBatchDue(scope, 'retry')
+      }
     }
   }
 
@@ -1364,6 +1383,7 @@ export class SessionController {
     this.clearGroupBatchWindow(scope)
     this.contextSince.delete(scope)
     this.groupBatchRequired.delete(scope)
+    this.groupBatchForce.delete(scope)
     const entry = this.map.get(scope)
     if (!entry) return
     this.cleanupBatchImages(entry.sessionId)

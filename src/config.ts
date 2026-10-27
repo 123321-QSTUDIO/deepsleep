@@ -128,7 +128,7 @@ export const defaultConfig: PluginConfig = {
   groupContextBatchMaxMessages: 80,
   groupContextBatchMaxChars: 16000,
   groupContextBatchMaxImages: 16,
-  groupContextBatchIdleFlushSec: 120,
+  groupContextBatchIdleFlushSec: 60,
   groupContextBatchIdleCutoffSec: 480,
   replyDelayMinMs: 1200,
   replyDelayMaxMs: 3000,
@@ -205,6 +205,8 @@ export function loadConfig(configPath: string): PluginConfig {
     if (fs.existsSync(file)) {
       const saved = JSON.parse(fs.readFileSync(file, 'utf-8')) as Partial<PluginConfig>
       let migrated = saved
+      // 旧默认 120s 冷场投喂迁移到新的 60s；显式设成别的值保持原样
+      if (migrated.groupContextBatchIdleFlushSec === 120) migrated = { ...migrated, groupContextBatchIdleFlushSec: 60 }
       for (const key of ['hostModel', 'visionModel'] as const) {
         const current = migrated[key]
         if (current && modelMigrations[current]) migrated = { ...migrated, [key]: modelMigrations[current] }
