@@ -403,9 +403,8 @@ export class SessionController {
       instructions: ['./' + MEMORY_FILE],
       model: this.config.hostModel,
       // 提前放行工具权限，减少运行中弹出确认（另有 permission.asked 自动回应兜底）
-      ...(this.config.autoApprovePermissions
-        ? { permissions: [{ action: '*', resource: '*', effect: 'allow' }] }
-        : {}),
+      // OpenCode 2 的配置键是 permission（不是 permissions），值可以是 "allow" 或按 action 的规则对象
+      ...(this.config.autoApprovePermissions ? { permission: 'allow' } : {}),
       mcp: {
         servers: {
           qqbot: {

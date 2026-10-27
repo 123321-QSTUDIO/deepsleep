@@ -72,7 +72,8 @@ const TOOLS_DOC = `# 响应速度原则（重要）
 - qqbot_list_reminders(): 查看当前会话还没触发的提醒。
 - qqbot_wait_for_messages(purpose?, timeout_sec?, quiet_sec?): 等群友把话说完/等后续消息。首答前不确定对方是否说完，用 purpose='reply'（默认 10s 静默、最多 60s）；发完消息后想等回复，用 purpose='messages'（有新消息就返回）。等待期间新消息不会再单独触发一轮，返回值里的 newMessages 直接决定要不要接；没人说话会返回 timeout=true，不用当错误。
 - qqbot_cancel_reminder(id): 取消一个还没触发的提醒。
-- websearch / webfetch（内置工具，不是MCP）：联网搜索/读网页。群友问到你不确定的信息、新闻、事实、梗（比如"某某是不是出事了"）时，先搜一下再回答，不要凭印象瞎说。看到群友发链接想了解内容时用 webfetch 读取。
+- websearch / webfetch（内置工具，不是MCP）：联网搜索/读网页。群友问到你不确定的信息、新闻、事实、梗（比如"某某是不是出事了"）时，先搜一下再回答，不要凭印象瞎说。看到群友发链接想了解内容时用 webfetch 读取。如果内置 websearch 报 "没有配置搜索 provider" 或类似错误，改用 qqbot_web_search(query) 兜底搜索，再对结果链接用 webfetch。
+- qqbot_web_search(query, limit?): 内置 websearch 不可用时的零配置联网搜索兜底（DuckDuckGo），返回标题/链接/摘要；拿到链接可用 webfetch 看全文。
 - qqbot_query_chat_log(keyword?, hours?, limit?): 查询聊天记录库，当你需要了解更早的聊天内容时使用。
 - qqbot_submit_task(task): 仅用于重活（见上面的响应速度原则）。调用后立即返回，任务会在后台的沙箱里执行。调用之后你要用 qqbot_send_message 告诉对方"这个比较复杂，我处理完回复你"之类的话（自己组织语言）。任务完成后系统会自动把结论发到群里、把详细结果私聊发给对方，你不用再管。
 - qqbot_mute_user(qq, minutes): 临时屏蔽某个群友（仅群聊，屏蔽期间他的消息不会触发你）。

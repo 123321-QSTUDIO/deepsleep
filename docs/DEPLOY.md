@@ -331,7 +331,8 @@ QQBOT_DATA=/opt/deepsleep/data node scripts/compact-all.mjs
 - 功能：表单改全部配置（写回 config.json，部分字段提示需重启）、看所有群/私聊会话与 Session 状态、打开某个会话看 OpenCode 对话/QQ 消息记录/工作区文件、执行 `/reset`、`/abort`、以机器人身份发 QQ 消息、把文字作为 prompt 直接发给 Agent
 - **表情看图**：群友发的收藏/商城表情也会处理——主模型是多模态时图片作为对话附件直接给它看；纯文本主模型则落工作区 inbox 走 vision-bridge；想确认收藏表情长什么样，可用 `qqbot_get_sticker_image` 保存到 inbox 后查看。
 - **表情两套**：内置小黄脸（CQ face）和收藏表情（MCP）是两套东西。提示词会自动注入内置表情表和所有已启用收藏表情；收藏表情需要在面板里同步、打标、启用后才会出现，未启用的不会注入。
-- **权限确认**：OpenCode V2 在模型首次使用搜索/联网等工具时会发权限请求（TUI 里是弹窗）。服务形态默认自动批准：workspace 配置提前放行 + `permission.asked` 事件自动回复；面板「权限与安全」组可关（`autoApprovePermissions`）或改成只批一次（`permissionAutoReply=once`）。关闭后服务端不会回应，会话可能一直等待，谨慎操作。
+- **联网搜索**：OpenCode 内置 `websearch` 需要搜索 provider（Exa/Firecrawl/Parallel/Tavily/TinyFish 的 API Key，或 OpenCode Console 托管搜索）；服务进程没配 provider 时会报 ProviderRequired/Disabled，这不是权限问题。未配置时模型可改用 MCP `qqbot_web_search` 做零配置搜索（DuckDuckGo，Bing 兜底），再 webfetch 读正文。
+- **权限确认**：OpenCode V2 在模型首次使用搜索/联网等工具时会发权限请求（TUI 里是弹窗）。服务形态默认自动批准：workspace 配置的 `permission: 'allow'` 提前放行 + `permission.asked` 事件自动回复；面板「权限与安全」组可关（`autoApprovePermissions`）或改成只批一次（`permissionAutoReply=once`）。关闭后服务端不会回应，会话可能一直等待，谨慎操作。
 - **回复长度/条数**：`normalCharsPerMessage`（默认 20 字）写进人格提示词，普通对话单条尽量不超过；`maxCharsPerMessage`（默认 200 字）与 `maxLinesPerReply`（默认 4 条）是提醒阈值——超出不会拦截发送，消息照发，但 MCP 会在工具结果里返回警告，让模型自己收尾/精简；如果这一轮同时在回复多个人（pending >= 2），条数警告会自动跳过，方便逐人回复。人格提示词保留拟人化分条，但不再强制每条都拆，模型按内容自由选择 1 到 4 条。
 - **定时提醒**：Agent 可以自己设倒计时（`qqbot_set_reminder`）。默认 `reminderMode=agent`：到点系统只把提醒内容交给模型、由它结合上下文处理；模型没调用发送工具就不发（不再兜底）；改成 `static` 则直接发固定文案。数据存 `data/reminders.json`，服务重启后仍会补发过期提醒。面板「定时提醒」组可开关、调检查间隔/单会话上限/最大天数。注意：它不是 cron 定时任务，只支持“从现在起 N 分钟后”的相对倒计时。
 - **戳一戳**：别人拍机器人时，桥接把 `[戳一戳]` 当作一条消息交给模型，模型自行决定回话/回拍/不理；可在面板・主动参与（测试）组调 `pokeReplyCooldownSec` 防止连环唤醒。

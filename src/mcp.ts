@@ -34,6 +34,63 @@ function text(text: string) {
   return { content: [{ type: 'text' as const, text }] }
 }
 
+function stripHtmlTags(input: string): string {
+  return input
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&#x27;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function unwrapSearchUrl(href: string): string {
+  const full = href.startsWith('//') ? 'https:' + href : href
+  try {
+    const u = new URL(full)
+    const wrapped = u.searchParams.get('uddg')
+    if (wrapped) return decodeURIComponent(wrapped)
+    return full
+  } catch {
+    return href
+  }
+}
+
+// 内置 websearch 需要 Exa/Tavily 等 provider 或 Console 托管搜索；
+// 服务端没有这些凭据时用 DuckDuckGo HTML 做零配置兜底，返回结果让模型再 webfetch。
+async function searchWeb(query: string, limit: number): Promise<{ title: string; url: string; snippet: string }[]> {
+  const endpoint = process.env.QQBOT_SEARCH_URL || 'https://html.duckduckgo.com/html/?q='
+  const response = await fetch(endpoint + encodeURIComponent(query), {
+    headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36' },
+    signal: AbortSignal.timeout(15000),
+  })
+  if (!response.ok) throw new Error('搜索 HTTP ' + response.status)
+  const html = await response.text()
+  const links = [...html.matchAll(/<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)]
+  const snippets = [...html.matchAll(/<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g)]
+  const results = links.map((l, i) => ({
+    title: stripHtmlTags(l[2] || ''),
+    url: unwrapSearchUrl(l[1] || ''),
+    snippet: stripHtmlTags(snippets[i]?.[1] || ''),
+  })).filter((r) => r.url && r.title)
+  if (results.length > 0) return results.slice(0, limit)
+  // DuckDuckGo 偶发空结果时用 Bing HTML 兜底
+  const bing = await fetch('https://www.bing.com/search?q=' + encodeURIComponent(query), {
+    headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36' },
+    signal: AbortSignal.timeout(15000),
+  })
+  const bingHtml = await bing.text()
+  const bingRe = /<li class="b_algo"[\s\S]*?<h2[^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?(?:<p[^>]*>([\s\S]*?)<\/p>)?/g
+  const bingResults: { title: string; url: string; snippet: string }[] = []
+  for (const b of bingHtml.matchAll(bingRe)) {
+    bingResults.push({ title: stripHtmlTags(b[2] || ''), url: b[1] || '', snippet: stripHtmlTags(b[3] || '') })
+    if (bingResults.length >= limit) break
+  }
+  return bingResults.filter((r) => r.url && r.title)
+}
 export class QqMcpServer {
   private server: http.Server | null = null
   private issuedLinks = new Map<string, { url: string; exp: number }>()
@@ -316,6 +373,27 @@ export class QqMcpServer {
           ? { ...result, hint: '等待期间有人 @/回复你：' + result.triggered.line + '，这条优先级高于普通聊天，请优先回应。' }
           : result
         return text(JSON.stringify(payload))
+      }
+    )
+
+    mcp.registerTool(
+      'web_search',
+      {
+        description: '联网搜索（零配置兜底）。内置 websearch 报 provider 未配置/不可用时用这个；返回标题、链接和摘要，拿到链接后可按需 webfetch 读全文。',
+        inputSchema: {
+          query: z.string().describe('搜索关键词'),
+          limit: z.number().optional().describe('最多返回几条，默认 5，最大 8'),
+        },
+      },
+      async ({ query, limit }) => {
+        const q = String(query ?? '').trim()
+        if (!q) return text('错误: 搜索关键词为空')
+        try {
+          const results = await searchWeb(q, Math.max(1, Math.min(8, Number(limit) || 5)))
+          return text(JSON.stringify({ query: q, results }, null, 2))
+        } catch (e) {
+          return text('搜索失败: ' + String((e as Error)?.message ?? e))
+        }
       }
     )
 
