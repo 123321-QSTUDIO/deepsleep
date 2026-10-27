@@ -873,6 +873,8 @@ export class SessionController {
           }
           this.waitTriggered.set(scope, { messageId: mid, userId: Number(event.user_id ?? 0), line: cleanCqForDisplay(String(event.raw_message ?? '')).trim() })
         }
+        // 等待期间的消息也要进批量窗口，避免等待返回后没有窗口、@ 消息被漏掉
+        this.noteGroupMessage(scope, triggered ? mid : null)
         return
       }
       this.noteGroupMessage(scope, triggered ? mid : null)
