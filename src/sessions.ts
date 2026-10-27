@@ -284,6 +284,10 @@ export class SessionController {
     this.log('梦境整理暂停群消息投喂 scope=' + scope)
   }
 
+  isDreamPaused(scope: string): boolean {
+    return this.dreamPaused.has(scope)
+  }
+
   resumeGroupDream(scope: string): void {
     if (!this.dreamPaused.delete(scope)) return
     this.log('梦境整理结束恢复群消息投喂 scope=' + scope)
@@ -390,9 +394,11 @@ export class SessionController {
 
   // 定时提醒到点：构造 synthetic 上下文唤醒模型，让它用自己的语气发提醒；模型 90s 内没发则退回固定文案
   async deliverReminder(scope: string, text: string): Promise<'agent'> {
+    if (this.dreamPaused.has(scope)) throw new Error('梦境整理中，提醒延后投递')
     const entry = await this.ensureSession(scope, this.syntheticEventForScope(scope))
     if (!entry) throw new Error('会话建立失败')
     // 只把提醒内容交给模型，怎么处理由它结合上下文决定；没调用发送工具=保持沉默
+    if (this.dreamPaused.has(scope)) throw new Error('梦境整理中，提醒延后投递')
     const notice = '[系统提醒] 你之前设置的定时提醒到时间了：' + text
     await this.prompt(entry.sessionId, notice)
     return 'agent'
@@ -701,10 +707,17 @@ export class SessionController {
     } catch (e) {
       this.log('戳一戳入库失败:', e)
     }
+    // 梦境整理/compact 期间只入库，等 resume 后随批量补投喂
+    if (this.dreamPaused.has(scope)) {
+      this.log('梦境整理中戳一戳暂缓投喂 scope=' + scope)
+      return false
+    }
     const entry = await this.ensureSession(scope, event)
     if (!entry) return false
+    if (this.dreamPaused.has(scope)) return false
     const prompt = this.buildPrompt(event, 'poke', nickname || 'QQ' + poker)
     if (!prompt) return false
+    if (this.dreamPaused.has(scope)) return false
     await this.prompt(entry.sessionId, prompt)
     this.log('戳一戳已交给模型 scope=' + scope + ' poker=' + poker)
     return true
@@ -1111,7 +1124,15 @@ export class SessionController {
       ...(replyTo !== null ? this.quotedImages(scope, replyTo) : []),
     ])
     try {
+      if (this.dreamPaused.has(scope)) {
+        this.dropPending(scope, mid)
+        return
+      }
       const { note: imageNote, files: imageFiles } = await this.downloadImages(entry.directory, images)
+      if (this.dreamPaused.has(scope)) {
+        this.dropPending(scope, mid)
+        return
+      }
       await this.prompt(entry.sessionId, imageNote ? prompt + imageNote : prompt, imageFiles)
     } catch (e) {
       // buildPrompt 已经把当前消息放进 pending；如果 prompt 根本没发出去（服务异常/409/图片处理异常），
@@ -1445,6 +1466,8 @@ export class SessionController {
         body = '（较早记录已省略）\n' + body.slice(-maxChars)
       }
       const prompt = this.buildGroupBatchPrompt(scope, body, omitted)
+      // 准备投喂期间才开始梦境：本次先不发送，等 resume 再补
+      if (this.dreamPaused.has(scope)) return false
       const batchImages = this.collectGroupBatchImages(rows)
       const imageInfo = batchImages.length > 0
         ? await this.downloadImages(entry.directory, batchImages)
@@ -1515,7 +1538,13 @@ export class SessionController {
           const mid = r.message_id == null ? null : Number(r.message_id)
           if (last) {
             if (time < last.time) continue
-            if (time === last.time && (mid ?? 0) <= last.msgId) continue
+            if (time === last.time) {
+              // 戳一戳/系统消息没有 message_id；同一秒内只允许在上一轮以普通消息结束时补收一次，
+              // 避免以 poke 为最后一条时无限重复投喂
+              if (mid === null) {
+                if (last.msgId <= 0) continue
+              } else if (mid <= last.msgId) continue
+            }
           }
           if (String(r.user_id) === String(this.selfId)) continue
           const key = day + ':' + String(r.msg_pk)

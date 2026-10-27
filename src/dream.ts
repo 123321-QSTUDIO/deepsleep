@@ -209,8 +209,14 @@ export class DreamMemory {
       log(`梦境整理 ${scope}: MEMORY.md 已更新 (${memoryChars} 字)`)
       const compacted = await this.compactOriginal(sessionId)
       const durationMs = Date.now() - started
-      this.record(scope, today, { ok: true, at: now, transcriptChars: transcript.length, memoryChars, compacted, durationMs })
-      return { ok: true, scope, transcriptChars: transcript.length, memoryChars, compacted, durationMs, dreamSessionId }
+      if (!compacted) {
+        const err = '主 session 压缩未确认完成'
+        log('梦境整理 ' + scope + ': ' + err + '（MEMORY.md 已替换，状态记为失败）')
+        this.record(scope, today, { ok: false, at: now, transcriptChars: transcript.length, memoryChars, compacted: false, durationMs, error: err })
+        return { ok: false, scope, error: err, transcriptChars: transcript.length, memoryChars, compacted: false, durationMs, dreamSessionId }
+      }
+      this.record(scope, today, { ok: true, at: now, transcriptChars: transcript.length, memoryChars, compacted: true, durationMs })
+      return { ok: true, scope, transcriptChars: transcript.length, memoryChars, compacted: true, durationMs, dreamSessionId }
     } catch (e) {
       const err = String((e as Error)?.message ?? e)
       this.record(scope, today, { ok: false, at: now, error: err })
@@ -364,18 +370,30 @@ export class DreamMemory {
   private async compactOriginal(sessionId: string): Promise<boolean> {
     const { oc, log } = this.deps
     try {
+      // 只认「本次 compact 之后新出现的 completed 压缩消息」，不能拿历史 compaction 蒙混过关
+      const before = await oc.getMessages(sessionId, 20).catch(() => [] as OcMessage[])
+      const beforeIds = new Set(before.map((m) => String(m.id)))
+      const beforeLatest = before
+        .filter((m) => m.type === 'compaction')
+        .map((m) => Number(m.time?.created ?? 0))
+        .reduce((x, y) => Math.max(x, y), 0)
       await oc.compactSession(sessionId)
       await this.waitIdle(sessionId, COMPACT_TIMEOUT_MS)
-      // 确认压缩消息已完成
-      const deadline = Date.now() + 30_000
+      const deadline = Date.now() + COMPACT_TIMEOUT_MS
       while (Date.now() < deadline) {
         const msgs = await oc.getMessages(sessionId, 20).catch(() => [] as OcMessage[])
-        const compaction = msgs.find((m) => m.type === 'compaction')
-        if (compaction && (compaction as unknown as { status?: string }).status === 'completed') return true
+        const fresh = msgs.filter((m) => m.type === 'compaction' && !beforeIds.has(String(m.id)) && Number(m.time?.created ?? 0) >= beforeLatest)
+        const done = fresh.find((m) => (m as unknown as { status?: string }).status === 'completed')
+        if (done) return true
+        const failed = fresh.find((m) => (m as unknown as { status?: string }).status === 'failed')
+        if (failed) {
+          log('梦境整理: compact 失败 session=' + sessionId)
+          return false
+        }
         await sleep(2000)
       }
-      log(`梦境整理: compact 已提交但未在预期时间内完成 session=${sessionId}`)
-      return true
+      log('梦境整理: compact 未在预期时间内确认完成 session=' + sessionId)
+      return false
     } catch (e) {
       log('梦境整理: compact 失败:', e)
       return false

@@ -104,6 +104,7 @@ export async function createApp(options: AppOptions): Promise<App> {
   const reminderScheduler = new ReminderScheduler(
     reminders,
     async (reminder) => {
+      if (sessions.isDreamPaused(reminder.scope)) throw new Error('梦境整理中，提醒延后投递')
       if ((config.reminderMode || 'agent') === 'static') {
         const staticText = (reminder.atUserId ? '[CQ:at,qq=' + reminder.atUserId + '] ' : '') + '提醒：' + reminder.text
         await sessions.sendTextToScope(reminder.scope, staticText)
