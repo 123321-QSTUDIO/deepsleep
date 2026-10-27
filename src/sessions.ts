@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { PluginConfig } from './config'
+import { PluginConfig, isAdminQq } from './config'
 import { MsgDB, dayKey } from './msgdb'
 import { OpencodeClient, OpencodeEvent, OcPromptFile } from './opencode'
 import { buildGroupAgentsMd, buildPrivateAgentsMd, ALLOWED_FACE_IDS, VisionStrategy } from './agentsmd'
@@ -603,7 +603,7 @@ export class SessionController {
           return {
             message_id: r.message_id == null ? null : Number(r.message_id),
             user_id: Number(r.user_id),
-            nickname: this.displayName(r.card, r.nickname, r.user_id),
+            nickname: this.roleTag(r.user_id) + this.displayName(r.card, r.nickname, r.user_id),
             time: Number(r.time),
             text: this.promptText(scope, String(r.text ?? ''), segs) + (replyTo !== null ? this.quoteSuffix(scope, replyTo) : ''),
           }
@@ -797,6 +797,10 @@ export class SessionController {
     return out.slice(-limit).map((x) => x.line)
   }
 
+  private roleTag(userId: unknown): string {
+    return isAdminQq(this.config, userId) ? '[管理员] ' : ''
+  }
+
   private displayName(card: unknown, nickname: unknown, userId: unknown): string {
     return String(card ?? '').trim() || String(nickname ?? '').trim() || String(userId ?? '')
   }
@@ -812,7 +816,7 @@ export class SessionController {
         try { segs = JSON.parse(String(rows[0].segments ?? '[]')) as MsgSegment[] } catch { /* ignore */ }
         const who = this.displayName(rows[0].card, rows[0].nickname, rows[0].user_id)
         const body = this.promptText(scope, String(rows[0].text ?? ''), segs).slice(0, maxLen)
-        return '\n  > 引用 ' + who + '(' + String(rows[0].user_id) + '): ' + body
+        return '\n  > 引用 ' + this.roleTag(rows[0].user_id) + who + '(' + String(rows[0].user_id) + '): ' + body
       } catch {
         // day db missing
       }
@@ -949,7 +953,7 @@ export class SessionController {
           const nick = this.displayName(r.card, r.nickname, r.user_id)
           let segs: MsgSegment[] = []
           try { segs = JSON.parse(String(r.segments ?? '[]')) as MsgSegment[] } catch { /* ignore */ }
-          candidates.push({ mid, line: `[${hhmm(Number(r.time))}] ${nick}(${r.user_id}): ${this.promptText(scope, String(r.text ?? ''), segs)}` })
+          candidates.push({ mid, line: `[${hhmm(Number(r.time))}] ${this.roleTag(r.user_id)}${nick}(${r.user_id}): ${this.promptText(scope, String(r.text ?? ''), segs)}` })
         }
       } catch {
         // no db for that day
@@ -961,7 +965,7 @@ export class SessionController {
     const segments = (Array.isArray(event.message) ? event.message : []) as MsgSegment[]
     const nick = event.sender?.card || event.sender?.nickname || String(event.user_id ?? '')
     const currentText = this.promptText(scope, typeof event.raw_message === 'string' ? event.raw_message : '', segments)
-    let currentLine = `[${hhmm(event.time ?? now)}] ${nick}(${event.user_id}): ${currentText}`
+    let currentLine = `[${hhmm(event.time ?? now)}] ${this.roleTag(event.user_id)}${nick}(${event.user_id}): ${currentText}`
     const replyTo = extractReplyTo(segments)
     if (replyTo !== null) currentLine += this.quoteSuffix(scope, replyTo)
     if (proactive) {
@@ -1004,15 +1008,19 @@ export class SessionController {
     if (event.user_id && this.mutes.isMuted(scope, String(event.user_id))) return
     const raw = (event.raw_message ?? '').trim().replace(/\[CQ:[^\]]+\]/g, '').trim()
 
-    if (raw === '/reset') {
-      await this.reset(scope)
-      await this.sendText(event, '记忆已清空，我们重新认识一下吧')
-      return
-    }
-    if (raw === '/abort') {
-      const entry = this.map.get(scope)
-      if (entry) await this.oc.abort(entry.sessionId).catch(() => undefined)
-      await this.sendText(event, '停了停了')
+    if (raw === '/reset' || raw === '/abort') {
+      if (!isAdminQq(this.config, event.user_id)) {
+        await this.sendText(event, '这个操作只有管理员能执行')
+        return
+      }
+      if (raw === '/reset') {
+        await this.reset(scope)
+        await this.sendText(event, '记忆已清空，我们重新认识一下吧')
+      } else {
+        const entry = this.map.get(scope)
+        if (entry) await this.oc.abort(entry.sessionId).catch(() => undefined)
+        await this.sendText(event, '停了停了')
+      }
       return
     }
 
@@ -1422,7 +1430,7 @@ export class SessionController {
         const replyTo = extractReplyTo(rowSegs)
         const quote = replyTo !== null ? this.quoteSuffix(scope, replyTo) : ''
         const prefix = mid !== null && requiredIds.has(mid) ? '[须回应] ' : ''
-        return { id: mid, line: prefix + '[' + mmddhhmm(Number(r.time)) + '] ' + this.displayName(r.card, r.nickname, r.user_id) + '(' + r.user_id + '): ' + text + quote }
+        return { id: mid, line: prefix + '[' + mmddhhmm(Number(r.time)) + '] ' + this.roleTag(r.user_id) + this.displayName(r.card, r.nickname, r.user_id) + '(' + r.user_id + '): ' + text + quote }
       }).filter((x) => x.line.length > 20)
       if (allLines.length === 0) return false
       let lines = allLines.map((x) => x.line)

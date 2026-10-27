@@ -3,6 +3,8 @@ import path from 'node:path'
 
 export interface PluginConfig {
   botName: string
+  /** 管理员 QQ，逗号/空格分隔；只用于身份提示与重置/停止等管理命令 */
+  adminQqs: string
   onebotUrl: string
   onebotToken: string
   hostModel: string
@@ -100,6 +102,7 @@ export interface PluginConfig {
 
 export const defaultConfig: PluginConfig = {
   botName: 'DeepSleep',
+  adminQqs: '',
   onebotUrl: 'ws://127.0.0.1:3001',
   onebotToken: '',
   hostModel: 'opencode/deepseek-v4.1-flash-free',
@@ -203,6 +206,18 @@ export function saveConfig(configPath: string, config: PluginConfig): string {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, JSON.stringify(config, null, 2))
   return file
+}
+
+export function adminQqList(config: Pick<PluginConfig, 'adminQqs'>): string[] {
+  return String(config.adminQqs ?? '')
+    .split(/[\s,，;；]+/)
+    .map((x) => x.replace(/\D/g, ''))
+    .filter((x) => x.length > 0)
+}
+
+export function isAdminQq(config: Pick<PluginConfig, 'adminQqs'>, qq: unknown): boolean {
+  const id = String(qq ?? '').replace(/\D/g, '')
+  return id.length > 0 && adminQqList(config).includes(id)
 }
 
 export function loadConfig(configPath: string): PluginConfig {

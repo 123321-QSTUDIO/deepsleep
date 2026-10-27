@@ -267,6 +267,7 @@ QQBOT_DATA=/opt/deepsleep/data node scripts/compact-all.mjs
 ```json
 {
   "botName": "DeepSleep",
+  "adminQqs": "",
   "hostModel": "opencode/deepseek-v4.1-flash-free",
   "visionModel": "opencode/mimo-v2.6-flash-free",
   "opencodeUrl": "http://127.0.0.1:4096",

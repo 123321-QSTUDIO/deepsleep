@@ -41,6 +41,7 @@ interface FieldDef {
 
 const FIELDS: FieldDef[] = [
   { key: 'botName', label: 'botName（机器人自称）', group: '基础', type: 'string', help: '写入群/私聊工作区的人设，下一条消息触发时重建 AGENTS.md' },
+ { key: 'adminQqs', label: 'adminQqs（管理员 QQ，逗号分隔）', group: '基础', type: 'string', help: '这些 QQ 是管理员；会写进人设，且 /reset、/abort 只允许管理员执行' },
   { key: 'hostModel', label: 'hostModel（主模型）', group: '模型', type: 'string' },
   { key: 'visionModel', label: 'visionModel（识图子代理模型）', group: '模型', type: 'string' },
 
