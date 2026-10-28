@@ -276,6 +276,7 @@ function storeMessage(db: MsgDB, event: OB11MessageEvent): void {
     user_id: event.user_id ?? null,
     nickname: event.sender?.nickname ?? '',
     card: event.sender?.card ?? '',
+    role: event.sender?.role ?? '',
     time: event.time ?? Math.floor(Date.now() / 1000),
     reply_to: extractReplyTo(segments),
     text,

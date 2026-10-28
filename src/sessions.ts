@@ -136,6 +136,9 @@ export class SessionController {
   // @ 到达时立即 flush 当前窗口；正在投喂时等本轮结束后再补一次
   private groupBatchForce = new Set<string>()
   private dreamPaused = new Set<string>()
+  private botGroupRoles = new Map<string, { role: string; at: number }>()
+  private botRoleFetching = new Set<string>()
+  private botRoleTriedAt = new Map<string, number>()
   // 即时 prompt 的上下文下界（秒）：只带下界之后的新消息，避免每次 @ 都把历史积压分块重发
   private contextSince = new Map<string, number>()
   // 批量投喂下载的图片：native 模式请求接受后即删；bridge/none 模式等回合结束再删
@@ -453,7 +456,7 @@ export class SessionController {
     const stickerList = (this.stickers?.listForAgent() ?? []).map((s) => ({ id: s.id, display: s.display }))
     const agentsMd =
       event.message_type === 'group'
-        ? buildGroupAgentsMd(this.config, String(event.group_id), event.group_name ?? '', vision, stickerList)
+        ? buildGroupAgentsMd(this.config, String(event.group_id), event.group_name ?? '', vision, stickerList, this.botGroupRoleOf(scope))
         : buildPrivateAgentsMd(this.config, String(event.user_id), event.sender?.nickname ?? '', vision, stickerList)
     // 只有主模型没有视觉能力时才注册 vision-bridge 子代理；多模态主模型直接读图
     const ocConfig: Record<string, unknown> = {
@@ -609,7 +612,7 @@ export class SessionController {
           return {
             message_id: r.message_id == null ? null : Number(r.message_id),
             user_id: Number(r.user_id),
-            nickname: this.roleTag(r.user_id) + this.displayName(r.card, r.nickname, r.user_id),
+            nickname: this.roleTag(r.user_id, r.role) + this.displayName(r.card, r.nickname, r.user_id),
             time: Number(r.time),
             text: this.promptText(scope, String(r.text ?? ''), segs) + (replyTo !== null ? this.quoteSuffix(scope, replyTo) : ''),
           }
@@ -657,7 +660,7 @@ export class SessionController {
     return max
   }
 
-  private messagesSince(scope: string, afterPk: number, limit: number): { message_id: number | null; user_id: number; card: string; nickname: string; time: number; text: string; segments: string }[] {
+  private messagesSince(scope: string, afterPk: number, limit: number): { message_id: number | null; user_id: number; card: string; nickname: string; role: string; time: number; text: string; segments: string }[] {
     const now = Math.floor(Date.now() / 1000)
     const rows: Record<string, unknown>[] = []
     for (const day of [dayKey(now - 86400), dayKey(now)]) {
@@ -665,7 +668,7 @@ export class SessionController {
         const part = this.db.query(
           scope,
           day,
-          'SELECT msg_pk, message_id, user_id, card, nickname, time, text, segments FROM message WHERE msg_pk > ? ORDER BY msg_pk ASC LIMIT ?',
+          'SELECT msg_pk, message_id, user_id, card, nickname, role, time, text, segments FROM message WHERE msg_pk > ? ORDER BY msg_pk ASC LIMIT ?',
           [afterPk, limit]
         ) as Record<string, unknown>[]
         rows.push(...part)
@@ -676,7 +679,7 @@ export class SessionController {
     return rows
       .filter((r) => String(r.user_id) !== String(this.selfId))
       .sort((a, b) => Number(a.msg_pk) - Number(b.msg_pk))
-      .slice(-limit) as { message_id: number | null; user_id: number; card: string; nickname: string; time: number; text: string; segments: string }[]
+      .slice(-limit) as { message_id: number | null; user_id: number; card: string; nickname: string; role: string; time: number; text: string; segments: string }[]
   }
 
   // 戳一戳：像一条普通消息一样入库并交给模型，模型自己决定回话/回拍/不理
@@ -810,8 +813,43 @@ export class SessionController {
     return out.slice(-limit).map((x) => x.line)
   }
 
-  private roleTag(userId: unknown): string {
-    return isAdminQq(this.config, userId) ? '[管理员] ' : ''
+  private botGroupRoleOf(scope: string): string {
+    return this.botGroupRoles.get(scope)?.role ?? ''
+  }
+
+  // 从 OneBot 拉机器人在本群的角色（owner/admin/member），缓存 10 分钟；失败不阻塞消息处理
+  private async refreshBotGroupRole(scope: string): Promise<void> {
+    if (!scope.startsWith('group-')) return
+    const cached = this.botGroupRoles.get(scope)
+    if (cached && Date.now() - cached.at < 10 * 60_000) return
+    if (this.botRoleFetching.has(scope)) return
+    const tried = this.botRoleTriedAt.get(scope) ?? 0
+    if (Date.now() - tried < 5 * 60_000) return
+    this.botRoleTriedAt.set(scope, Date.now())
+    this.botRoleFetching.add(scope)
+    try {
+      const groupId = scope.slice(6)
+      const raw = await this.runtime.actions.call('get_group_member_info', { group_id: groupId, user_id: this.selfId })
+      const data = raw && typeof raw === 'object' && 'data' in raw ? (raw as { data?: unknown }).data : raw
+      const role = data && typeof data === 'object' ? String((data as Record<string, unknown>).role ?? '') : ''
+      if (role === 'owner' || role === 'admin' || role === 'member') {
+        this.botGroupRoles.set(scope, { role, at: Date.now() })
+        this.log('机器人群身份 ' + scope + ': ' + role)
+      }
+    } catch (e) {
+      this.log('获取机器人群身份失败 ' + scope + ':', e)
+    } finally {
+      this.botRoleFetching.delete(scope)
+    }
+  }
+
+  private roleTag(userId: unknown, groupRole?: unknown): string {
+    const tags: string[] = []
+    if (isAdminQq(this.config, userId)) tags.push('[机器人管理员]')
+    const role = String(groupRole ?? '')
+    if (role === 'owner') tags.push('[群主]')
+    else if (role === 'admin') tags.push('[群管理员]')
+    return tags.length > 0 ? tags.join(' ') + ' ' : ''
   }
 
   private displayName(card: unknown, nickname: unknown, userId: unknown): string {
@@ -823,13 +861,13 @@ export class SessionController {
     const now = Math.floor(Date.now() / 1000)
     for (const day of [dayKey(now), dayKey(now - 86400)]) {
       try {
-        const rows = this.db.query(scope, day, 'SELECT card, nickname, user_id, text, segments FROM message WHERE message_id = ? LIMIT 1', [replyTo]) as Record<string, unknown>[]
+        const rows = this.db.query(scope, day, 'SELECT card, nickname, user_id, role, text, segments FROM message WHERE message_id = ? LIMIT 1', [replyTo]) as Record<string, unknown>[]
         if (rows.length === 0) continue
         let segs: MsgSegment[] = []
         try { segs = JSON.parse(String(rows[0].segments ?? '[]')) as MsgSegment[] } catch { /* ignore */ }
         const who = this.displayName(rows[0].card, rows[0].nickname, rows[0].user_id)
         const body = this.promptText(scope, String(rows[0].text ?? ''), segs).slice(0, maxLen)
-        return '\n  > 引用 ' + this.roleTag(rows[0].user_id) + who + '(' + String(rows[0].user_id) + '): ' + body
+        return '\n  > 引用 ' + this.roleTag(rows[0].user_id, rows[0].role) + who + '(' + String(rows[0].user_id) + '): ' + body
       } catch {
         // day db missing
       }
@@ -883,9 +921,9 @@ export class SessionController {
   }
 
   // MCP 的 query_chat_log 等外部入口复用同一套展示：群昵称 + @映射 + 引用
-  formatForAgent(scope: string, text: string, segments?: unknown): string {
+  formatForAgent(scope: string, text: string, segments?: unknown, userId?: unknown, groupRole?: unknown): string {
     const segs = Array.isArray(segments) ? (segments as MsgSegment[]) : undefined
-    return this.promptText(scope, text, segs)
+    return this.roleTag(userId, groupRole) + this.promptText(scope, text, segs)
   }
 
   // 回复解析：模型不用知道 message_id，给「QQ号 + 原文（可选）」即可。
@@ -951,7 +989,7 @@ export class SessionController {
         const rows = this.db.query(
           scope,
           day,
-          'SELECT msg_pk, message_id, time, card, nickname, user_id, text, segments FROM message ORDER BY msg_pk DESC LIMIT ?',
+          'SELECT msg_pk, message_id, time, card, nickname, user_id, role, text, segments FROM message ORDER BY msg_pk DESC LIMIT ?',
           [contextLimit * 3]
         )
         for (const r of rows.reverse()) {
@@ -966,7 +1004,7 @@ export class SessionController {
           const nick = this.displayName(r.card, r.nickname, r.user_id)
           let segs: MsgSegment[] = []
           try { segs = JSON.parse(String(r.segments ?? '[]')) as MsgSegment[] } catch { /* ignore */ }
-          candidates.push({ mid, line: `[${hhmm(Number(r.time))}] ${this.roleTag(r.user_id)}${nick}(${r.user_id}): ${this.promptText(scope, String(r.text ?? ''), segs)}` })
+          candidates.push({ mid, line: `[${hhmm(Number(r.time))}] ${this.roleTag(r.user_id, r.role)}${nick}(${r.user_id}): ${this.promptText(scope, String(r.text ?? ''), segs)}` })
         }
       } catch {
         // no db for that day
@@ -978,7 +1016,7 @@ export class SessionController {
     const segments = (Array.isArray(event.message) ? event.message : []) as MsgSegment[]
     const nick = event.sender?.card || event.sender?.nickname || String(event.user_id ?? '')
     const currentText = this.promptText(scope, typeof event.raw_message === 'string' ? event.raw_message : '', segments)
-    let currentLine = `[${hhmm(event.time ?? now)}] ${this.roleTag(event.user_id)}${nick}(${event.user_id}): ${currentText}`
+    let currentLine = `[${hhmm(event.time ?? now)}] ${this.roleTag(event.user_id, event.sender?.role)}${nick}(${event.user_id}): ${currentText}`
     const replyTo = extractReplyTo(segments)
     if (replyTo !== null) currentLine += this.quoteSuffix(scope, replyTo)
     if (proactive) {
@@ -1037,6 +1075,7 @@ export class SessionController {
       return
     }
 
+    if (event.message_type === 'group') void this.refreshBotGroupRole(scope)
     const triggered = this.isTriggered(event, segments)
     const mid = typeof event.message_id === 'number' ? event.message_id : Number(event.message_id) || null
     // 梦境整理/compact 期间：消息已入库，但先不投喂；@ 只记 required，压缩完成后统一推送
@@ -1451,7 +1490,7 @@ export class SessionController {
         const replyTo = extractReplyTo(rowSegs)
         const quote = replyTo !== null ? this.quoteSuffix(scope, replyTo) : ''
         const prefix = mid !== null && requiredIds.has(mid) ? '[须回应] ' : ''
-        return { id: mid, line: prefix + '[' + mmddhhmm(Number(r.time)) + '] ' + this.roleTag(r.user_id) + this.displayName(r.card, r.nickname, r.user_id) + '(' + r.user_id + '): ' + text + quote }
+        return { id: mid, line: prefix + '[' + mmddhhmm(Number(r.time)) + '] ' + this.roleTag(r.user_id, r.role) + this.displayName(r.card, r.nickname, r.user_id) + '(' + r.user_id + '): ' + text + quote }
       }).filter((x) => x.line.length > 20)
       if (allLines.length === 0) return false
       let lines = allLines.map((x) => x.line)
@@ -1521,16 +1560,16 @@ export class SessionController {
     return images.slice(-max)
   }
 
-  private collectGroupBatchRows(scope: string, sinceSec: number, last?: { time: number; msgId: number }): { message_id: number | null; user_id: number; card: string; nickname: string; time: number; text: string; segments: string }[] {
+  private collectGroupBatchRows(scope: string, sinceSec: number, last?: { time: number; msgId: number }): { message_id: number | null; user_id: number; card: string; nickname: string; role: string; time: number; text: string; segments: string }[] {
     const now = Math.floor(Date.now() / 1000)
     const seen = new Set<string>()
-    const out: { message_id: number | null; user_id: number; card: string; nickname: string; time: number; text: string; segments: string; pk: number; day: string }[] = []
+    const out: { message_id: number | null; user_id: number; card: string; nickname: string; role: string; time: number; text: string; segments: string; pk: number; day: string }[] = []
     for (const day of [dayKey(now - 86400), dayKey(now)]) {
       try {
         const rows = this.db.query(
           scope,
           day,
-          'SELECT msg_pk, message_id, card, nickname, user_id, time, text, segments FROM message WHERE time >= ? ORDER BY time ASC, msg_pk ASC LIMIT 400',
+          'SELECT msg_pk, message_id, card, nickname, user_id, role, time, text, segments FROM message WHERE time >= ? ORDER BY time ASC, msg_pk ASC LIMIT 400',
           [Math.max(0, sinceSec)]
         ) as Record<string, unknown>[]
         for (const r of rows) {
@@ -1555,6 +1594,7 @@ export class SessionController {
             user_id: Number(r.user_id),
             card: String(r.card ?? ''),
             nickname: String(r.nickname ?? ''),
+            role: String(r.role ?? ''),
             time,
             text: String(r.text ?? ''),
             segments: String(r.segments ?? '[]'),
@@ -1574,7 +1614,10 @@ export class SessionController {
     const now = new Date()
     const p2 = (n: number) => String(n).padStart(2, '0')
     const week = '日一二三四五六'[now.getDay()]
+    const botRole = this.botGroupRoleOf(scope)
+    const botRoleText = botRole === 'owner' ? '群主' : botRole === 'admin' ? '群管理员' : botRole === 'member' ? '普通群成员' : ''
     return [
+      botRoleText ? '[你的群身份] 你是本群的' + botRoleText + '（这是 QQ 群身份，不是机器人管理员）' : '',
       '[当前时间] ' + now.getFullYear() + '-' + p2(now.getMonth() + 1) + '-' + p2(now.getDate()) + ' ' + p2(now.getHours()) + ':' + p2(now.getMinutes()) + ' 星期' + week + '（以此为准，下面消息前面的方括号是发送时间）',
       omitted > 0 ? '（较早记录已省略）' : '',
       '[最近群聊内容]',

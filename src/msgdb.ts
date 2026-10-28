@@ -9,6 +9,7 @@ const TABLE_SQL = `CREATE TABLE IF NOT EXISTS message (
   user_id INTEGER,
   nickname TEXT,
   card TEXT,
+  role TEXT,
   time INTEGER,
   reply_to INTEGER,
   text TEXT,
@@ -52,6 +53,8 @@ export class MsgDB {
       ? new this.sql!.Database(fs.readFileSync(file))
       : new this.sql!.Database()
     db.run(TABLE_SQL)
+    // 旧库没有 role 列：补列（群主/管理员/普通成员）
+    try { db.run('ALTER TABLE message ADD COLUMN role TEXT') } catch { /* already exists */ }
     const entry: Cached = { db, file, timer: null }
     this.cache.set(file, entry)
     return entry
@@ -74,6 +77,7 @@ export class MsgDB {
     user_id: number | null
     nickname: string
     card: string
+    role?: string
     time: number
     reply_to: number | null
     text: string
@@ -82,13 +86,14 @@ export class MsgDB {
     const day = dayKey(row.time || Math.floor(Date.now() / 1000))
     const entry = this.open(scope, day)
     const stmt = entry.db.prepare(
-      'INSERT INTO message (message_id, user_id, nickname, card, time, reply_to, text, segments) VALUES (?,?,?,?,?,?,?,?)'
+      'INSERT INTO message (message_id, user_id, nickname, card, role, time, reply_to, text, segments) VALUES (?,?,?,?,?,?,?,?,?)'
     )
     stmt.run([
       row.message_id,
       row.user_id,
       row.nickname,
       row.card,
+      row.role ?? '',
       row.time,
       row.reply_to,
       row.text,

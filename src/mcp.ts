@@ -113,13 +113,13 @@ export class QqMcpServer {
     const since = now - hours * 3600
     const sinceDay = dayKey(since)
     const days = this.deps.db.listDays(scope).filter((d) => d >= sinceDay)
-    const rows: { time: number; card: string; nickname: string; user_id: number; text: string; segments: string }[] = []
+    const rows: { time: number; card: string; nickname: string; user_id: number; role: string; text: string; segments: string }[] = []
     for (const day of days) {
       try {
         const r = this.deps.db.query(
           scope,
           day,
-          `SELECT time, card, nickname, user_id, text, segments FROM message
+          `SELECT time, card, nickname, user_id, role, text, segments FROM message
            WHERE time >= ? ${keyword ? 'AND text LIKE ?' : ''}
            ORDER BY msg_pk DESC LIMIT ?`,
           keyword ? [since, `%${keyword}%`, limit] : [since, limit]
@@ -136,7 +136,7 @@ export class QqMcpServer {
       let segs: unknown = []
       try { segs = JSON.parse(String(r.segments ?? '[]')) } catch { /* ignore */ }
       const name = String(r.card || '').trim() || String(r.nickname || '').trim() || String(r.user_id)
-      return `[${hhmm(r.time)}] ${name}(${r.user_id}): ${this.deps.sessions.formatForAgent(scope, String(r.text ?? ''), segs)}`
+      return `[${hhmm(r.time)}] ${name}(${r.user_id}): ${this.deps.sessions.formatForAgent(scope, String(r.text ?? ''), segs, r.user_id, r.role)}`
     }).join('\n')
   }
 
