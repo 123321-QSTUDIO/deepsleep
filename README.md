@@ -20,7 +20,7 @@ QQ群/私聊 ⇄ SnowLuma（QQ 网关；OneBot v11 WS）
                 ├─ 消息收发（OneBot WS 事件 / send_msg）
                 ├─ 消息库：每群/每人每天一个 SQLite（sql.js WASM）
                 ├─ Session 控制器 → 本机 opencode serve（每群/每人一个持久 session）
-                ├─ MCP Server（HTTP+Bearer，共 18 个工具，含收藏表情包）
+                ├─ MCP Server（HTTP+Bearer，共 19 个工具，含收藏表情包）
                 │   模型可见名带 qqbot_ 前缀，MCP 服务注册名不变
                 ├─ 控制面板（WebUI）：改配置 / 看会话 / 操作 Session，与服务同进程
                 ├─ 梦境记忆：每晚 fork 会话整理 MEMORY.md（instructions 注入）→ 原子替换
@@ -62,11 +62,11 @@ src/
 ├── agentsmd.ts   各群/私聊工作区 AGENTS.md 生成器（人设+分句规则+表情表+工具说明）
 ├── tasks.ts      任务注册表（tasks.json 持久化）
 ├── executor.ts   任务执行器（远程 docker：每 QQ 可休眠容器、归档、配额、过期提醒）
-├── mcp.ts        MCP Server（8 工具，scope 头路由，沙箱模式，属主权限校验）
+├── mcp.ts        MCP Server（19 工具，scope 头路由，沙箱模式，属主权限校验）
 ├── dream.ts      梦境记忆：每晚 fork 会话用当天群聊更新 MEMORY.md，再 compact 原 session
 ├── panel.ts      控制面板 HTTP 服务（配置读写/校验、会话快照、Session 操作 API）
 └── panel.html    控制面板前端（单文件，构建时内联进 dist）
-smoke*.mjs        冒烟测试（消息库 / V2 session / MCP 十工具（含收藏表情） / 图片与视觉 / watchdog / 服务模式 / 控制面板）
+smoke*.mjs        冒烟测试（消息库 / V2 session / MCP 十九工具（含收藏表情） / 图片与视觉 / watchdog / 服务模式 / 控制面板）
 ```
 
 > 任务沙箱镜像、HK 部署脚本、产物下载服务在独立的执行层仓库
@@ -80,7 +80,7 @@ npm run typecheck
 npm run build        # 产出 dist-service/（独立服务）
 node smoke.mjs           # 冒烟：消息库
 node smoke2.mjs          # 冒烟：V2 session 创建（需本地 OpenCode 2.1.4 serve）
-node smoke3.mjs          # 冒烟：MCP 十工具（含收藏表情包）
+node smoke3.mjs          # 冒烟：MCP 十九工具（含收藏表情包）
 node smoke4.mjs          # 冒烟：离线图片下载/prompt
 node smoke5.mjs <图片路径>  # 冒烟：视觉；也可设 QQBOT_TEST_IMAGE
 node smoke6.mjs          # 冒烟：watchdog 兜底（需本地 opencode serve）
