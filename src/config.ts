@@ -3,6 +3,8 @@ import path from 'node:path'
 
 export interface PluginConfig {
   botName: string
+  /** 英文名/次名称（选填）；主名称 botName 必填，可以是任意语言 */
+  botNameEn: string
   /** 机器人主人（Bot Owner）QQ，逗号/空格分隔；不是群主/群管理员 */
   ownerQqs: string
   onebotUrl: string
@@ -102,6 +104,7 @@ export interface PluginConfig {
 
 export const defaultConfig: PluginConfig = {
   botName: 'DeepSleep',
+  botNameEn: '',
   ownerQqs: '',
   onebotUrl: 'ws://127.0.0.1:3001',
   onebotToken: '',
@@ -236,6 +239,8 @@ export function loadConfig(configPath: string): PluginConfig {
         delete copy.adminQqs
         migrated = copy as typeof migrated
       }
+      // 主名称必填：旧配置/手写配置为空时回退默认名称，避免人格里出现空名字
+      if (!String(migrated.botName ?? '').trim()) migrated = { ...migrated, botName: defaultConfig.botName }
       // 旧默认 120s 冷场投喂迁移到新的 60s；显式设成别的值保持原样
       if (migrated.groupContextBatchIdleFlushSec === 120) migrated = { ...migrated, groupContextBatchIdleFlushSec: 60 }
       for (const key of ['hostModel', 'visionModel'] as const) {

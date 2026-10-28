@@ -132,7 +132,8 @@ node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 | 字段 | 默认 | 说明 |
 |---|---|---|
 | `ownerQqs` | 空 | 机器人主人（Bot Owner）QQ，逗号/空格分隔；不是群主/群管理员，/reset、/abort 只允许机器人主人执行 |
-| `botName` | `DeepSleep` | 机器人自称（写入 AGENTS.md 人设） |
+| `botName` | `DeepSleep` | 机器人主名称（必填，可中文/英文/任意语言；写入 AGENTS.md 人设） |
+| `botNameEn` | 空 | 英文名/次名称（选填，写入人设；日常优先主名称） |
 | `hostModel` | `opencode/deepseek-v4.1-flash-free` | host 层默认模型（OpenCode Zen 免费模型，免登录） |
 | `visionModel` | `opencode/mimo-v2.6-flash-free` | vision-bridge 桥接 subagent 的识图模型（免费 MiMo V2.6；图片下载到 inbox/ 由 subagent 读图） |
 | `opencodeUrl` | `http://127.0.0.1:4096` | host opencode V2 地址 |

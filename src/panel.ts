@@ -40,7 +40,8 @@ interface FieldDef {
 }
 
 const FIELDS: FieldDef[] = [
-  { key: 'botName', label: 'botName（机器人自称）', group: '基础', type: 'string', help: '写入群/私聊工作区的人设，下一条消息触发时重建 AGENTS.md' },
+  { key: 'botName', label: 'botName（主名称，必填）', group: '基础', type: 'string', help: '机器人主名称，必填，可以是中文/英文/任意语言；写入 AGENTS.md 人设，下一条消息触发时重建' },
+  { key: 'botNameEn', label: 'botNameEn（英文名/次名称，选填）', group: '基础', type: 'string', help: '可选的英文名或次名称，写进人设；日常仍优先使用主名称' },
  { key: 'ownerQqs', label: 'ownerQqs（机器人主人 QQ，逗号分隔）', group: '基础', type: 'string', help: '这些 QQ 是机器人主人（Bot Owner），不是群主/群管理员；会写进人设，且 /reset、/abort 只允许机器人主人执行' },
   { key: 'hostModel', label: 'hostModel（主模型）', group: '模型', type: 'string' },
   { key: 'visionModel', label: 'visionModel（识图子代理模型）', group: '模型', type: 'string' },
@@ -510,6 +511,7 @@ export class ControlPanel {
       version: PANEL_VERSION,
       mode,
       botName: config.botName,
+      botNameEn: config.botNameEn,
       uptime: process.uptime(),
       dataPath,
       opencode: { url: config.opencodeUrl, healthy: await oc.health() },
@@ -771,6 +773,28 @@ export class ControlPanel {
       }
       if (typeof value !== 'string') {
         errors.push(`${key} 必须是字符串`)
+        continue
+      }
+      if (key === 'botName') {
+        const name = value.trim()
+        if (!name) {
+          errors.push('botName（主名称）必填，不能为空')
+          continue
+        }
+        if (name.length > 64) {
+          errors.push('botName（主名称）不能超过 64 字')
+          continue
+        }
+        patch[key] = name
+        continue
+      }
+      if (key === 'botNameEn') {
+        const name = value.trim()
+        if (name.length > 64) {
+          errors.push('botNameEn（英文名/次名称）不能超过 64 字')
+          continue
+        }
+        patch[key] = name
         continue
       }
       if (value.length > 4096) {
