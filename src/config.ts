@@ -3,8 +3,8 @@ import path from 'node:path'
 
 export interface PluginConfig {
   botName: string
-  /** 管理员 QQ，逗号/空格分隔；只用于身份提示与重置/停止等管理命令 */
-  adminQqs: string
+  /** 机器人主人（Bot Owner）QQ，逗号/空格分隔；不是群主/群管理员 */
+  ownerQqs: string
   onebotUrl: string
   onebotToken: string
   hostModel: string
@@ -102,7 +102,7 @@ export interface PluginConfig {
 
 export const defaultConfig: PluginConfig = {
   botName: 'DeepSleep',
-  adminQqs: '',
+  ownerQqs: '',
   onebotUrl: 'ws://127.0.0.1:3001',
   onebotToken: '',
   hostModel: 'opencode/deepseek-v4.1-flash-free',
@@ -208,16 +208,16 @@ export function saveConfig(configPath: string, config: PluginConfig): string {
   return file
 }
 
-export function adminQqList(config: Pick<PluginConfig, 'adminQqs'>): string[] {
-  return String(config.adminQqs ?? '')
+export function ownerQqList(config: Pick<PluginConfig, 'ownerQqs'>): string[] {
+  return String(config.ownerQqs ?? '')
     .split(/[\s,，;；]+/)
     .map((x) => x.replace(/\D/g, ''))
     .filter((x) => x.length > 0)
 }
 
-export function isAdminQq(config: Pick<PluginConfig, 'adminQqs'>, qq: unknown): boolean {
+export function isOwnerQq(config: Pick<PluginConfig, 'ownerQqs'>, qq: unknown): boolean {
   const id = String(qq ?? '').replace(/\D/g, '')
-  return id.length > 0 && adminQqList(config).includes(id)
+  return id.length > 0 && ownerQqList(config).includes(id)
 }
 
 export function loadConfig(configPath: string): PluginConfig {
@@ -226,6 +226,16 @@ export function loadConfig(configPath: string): PluginConfig {
     if (fs.existsSync(file)) {
       const saved = JSON.parse(fs.readFileSync(file, 'utf-8')) as Partial<PluginConfig>
       let migrated = saved
+      // 旧配置 adminQqs 迁移为机器人主人 ownerQqs（Bot Owner，不是群管理员）
+      const legacyOwner = (migrated as Record<string, unknown>).adminQqs
+      if (typeof legacyOwner === 'string' && legacyOwner.trim() && !migrated.ownerQqs) {
+        migrated = { ...migrated, ownerQqs: legacyOwner }
+      }
+      if ('adminQqs' in (migrated as Record<string, unknown>)) {
+        const copy = { ...(migrated as Record<string, unknown>) }
+        delete copy.adminQqs
+        migrated = copy as typeof migrated
+      }
       // 旧默认 120s 冷场投喂迁移到新的 60s；显式设成别的值保持原样
       if (migrated.groupContextBatchIdleFlushSec === 120) migrated = { ...migrated, groupContextBatchIdleFlushSec: 60 }
       for (const key of ['hostModel', 'visionModel'] as const) {

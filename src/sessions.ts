@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { PluginConfig, isAdminQq } from './config'
+import { PluginConfig, isOwnerQq } from './config'
 import { MsgDB, dayKey } from './msgdb'
 import { OpencodeClient, OpencodeEvent, OcPromptFile } from './opencode'
 import { buildGroupAgentsMd, buildPrivateAgentsMd, ALLOWED_FACE_IDS, VisionStrategy } from './agentsmd'
@@ -845,7 +845,7 @@ export class SessionController {
 
   private roleTag(userId: unknown, groupRole?: unknown): string {
     const tags: string[] = []
-    if (isAdminQq(this.config, userId)) tags.push('[机器人管理员]')
+    if (isOwnerQq(this.config, userId)) tags.push('[主人]')
     const role = String(groupRole ?? '')
     if (role === 'owner') tags.push('[群主]')
     else if (role === 'admin') tags.push('[群管理员]')
@@ -1060,8 +1060,8 @@ export class SessionController {
     const raw = (event.raw_message ?? '').trim().replace(/\[CQ:[^\]]+\]/g, '').trim()
 
     if (raw === '/reset' || raw === '/abort') {
-      if (!isAdminQq(this.config, event.user_id)) {
-        await this.sendText(event, '这个操作只有管理员能执行')
+      if (!isOwnerQq(this.config, event.user_id)) {
+        await this.sendText(event, '这个操作只有机器人主人能执行')
         return
       }
       if (raw === '/reset') {
@@ -1617,7 +1617,7 @@ export class SessionController {
     const botRole = this.botGroupRoleOf(scope)
     const botRoleText = botRole === 'owner' ? '群主' : botRole === 'admin' ? '群管理员' : botRole === 'member' ? '普通群成员' : ''
     return [
-      botRoleText ? '[你的群身份] 你是本群的' + botRoleText + '（这是 QQ 群身份，不是机器人管理员）' : '',
+      botRoleText ? '[你的群身份] 你是本群的' + botRoleText + '（这是 QQ 群身份，不是机器人主人）' : '',
       '[当前时间] ' + now.getFullYear() + '-' + p2(now.getMonth() + 1) + '-' + p2(now.getDate()) + ' ' + p2(now.getHours()) + ':' + p2(now.getMinutes()) + ' 星期' + week + '（以此为准，下面消息前面的方括号是发送时间）',
       omitted > 0 ? '（较早记录已省略）' : '',
       '[最近群聊内容]',

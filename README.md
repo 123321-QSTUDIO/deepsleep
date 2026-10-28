@@ -40,7 +40,7 @@ Docker opencode（下层）：一次性容器跑重活；结果 → 私聊全文
 1. 群消息全部写入消息库
 2. **不@机器人的群聊**：首条不@消息开一个窗口，最多攒 `groupContextBatchIntervalSec`（默认 600s）或最后一条消息后 `groupContextBatchIdleFlushSec`（默认 60s）冷场就作为一次 user prompt 交给模型（每条带发送时间；8 分钟后不再冷场跳出），模型可以挑想接的回复，也可以 `[SILENT]` 安静；没有新消息不触发
 3. **群聊所有消息（含 @/回复机器人）** → 进批量窗口，@/回复机器人的记录行加 `[须回应]`；**私聊 / 戳一戳** → 立即组装 prompt（最近 N 条上下文 + 引用还原 + 图片附件）
-   - 群主/群管理员身份用 `[群主]`/`[群管理员]` 标注，配置里的 `adminQqs` 是**机器人管理员**，消息标 `[机器人管理员]`；两种身份互不等同。机器人自己在群里的角色通过 OneBot `get_group_member_info` 获取并写进场景/批量 prompt
+   - 群主/群管理员身份用 `[群主]`/`[群管理员]` 标注，配置里的 `ownerQqs` 是**机器人主人（Bot Owner）**，消息标 `[主人]`；两种身份互不等同。机器人自己在群里的角色通过 OneBot `get_group_member_info` 获取并写进场景/批量 prompt
 4. Agent 用 `qqbot_send_message` 分句回复（每条一次调用，像真人打字）；要引用某条消息时用 `reply_to_qq` + `reply_to_text`（模型不需要知道 message_id）；没调用发送工具 = 选择沉默，不做兜底
 3b. 收藏表情包：先在控制面板「表情」页从当前 QQ 同步收藏、按合集归组并打标启用；Agent 之后会用 `qqbot_list_stickers` 挑（显示为「合集:描述」）、`qqbot_send_sticker` 发（未打标/未启用的不会暴露给 Agent）
 5. 复杂请求 → Agent 调 `qqbot_submit_task` → 自己回一句"处理完回复你" → 服务排队起容器
@@ -131,7 +131,7 @@ node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| `adminQqs` | 空 | 机器人管理员 QQ，逗号/空格分隔；与群主/群管理员不同，/reset、/abort 只允许机器人管理员执行 |
+| `ownerQqs` | 空 | 机器人主人（Bot Owner）QQ，逗号/空格分隔；不是群主/群管理员，/reset、/abort 只允许机器人主人执行 |
 | `botName` | `DeepSleep` | 机器人自称（写入 AGENTS.md 人设） |
 | `hostModel` | `opencode/deepseek-v4.1-flash-free` | host 层默认模型（OpenCode Zen 免费模型，免登录） |
 | `visionModel` | `opencode/mimo-v2.6-flash-free` | vision-bridge 桥接 subagent 的识图模型（免费 MiMo V2.6；图片下载到 inbox/ 由 subagent 读图） |
