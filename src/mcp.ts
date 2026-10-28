@@ -136,7 +136,8 @@ export class QqMcpServer {
       let segs: unknown = []
       try { segs = JSON.parse(String(r.segments ?? '[]')) } catch { /* ignore */ }
       const name = String(r.card || '').trim() || String(r.nickname || '').trim() || String(r.user_id)
-      return `[${hhmm(r.time)}] ${name}(${r.user_id}): ${this.deps.sessions.formatForAgent(scope, String(r.text ?? ''), segs, r.user_id, r.role)}`
+      const prefix = this.deps.sessions.rolePrefix(r.user_id, r.role)
+      return `[${hhmm(r.time)}] ${prefix}${name}(${r.user_id}): ${this.deps.sessions.formatForAgent(scope, String(r.text ?? ''), segs)}`
     }).join('\n')
   }
 

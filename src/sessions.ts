@@ -921,9 +921,14 @@ export class SessionController {
   }
 
   // MCP 的 query_chat_log 等外部入口复用同一套展示：群昵称 + @映射 + 引用
-  formatForAgent(scope: string, text: string, segments?: unknown, userId?: unknown, groupRole?: unknown): string {
+  formatForAgent(scope: string, text: string, segments?: unknown): string {
     const segs = Array.isArray(segments) ? (segments as MsgSegment[]) : undefined
-    return this.roleTag(userId, groupRole) + this.promptText(scope, text, segs)
+    return this.promptText(scope, text, segs)
+  }
+
+  // 作者前缀（[主人]/[群主]/[群管理员]）必须放在名字前面，不能混进消息正文
+  rolePrefix(userId: unknown, groupRole?: unknown): string {
+    return this.roleTag(userId, groupRole)
   }
 
   // 回复解析：模型不用知道 message_id，给「QQ号 + 原文（可选）」即可。
