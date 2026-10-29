@@ -1,6 +1,6 @@
 # DeepSleep
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 **一个会聊天、会接梗、还能帮你干活的 AI 群友。**
 
@@ -149,7 +149,8 @@ node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 | `artifactBaseUrl` / `artifactToken` / `linkTtlMinutes` | 空 / 空 / 10 | 产物下载服务地址、签名密钥、链接有效期（分钟）。有效期内重复索要返回同一链接，失效后可再生成；产物到期前一天主动私聊提醒 |
 | `taskConcurrency` / `taskTimeoutSec` | `3` / `900` | 任务并发上限与超时 |
 | `contextMessageCount` | `15` | 触发时携带的最近上下文条数 |
-| `replyDelayMinMs` / `replyDelayMaxMs` | `1200` / `3000` | 兜底分句发送的随机间隔 |
+| `replyDelayMinMs` / `replyDelayMaxMs` | `1200` / `3000` | 每条消息发送后的随机等待区间（模拟真人打字），0=关闭 |
+| `groupContextBatchMaxImages` | `16` | 单个批量窗口最多附带多少张图片/表情原图 |
 | `maxLinesPerReply` | `4` | 兜底回复最大分句数，超出自动合并 |
 | `panelEnabled` | `true` | 是否启用控制面板 |
 | `panelHost` / `panelPort` | `127.0.0.1` / `5101` | 控制面板监听地址与端口（默认只允许本机访问） |
@@ -160,6 +161,8 @@ node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 | `dreamMemoryIdleMinutes` | `30` | 群内至少多少分钟无新消息才允许开始整理 |
 | `dreamMaxTranscriptChars` | `120000` | 单次喂给梦境会话的群聊记录字符上限（超出截断保留最近部分） |
 | `dreamMemoryMaxChars` | `8000` | 要求梦境产出的 MEMORY.md 建议字数上限（超过 2 倍视为无效输出） |
+
+> `proactive*`、`pokeFollowUpSec`、`botReplyWindowSec`、`contextReplyCooldownSec` 等旧版主动参与参数仍保留在 config.json 兼容旧部署，但已从控制面板移除；仅在 `groupContextBatchEnabled=false` 时生效，高级用户可手工编辑。
 
 ## 群命令
 
@@ -214,7 +217,7 @@ ssh -N -L 5101:127.0.0.1:5101 <用户>@<服务器IP>   # 然后本机打开 http
 
 ## 许可证
 
-本项目使用 [MIT License](LICENSE)，Copyright (c) 2026 123321-QSTUDIO。
+本项目使用 [Apache License 2.0](LICENSE)，Copyright 2026 123321-QSTUDIO。附 [NOTICE](NOTICE)，分发时请保留许可证与 NOTICE。
 
 ## 注意
 

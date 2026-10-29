@@ -10,7 +10,7 @@ import { DreamMemory } from './dream'
 import { StickerStore } from './stickers'
 import panelHtml from './panel.html'
 
-const PANEL_VERSION = '0.1.1'
+const PANEL_VERSION = '0.1.2'
 const BODY_LIMIT = 1024 * 1024
 const MAX_TEXT = 5000
 
@@ -52,18 +52,20 @@ const FIELDS: FieldDef[] = [
   { key: 'onebotToken', label: 'onebotToken（独立服务模式）', group: '连接', type: 'password' },
 
   { key: 'contextMessageCount', label: 'contextMessageCount（上下文条数）', group: '消息与回复', type: 'number', min: 1 },
-  { key: 'groupContextBatchEnabled', label: 'groupContextBatchEnabled（群聊上下文批量投喂）', group: '消息与回复', type: 'boolean', help: '每 N 秒把这段时间的新群聊记录作为一次 user prompt 交给模型，由模型决定要不要回复；@ 仍然立即触发。受顶部「自动回复」总开关控制' },
-  { key: 'groupContextBatchIntervalSec', label: 'groupContextBatchIntervalSec（批量投喂间隔秒）', group: '消息与回复', type: 'number', min: 10, help: '默认 600 秒（10 分钟）；没有新消息时不触发模型' },
+  { key: 'groupContextBatchEnabled', label: 'groupContextBatchEnabled（群聊上下文批量投喂）', group: '消息与回复', type: 'boolean', help: '群聊消息先入库，按窗口批量交给模型；@/回复机器人会立即投递当前窗口。关闭后回退旧版逐条触发/主动参与' },
+  { key: 'groupContextBatchIntervalSec', label: 'groupContextBatchIntervalSec（批量窗口最长秒数）', group: '消息与回复', type: 'number', min: 10, help: '从窗口第一条消息开始，最多攒这么久；默认 600 秒。不是固定每 N 秒触发' },
   { key: 'groupContextBatchMaxMessages', label: 'groupContextBatchMaxMessages（单次最多消息数）', group: '消息与回复', type: 'number', min: 1 },
   { key: 'groupContextBatchMaxChars', label: 'groupContextBatchMaxChars（单次最多字符数）', group: '消息与回复', type: 'number', min: 500 },
-  { key: 'groupContextBatchIdleFlushSec', label: 'groupContextBatchIdleFlushSec（冷场跳出秒数）', group: '消息与回复', type: 'number', min: 10, help: '最后一条消息后这么久没人再说话，就提前把当前窗口投喂给模型；默认 120 秒' },
+  { key: 'groupContextBatchMaxImages', label: 'groupContextBatchMaxImages（单次最多图片数）', group: '消息与回复', type: 'number', min: 1, help: '窗口内最多把多少张图片/表情原图作为附件交给模型；默认 16，取最近出现的' },
+  { key: 'groupContextBatchIdleFlushSec', label: 'groupContextBatchIdleFlushSec（冷场跳出秒数）', group: '消息与回复', type: 'number', min: 10, help: '最后一条消息后这么久没人再说话，就提前把当前窗口投喂给模型；默认 60 秒' },
   { key: 'groupContextBatchIdleCutoffSec', label: 'groupContextBatchIdleCutoffSec（冷场跳出截止秒数）', group: '消息与回复', type: 'number', min: 10, help: '窗口开始超过这么久后不再启用冷场跳出，等正常间隔到点；默认 480 秒（8 分钟）' },
-  { key: 'replyDelayMinMs', label: 'replyDelayMinMs（兜底分句最小间隔）', group: '消息与回复', type: 'number', min: 0 },
-  { key: 'replyDelayMaxMs', label: 'replyDelayMaxMs（兜底分句最大间隔）', group: '消息与回复', type: 'number', min: 0 },
+  { key: 'replyDelayMinMs', label: 'replyDelayMinMs（发送间隔最小值 ms）', group: '消息与回复', type: 'number', min: 0, help: '每条消息发出后随机等待，模拟真人打字；设为 0 关闭' },
+  { key: 'replyDelayMaxMs', label: 'replyDelayMaxMs（发送间隔最大值 ms）', group: '消息与回复', type: 'number', min: 0, help: '与最小值组成随机区间；设为 0 关闭' },
   { key: 'maxLinesPerReply', label: 'maxLinesPerReply（单轮最多消息条数）', group: '消息与回复', type: 'number', min: 1, help: '模型一轮回复建议最多几条消息，超过不会拦截，但 MCP 会提醒模型收尾' },
   { key: 'normalCharsPerMessage', label: 'normalCharsPerMessage（普通对话单条建议字数）', group: '消息与回复', type: 'number', min: 5, help: '写进人格提示词：普通聊天单条尽量不超过这个字数（默认 20），解释类内容可适当加长' },
   { key: 'maxCharsPerMessage', label: 'maxCharsPerMessage（单条消息硬上限）', group: '消息与回复', type: 'number', min: 20, help: '单条超过这个长度不会拦截，但 MCP 会在结果里提醒模型收敛（默认 200）' },
   { key: 'turnTimeoutSec', label: 'turnTimeoutSec（单轮超时秒数）', group: '消息与回复', type: 'number', min: 10 },
+  { key: 'pokeReplyCooldownSec', label: 'pokeReplyCooldownSec（戳一戳回复冷却秒）', group: '消息与回复', type: 'number', min: 1, help: '同一会话两次戳一戳唤醒的最小间隔；模型会像处理消息一样决定回话/回拍/不理' },
 
   { key: 'mcpHost', label: 'mcpHost（MCP 绑定地址）', group: 'MCP', type: 'string' },
   { key: 'mcpPort', label: 'mcpPort', group: 'MCP', type: 'number', min: 1, max: 65535 },
@@ -110,19 +112,6 @@ const FIELDS: FieldDef[] = [
   { key: 'reminderCheckSec', label: 'reminderCheckSec（检查间隔秒）', group: '定时提醒', type: 'number', min: 1, help: '调度器多久检查一次到期提醒' },
   { key: 'reminderMaxPerScope', label: 'reminderMaxPerScope（单会话上限）', group: '定时提醒', type: 'number', min: 1 },
   { key: 'reminderMaxDays', label: 'reminderMaxDays（最大天数）', group: '定时提醒', type: 'number', min: 1 },
-  { key: 'proactiveChance', label: 'proactiveChance（候选概率 %）', group: '主动参与（测试）', type: 'number', min: 0, max: 100, help: '满足最少消息数/冷却后，每条候选消息进入判官的概率；本地判官便宜，默认 100' },
-  { key: 'proactiveMinIntervalSec', label: 'proactiveMinIntervalSec（冷却秒数）', group: '主动参与（测试）', type: 'number', min: 0 },
-  { key: 'proactiveMinMessages', label: 'proactiveMinMessages（最少新消息数）', group: '主动参与（测试）', type: 'number', min: 1 },
-  { key: 'proactiveMaxPerHour', label: 'proactiveMaxPerHour（每小时上限）', group: '主动参与（测试）', type: 'number', min: 1 },
-  { key: 'proactiveJudgeMode', label: 'proactiveJudgeMode（判官模式）', group: '主动参与（测试）', type: 'string', help: 'auto=有本地判官就用，否则启发式；local=只用本地判官（失败回退启发式）；heuristic=只用规则' },
-  { key: 'proactiveJudgeBaseUrl', label: 'proactiveJudgeBaseUrl（本地判官地址）', group: '主动参与（测试）', type: 'string', help: 'OpenAI 兼容服务，如 http://127.0.0.1:11434/v1（Ollama）或 llama.cpp 的 /v1' },
-  { key: 'proactiveJudgeModel', label: 'proactiveJudgeModel（本地判官模型）', group: '主动参与（测试）', type: 'string', help: '如 qwen3:0.6b 或本地 GGUF 服务里的模型名；留空=不用本地判官' },
-  { key: 'proactiveJudgeApiKey', label: 'proactiveJudgeApiKey（可选）', group: '主动参与（测试）', type: 'password' },
-  { key: 'pokeFollowUpSec', label: 'pokeFollowUpSec（被戳后跟进窗口秒）', group: '主动参与（测试）', type: 'number', min: 1, help: '被戳后这段时间内，戳你的人再发消息会直接交给模型判断要不要回（不再走轻量判官）' },
-  { key: 'botReplyWindowSec', label: 'botReplyWindowSec（发言后接话窗口秒）', group: '主动参与（测试）', type: 'number', min: 1, help: '机器人刚发过消息后这段时间内，群里有人接话会直接交给模型判断是不是在回它' },
-  { key: 'pokeReplyCooldownSec', label: 'pokeReplyCooldownSec（拍一拍回复冷却秒）', group: '主动参与（测试）', type: 'number', min: 1, help: '同一会话两次戳一戳唤醒的最小间隔；模型会像处理消息一样决定回话/回拍/不理' },
-  { key: 'contextReplyCooldownSec', label: 'contextReplyCooldownSec（语境回复冷却秒）', group: '主动参与（测试）', type: 'number', min: 0, help: '两次语境自动回复之间的最小间隔' },
-  { key: 'proactiveJudgeTimeoutSec', label: 'proactiveJudgeTimeoutSec（判官超时）', group: '主动参与（测试）', type: 'number', min: 1 },
   { key: 'dreamMemoryEnabled', label: 'dreamMemoryEnabled（启用梦境记忆）', group: '梦境记忆', type: 'boolean', help: '每天凌晨 fork 会话更新 MEMORY.md，然后压缩原 session' },
   { key: 'dreamMemoryWindowStartHour', label: 'dreamMemoryWindowStartHour（记忆窗口开始小时）', group: '梦境记忆', type: 'number', min: 0, max: 23 },
   { key: 'dreamMemoryWindowStartMinute', label: 'dreamMemoryWindowStartMinute（窗口开始分钟）', group: '梦境记忆', type: 'number', min: 0, max: 59 },

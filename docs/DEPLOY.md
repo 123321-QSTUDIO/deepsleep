@@ -320,7 +320,7 @@ QQBOT_DATA=/opt/deepsleep/data node scripts/compact-all.mjs
 - `storageQuotaMB`：每个 QQ 的持久目录（home+workspace+archive）总配额，默认 500MB，超了从最旧归档开始删
 - `artifactBaseUrl` / `artifactToken` / `linkTtlMinutes`：产物下载服务（见 9.1 节）；链接为 HMAC 签名临时链接，默认 10 分钟有效，有效期内重复索要返回同一链接（不重复生成），失效后才能生成新链接
 - `archiveRetentionDays`：产物归档留存天数（默认 5），**每次该 QQ 的 session 被激活会自动刷新最近归档的过期时间**
-- `replyDelayMinMs` / `replyDelayMaxMs` 默认 `1200` / `3000` 毫秒，`maxLinesPerReply` 默认 `4`
+- `replyDelayMinMs` / `replyDelayMaxMs` 默认 `1200` / `3000` 毫秒（发送间隔，模拟真人打字），`maxLinesPerReply` 默认 `4`
 - `panelEnabled` / `panelHost` / `panelPort` / `panelToken`：控制面板（见 8.1 节）。默认开启、只绑 `127.0.0.1:5101`；**远程访问必须设 `panelToken`**
 - `dreamMemoryEnabled` / `dreamMemoryWindowStartHour` / `dreamMemoryWindowStartMinute` / `dreamMemoryWindowEndHour` / `dreamMemoryWindowEndMinute` / `dreamMemoryIdleMinutes`：梦境记忆（见 8.2 节）。默认窗口 02:00–05:00（服务器本地时区），窗口内按群随机挑时间，群内 30 分钟无新消息才整理；到 05:00 强制整理。`dreamMaxTranscriptChars` 限单次喂入的聊天记录字符数，`dreamMemoryMaxChars` 限 MEMORY.md 目标字数
 - `dockerEnv`：**用免费模型时留空 `{}` 即可**；要给容器换付费模型时才填 key（如 `ANTHROPIC_API_KEY`），同时调整 qqbot-hk-runner 的模型配置并重新 build 镜像
@@ -340,10 +340,10 @@ QQBOT_DATA=/opt/deepsleep/data node scripts/compact-all.mjs
 - **权限确认**：OpenCode V2 在模型首次使用搜索/联网等工具时会发权限请求（TUI 里是弹窗）。服务形态默认自动批准：workspace 配置的 `permission: 'allow'` 提前放行 + `permission.asked` 事件自动回复；面板「权限与安全」组可关（`autoApprovePermissions`）或改成只批一次（`permissionAutoReply=once`）。关闭后服务端不会回应，会话可能一直等待，谨慎操作。
 - **回复长度/条数**：`normalCharsPerMessage`（默认 20 字）写进人格提示词，普通对话单条尽量不超过；`maxCharsPerMessage`（默认 200 字）与 `maxLinesPerReply`（默认 4 条）是提醒阈值——超出不会拦截发送，消息照发，但 MCP 会在工具结果里返回警告，让模型自己收尾/精简；如果这一轮同时在回复多个人（pending >= 2），条数警告会自动跳过，方便逐人回复。人格提示词保留拟人化分条，但不再强制每条都拆，模型按内容自由选择 1 到 4 条。
 - **定时提醒**：Agent 可以自己设倒计时（`qqbot_set_reminder`）。默认 `reminderMode=agent`：到点系统只把提醒内容交给模型、由它结合上下文处理；模型没调用发送工具就不发（不再兜底）；改成 `static` 则直接发固定文案。数据存 `data/reminders.json`，服务重启后仍会补发过期提醒。面板「定时提醒」组可开关、调检查间隔/单会话上限/最大天数。注意：它不是 cron 定时任务，只支持“从现在起 N 分钟后”的相对倒计时。
-- **戳一戳**：别人拍机器人时，桥接把 `[戳一戳]` 当作一条消息交给模型，模型自行决定回话/回拍/不理；可在面板・主动参与（测试）组调 `pokeReplyCooldownSec` 防止连环唤醒。
+- **戳一戳**：别人拍机器人时，桥接把 `[戳一戳]` 当作一条消息交给模型，模型自行决定回话/回拍/不理；可在面板「消息与回复」组调 `pokeReplyCooldownSec` 防止连环唤醒。
 - **主动等待**：模型可用 `qqbot_wait_for_messages` 在回合内等待群友说完或等后续，避免把一条没说完的话拆成两个回合判断。
-- **语境自动回复**：被戳后 `pokeFollowUpSec` 秒内戳你的人发消息、或机器人发消息后 `botReplyWindowSec` 秒内有人接话，会直接交给主模型判断要不要回（不走轻量判官，也不等最少消息数）；冷却 `contextReplyCooldownSec`，每小时总次数仍受 `proactiveMaxPerHour` 限制。（batch 关闭时才走这条旧逻辑）
-- **主动参与**：当前默认由群聊批量窗口接管（见上）；把 `groupContextBatchEnabled=false` 才回退到旧版判官链路。推荐给配置好的机器接本地小模型：Ollama 拉一个 0.6B 级模型（如 `ollama pull qwen3:0.6b`），`proactiveJudgeBaseUrl=http://127.0.0.1:11434/v1`、`proactiveJudgeModel=qwen3:0.6b`、`proactiveJudgeMode=auto`；llama.cpp server 的 `/v1` 同样可用。跑不动 0.6B 的机器把 `proactiveJudgeModel` 留空即可，自动使用零依赖启发式规则（问句/求助/提到机器人等加权），不会报错。节流参数：最少新消息数、冷却秒数、每小时上限、候选概率，默认 3 条/180s/6 次每小时。
+- **旧版语境自动回复**：`groupContextBatchEnabled=false` 时才启用；被戳后 `pokeFollowUpSec` 秒内戳你的人发消息、或机器人发消息后 `botReplyWindowSec` 秒内有人接话，会直接交给主模型判断要不要回；冷却 `contextReplyCooldownSec`，每小时总次数受 `proactiveMaxPerHour` 限制。这些旧参数已不在控制面板显示，需要时手工编辑 config.json。
+- **旧版主动参与**：当前默认由群聊批量窗口接管（见上）；把 `groupContextBatchEnabled=false` 才回退到旧版判官链路；旧判官参数已从控制面板移除，需要时手工编辑 config.json。推荐给配置好的机器接本地小模型：Ollama 拉一个 0.6B 级模型（如 `ollama pull qwen3:0.6b`），`proactiveJudgeBaseUrl=http://127.0.0.1:11434/v1`、`proactiveJudgeModel=qwen3:0.6b`、`proactiveJudgeMode=auto`；llama.cpp server 的 `/v1` 同样可用。跑不动 0.6B 的机器把 `proactiveJudgeModel` 留空即可，自动使用零依赖启发式规则（问句/求助/提到机器人等加权），不会报错。节流参数：最少新消息数、冷却秒数、每小时上限、候选概率，默认 3 条/180s/6 次每小时。
 - **语音发送方式**：如果 OneBot 走 WS 连的是**远端** SnowLuma/网关，本地文件路径在远端读不到，语音会发不出去。默认 `voiceSendBase64=true`，TTS 音频以 `base64://` 内联进 `record` 段发送，远端/本机都可用；只有网关和机器人同机且网关不支持 base64 时，才把它关掉走本地文件路径。
 - **语音（TTS / 语音转文字）**：面板「语音」组填入 MiMo API Key（`ttsApiKey`，来自 MiMo 开放平台）并打开 `ttsEnabled`；默认地址 `https://api.xiaomimimo.com/v1`、模型 `mimo-v2.5-tts-voicedesign`（任意音色描述，不支持唱歌）；想唱歌把模型换成/让 `send_voice` 带 `sing=true` 使用 `mimo-v2.5-tts` 预置音色（`ttsPresetVoice`），歌词必须完整。配置好后 Agent 可用 `qqbot_send_voice` 发语音、`qqbot_send_voice(sing=true)` 唱歌、用 `qqbot_set_voice` 给每个群设定普通说话音色（存在 `data/voices.json`）。入站语音默认尝试让网关做 QQ 语音转文字（SnowLuma `fetch_ptt_text`），失败则上下文里显示 `[语音]`；可用 `voiceAsrEnabled` 关闭。语音发送依赖网关（SnowLuma）把本地音频转成 QQ 所需的 silk 格式，网关需与机器人服务在同一台机器（`record` 传的是本地路径）。
 - **模型（「模型」页）**：直接读 OpenCode 的 `/api/model` 动态目录，免费模型（provider `opencode`、cost 全 0）标「免费」并排在前面；模型列表会随 OpenCode 更新/下架，**免费模型失效时刷新页面选一个新免费模型即可**。

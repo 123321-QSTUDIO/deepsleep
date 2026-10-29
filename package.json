@@ -1,7 +1,7 @@
 {
   "name": "deepsleep",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
@@ -21,6 +21,6 @@
     "esbuild": "^0.25.0",
     "typescript": "^5.3.0"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "123321-QSTUDIO"
 }
