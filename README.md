@@ -1,192 +1,276 @@
+<div align="center">
+
 # DeepSleep
 
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+### 不只是回答问题，而是成为群聊的一员。
 
-**一个会聊天、会接梗、还能帮你干活的 AI 群友。**
+**面向 QQ 群聊和私聊的持久化自主 AI Agent 框架。**
 
-**基于 OpenCode 的开源智能群聊 Agent** —— 主动参与群聊 · 持久会话 · MCP 工具 · Docker 沙箱
+主动参与群聊、持续记忆、调用工具完成任务。让 AI 不只是被动回复消息，而是能够长期融入群聊的 Agent。
 
-> 独立服务形态：OneBot v11 WS 连 **SnowLuma**（或任意 OneBot v11 实现）作为 QQ 网关，本机 OpenCode 作为对话/调度层（NapCat 进程内插件形态已停止维护）。
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-3776AB?style=flat-square)](LICENSE)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-22%20recommended-43853D?style=flat-square&logo=node.js&logoColor=white)
+![OneBot v11](https://img.shields.io/badge/OneBot-v11-5B6ABF?style=flat-square)
+![OpenCode](https://img.shields.io/badge/Powered%20by-OpenCode-333333?style=flat-square)
 
-群友在 QQ 群里 @机器人 聊天，机器人把消息交给本机的 opencode（每群一个持久会话，拟人化分句回复）；遇到复杂任务（探索代码、跑命令、查资料），opencode 通过 MCP 把任务提交出来，机器人在**远程 Docker 沙箱**（HK 主机，每 QQ 一个可休眠容器）里执行，完成后**群里回复原消息发一句话结论、完整结果私聊发给提问的人**。
+[核心能力](#核心能力) · [工作原理](#工作原理) · [梦境记忆](#梦境记忆) · [快速开始](#快速开始) · [部署文档](docs/DEPLOY.md) · [参与贡献](CONTRIBUTING.md)
 
-> **仓库已改名**：本仓库原名 `napcat-plugin-qqbot`，现更名为 **DeepSleep**（GitHub 旧链接会自动跳转）。npm 包名与部署示例同步改为 `deepsleep`；数据目录与 `dist-service` 目录契约不变，已有部署只需替换代码目录，无需迁移数据。
+</div>
 
-## 架构
+---
 
-要求 **OpenCode 2.1.4**，使用 V2 API（`/api/session`、`/api/session/active`、`/api/event`、`/api/info`）。创建 session 的 `directory` 放在 POST body；新 session 未显式传模型时不再一概在创建时锁死。
+## DeepSleep 是什么？
 
-```
-QQ群/私聊 ⇄ SnowLuma（QQ 网关；OneBot v11 WS）
-             └─ DeepSleep 服务（本仓库，系统中枢）
-                ├─ 消息收发（OneBot WS 事件 / send_msg）
-                ├─ 消息库：每群/每人每天一个 SQLite（sql.js WASM）
-                ├─ Session 控制器 → 本机 opencode serve（每群/每人一个持久 session）
-                ├─ MCP Server（HTTP+Bearer，共 19 个工具，含收藏表情包）
-                │   模型可见名带 qqbot_ 前缀，MCP 服务注册名不变
-                ├─ 控制面板（WebUI）：改配置 / 看会话 / 操作 Session，与服务同进程
-                ├─ 梦境记忆：每晚 fork 会话整理 MEMORY.md（instructions 注入）→ 原子替换
-                │    → compact 原 session；batch 模式下直接复用 session 上下文，不再回灌 DB transcript
-                ├─ 任务注册表：task_id ↔ 属主QQ/群号/消息ID（持久化，重启恢复）
-                └─ 任务执行器：本地 docker 一次性容器；或远程 docker 主机（ssh://）——
-                    每 QQ 一个可休眠容器（qqbot-user-<QQ>），任务完成 stop + 产物压缩归档
-                    （默认留存 5 天），下次任务唤醒并 --continue 延续 session
-                      ↕ 容器内 opencode 挂同一 MCP（沙箱模式：禁发消息/禁嵌套任务）
+大多数机器人只能等一条指令，再给出一条回答。**DeepSleep 让 AI 不只是等待指令，而是能够长期参与群聊。**
 
-本机 opencode（上层）：每群/每人持久 session = 对话记忆；只聊天+调度
-Docker opencode（下层）：一次性容器跑重活；结果 → 私聊全文 + 群短通知
-```
+它会观察一段时间内的聊天内容，结合语境决定要不要接话；能够理解图片、发送表情、查找资料、设置提醒，或把更复杂的任务交给 Docker 沙箱执行。每个群聊和私聊都有独立的持久会话，夜间通过 **Dream Memory（梦境记忆）** 提炼值得保留的信息，减轻无限增长的上下文负担。
 
-## 消息流
+**DeepSleep 是框架，不是固定的机器人名字，也不是某个特定大模型。** 你可以为实例设置自己的名称与人设，通过 OpenCode 选择可用的模型提供商。QQ 只是它目前面向的交互场景。
 
-1. 群消息全部写入消息库
-2. **不@机器人的群聊**：首条不@消息开一个窗口，最多攒 `groupContextBatchIntervalSec`（默认 600s）或最后一条消息后 `groupContextBatchIdleFlushSec`（默认 60s）冷场就作为一次 user prompt 交给模型（每条带发送时间；8 分钟后不再冷场跳出），模型可以挑想接的回复，也可以 `[SILENT]` 安静；没有新消息不触发
-3. **群聊所有消息（含 @/回复机器人）** → 进批量窗口，@/回复机器人的记录行加 `[须回应]`；**私聊 / 戳一戳** → 立即组装 prompt（最近 N 条上下文 + 引用还原 + 图片附件）
-   - 群主/群管理员身份用 `[群主]`/`[群管理员]` 标注，配置里的 `ownerQqs` 是**机器人主人（Bot Owner）**，消息标 `[主人]`；两种身份互不等同。机器人自己在群里的角色通过 OneBot `get_group_member_info` 获取并写进场景/批量 prompt
-4. Agent 用 `qqbot_send_message` 分句回复（每条一次调用，像真人打字）；要引用某条消息时用 `reply_to_qq` + `reply_to_text`（模型不需要知道 message_id）；没调用发送工具 = 选择沉默，不做兜底
-3b. 收藏表情包：先在控制面板「表情」页从当前 QQ 同步收藏、按合集归组并打标启用；Agent 之后会用 `qqbot_list_stickers` 挑（显示为「合集:描述」）、`qqbot_send_sticker` 发（未打标/未启用的不会暴露给 Agent）
-5. 复杂请求 → Agent 调 `qqbot_submit_task` → 自己回一句"处理完回复你" → 服务排队起容器
-6. 容器完成 → 群里 reply 原提问 + @发起人 + 一句话结论（Agent 措辞）；全文私聊属主并注入私聊上下文
-7. 属主私聊问"我的任务怎么样了" → 私聊 session 用 `qqbot_list_tasks`/`qqbot_get_task_detail` 查（越权只给状态不给内容）
+> **一句话：能接话、能记事、能动手，也知道什么时候保持安静。**
 
-## 目录
+## 核心能力
 
-```
-src/
-├── app.ts        服务组装层（配置/消息库/Session/MCP/面板/梦境 + 生命周期）
-├── main.ts       独立服务入口（OneBot WS 连接网关 + 进程生命周期）
-├── onebot.ts     OneBot v11 WebSocket 客户端（自动重连、action/echo 往返）
-├── config.ts     配置（config.json 首次运行自动生成，已知旧模型 ID 自动迁移）
-├── msgdb.ts      消息库：sql.js(WASM SQLite)，按 scope+天 分文件
-├── format.ts     消息段提取（文本/引用/@/图片/CQ 码清洗）
-├── opencode.ts   OpenCode V2 HTTP 客户端 + SSE 事件订阅（自动重连）
-├── sessions.ts   Session 控制器：映射持久化、工作区、触发判定、prompt 组装、回复路由、
-│                 串行发送队列、watchdog 兜底（轮询 /api/session/active，running 即忙碌）
-├── agentsmd.ts   各群/私聊工作区 AGENTS.md 生成器（人设+分句规则+表情表+工具说明）
-├── tasks.ts      任务注册表（tasks.json 持久化）
-├── executor.ts   任务执行器（远程 docker：每 QQ 可休眠容器、归档、配额、过期提醒）
-├── mcp.ts        MCP Server（19 工具，scope 头路由，沙箱模式，属主权限校验）
-├── dream.ts      梦境记忆：每晚 fork 会话用当天群聊更新 MEMORY.md，再 compact 原 session
-├── panel.ts      控制面板 HTTP 服务（配置读写/校验、会话快照、Session 操作 API）
-└── panel.html    控制面板前端（单文件，构建时内联进 dist）
+| 能力 | 能做什么 |
+| :-- | :-- |
+| **自主参与群聊** | 按窗口汇总群聊上下文，自主选择接话或保持沉默；被 @ 或回复时及时处理，不是每条消息都强行插嘴。 |
+| **梦境记忆** | Fork 会话整理聊天经历，更新 `MEMORY.md`，再 Compact 原会话；保留长期有用的事实、关系与待办。 |
+| **持久会话** | 每个群/私聊独立维护 OpenCode Session；重启后可继续使用已有会话，不必每次从零认识群友。 |
+| **多模态与自然表达** | 理解图片和表情原图、发送 QQ 小黄脸/收藏表情、引用回复与戳一戳；支持可选的语音合成与语音识别。 |
+| **任务执行** | 使用 MCP 搜索、查询聊天记录、设置提醒；复杂任务提交到本地或远程 Docker 沙箱运行，并回传结果。 |
+| **配置与管理** | Web 控制面板、机器人主人权限、可切换的模型、消息数据库，以及独立的 OneBot v11 接入层。 |
+
+### 它在群里是什么样的？
+
+下面展示的是**交互行为示意**，并非实际运行截图：
+
+```text
+群友 A：有人知道这是什么图吗？ [图片]
+DeepSleep：让我看看……
+
+群友 B：@DeepSleep 帮我查下这个项目最近更新了什么
+DeepSleep：我去找找，等下给你说重点。
+
+群里聊了一阵，没人 @ 它……
+DeepSleep：这话题我可有点想说两句。
+
+凌晨，群聊安静下来……
+DeepSleep：〔内部整理长期记忆，不向群里刷屏〕
 ```
 
-> 任务沙箱镜像、HK 部署脚本、产物下载服务在独立的执行层仓库
-> [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner)（HK 服务器单独部署，镜像须使用 OpenCode 2.1.4）。
+模型是否主动发言、调用哪些工具、具体表达方式，都取决于配置、上下文和实际模型表现。
 
-## 构建
+## 工作原理
+
+```mermaid
+flowchart TD
+    QQ["QQ群 / 私聊"] <-->|"消息与事件"| OB["OneBot v11 网关<br/>SnowLuma / NapCat 等"]
+    OB <-->|"WebSocket"| DS["DeepSleep 服务"]
+    DS --> DB["消息库<br/>按群/私聊与日期存储"]
+    DS <-->|"持久 Session"| OC["OpenCode Agent<br/>可配置模型"]
+    OC <-->|"工具调用"| MCP["DeepSleep MCP 工具"]
+    MCP -->|"发送消息 / 执行操作"| DS
+    MCP --> TASK["任务执行器<br/>本地 / 远程 Docker"]
+    TASK --> RESULT["任务结果 / 归档 / 下载"]
+    DS --> DREAM["Dream Memory<br/>Fork → MEMORY.md → Compact"]
+    DS <--> PANEL["Web 控制面板"]
+```
+
+DeepSleep 将消息接入、Agent 推理和工具执行分离：
+
+- **OneBot 网关**负责与 QQ 收发消息；DeepSleep 本身不实现 QQ 协议，也不捆绑网关。
+- **DeepSleep 服务**负责上下文组织、Session 管理、消息持久化、权限、工具和调度。
+- **OpenCode Agent**负责推理和选择行动。模型通过明确的 MCP 工具发消息；**没有调用发送工具就不会由系统擅自代发回复**。
+- **任务沙箱**负责跑命令、读写文件等重活，与普通群聊的主 Agent 隔离。完整执行层见 [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner)。
+
+### 群聊上下文与自主回应
+
+默认开启**群聊批量上下文**：新消息进入窗口后，系统最长约 **10 分钟**汇总一次；若群里提前安静下来，默认在最后一条消息后约 **60 秒**投喂。被 @ 或收到针对机器人的引用回复时，会要求尽快刷新当前窗口，并在相关消息上标注 `[须回应]`。
+
+普通聊天不是每条消息都强制回复：模型可以接话，也可以选择 `[SILENT]`。私聊与戳一戳有各自的即时处理路径；引用回复能够带上被引用消息的内容，避免只见「回复了谁」却不知道「回复了什么」。
+
+### 工具调用与任务执行
+
+内置 MCP 工具涵盖消息、表情、戳一戳、聊天记录查询、联网搜索兜底、定时提醒和任务提交等场景。日常小问题可由主 Agent 直接处理；需要执行命令、探索代码或产出文件的任务，可交给配置好的 Docker 执行环境。
+
+任务可以使用本地或远程 Docker；远程执行层按用户维护可休眠工作环境和有限期归档。任务完成后，群里获得简短结论，详细结果按现有权限与配置通过私聊或下载链接提供。
+
+## 梦境记忆
+
+**聊天记录不等于长期记忆，上下文也不应该无限增长。**
+
+DeepSleep 为每个会话维护人类可读的 `MEMORY.md`，记录值得长期保留的群聊信息。每天夜间在默认 **02:00–05:00** 的时间窗内，为不同会话安排整理；通常等待群聊至少 **30 分钟**没有新消息，到窗口结束时则按调度策略执行。
+
+```text
+原 Session 持续聊天
+      │
+      ├─ Fork 临时「梦境会话」
+      │      ├─ 读取旧 MEMORY.md 与已有上下文
+      │      └─ 写入 MEMORY.new.md
+      │
+      ├─ 校验内容、备份旧文件、原子替换 MEMORY.md
+      ├─ 删除临时会话
+      └─ Compact 原 Session，让新记忆进入后续上下文
+
+梦境整理期间：新消息先入库 → 整理结束再恢复投喂
+```
+
+这套机制**不训练、不修改模型权重**，而是在 Agent 层整理、更新外部记忆。长期记忆可能遗漏或概括错误，可在控制面板查看、修订。详细行为、失败处理和手动触发方式见 [部署文档](docs/DEPLOY.md#82-梦境记忆默认已开启)。
+
+## 快速开始
+
+> 以下为**独立服务模式的最小启动路径**。需要预先准备能正常运行的 OneBot v11 QQ 网关，并安装 OpenCode。仅使用聊天能力不必先搭建远程 Docker；复杂任务功能需要另行配置执行环境。
+
+### 运行要求
+
+- **Node.js 22 LTS（推荐；代码目标环境为 Node.js 18+）**、npm、Git。
+- **OpenCode 2.1.4**，在本机以 `serve` 模式运行。
+- 提供 **OneBot v11 WebSocket** 的 QQ 网关，如 [SnowLuma](https://github.com/SnowLuma/SnowLuma) 或兼容实现。
+- 若启用复杂任务，还需要本地或远程 Docker 环境。
+
+### 1. 获取并构建
 
 ```bash
-npm install
+git clone https://github.com/123321-QSTUDIO/deepsleep.git
+cd deepsleep
+npm ci
 npm run typecheck
-npm run build        # 产出 dist-service/（独立服务）
+npm run build
 ```
 
-## 部署
+构建产物位于 `dist-service/`，服务入口为 `dist-service/index.mjs`。
 
-**详细步骤见 [`docs/DEPLOY.md`](docs/DEPLOY.md)（Windows Server 版，Agent 可直接照做）。**
+### 2. 启动 OpenCode
 
-概要（独立服务模式）：
+```bash
+npm install -g @opencode/cli@2.1.4
 
-1. **QQ 网关**：推荐 [SnowLuma](https://github.com/SnowLuma/SnowLuma)（OneBot v11，默认 WS `127.0.0.1:3001`）；NapCat 等其它 OneBot v11 实现也可用
-2. **机器人服务**：拷贝 `dist-service/` 到 `C:\qqbot-svc`，`node index.mjs` 或计划任务常驻——**更新只重启这个进程，不动 QQ/网关**
-3. **host opencode**：安装 `@opencode/cli` 并确认版本为 2.1.4，再运行 `opencode serve --hostname 127.0.0.1 --port 4096`。
-   **必须显式设置 `OPENCODE_PASSWORD` 并同步配置 `opencodePassword`**；旧 `OPENCODE_SERVER_PASSWORD` 仅作兼容。2.1.4 未设密码会随机生成，不能省略。
-4. **任务沙箱镜像**：在远程执行层仓库 [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner) 构建（HK 主机跑其 `script/setup-hk.sh` 一键完成），镜像必须升级到 OpenCode 2.1.4。
-5. **模型**：默认 host/vision 分别走 OpenCode Zen 免费模型 `opencode/deepseek-v4.1-flash-free`、`opencode/mimo-v2.6-flash-free`（免登录）；配置加载会迁移已知旧模型 ID。换付费模型才需要 `opencode auth login` 或配置 `dockerEnv`。
-6. 群里 @机器人 即可。
-
-## 配置（config.json）
-
-| 字段 | 默认 | 说明 |
-|---|---|---|
-| `ownerQqs` | 空 | 机器人主人（Bot Owner）QQ，逗号/空格分隔；不是群主/群管理员，/reset、/abort 只允许机器人主人执行 |
-| `botName` | `DeepSleep` | 机器人主名称（必填，可中文/英文/任意语言；写入 AGENTS.md 人设） |
-| `botNameEn` | 空 | 英文名/次名称（选填，写入人设；日常优先主名称） |
-| `hostModel` | `opencode/deepseek-v4.1-flash-free` | host 层默认模型（OpenCode Zen 免费模型，免登录） |
-| `visionModel` | `opencode/mimo-v2.6-flash-free` | vision-bridge 桥接 subagent 的识图模型（免费 MiMo V2.6；图片下载到 inbox/ 由 subagent 读图） |
-| `opencodeUrl` | `http://127.0.0.1:4096` | host opencode V2 地址 |
-| `opencodePassword` | 空（部署必填） | 必须与 serve 的 `OPENCODE_PASSWORD` 一致 |
-| `mcpPort` / `mcpToken` / `mcpUrl` | `5100` | MCP Server 监听与鉴权 |
-| `mcpUrlForDocker` | `http://host.docker.internal:5100/mcp` | 容器访问 MCP 的地址 |
-| `dockerImage` / `dockerEnv` | `qqbot-opencode-task:latest` | 任务镜像与注入容器的环境变量（API key），镜像须为 OpenCode 2.1.4 |
-| `dockerHost` | 空（本机） | 远程 docker 主机（如 `ssh://user@x.x.x.x`），本机无法虚拟化时用 |
-| `remoteWorkRoot` / `archiveRetentionDays` | `/opt/qqbot-users` / `5` | 远程模式每 QQ 持久目录根路径与产物归档留存天数（激活 session 自动续期） |
-| `storageQuotaMB` | `500` | 每 QQ 持久目录总配额，超出从最旧归档开始清理 |
-| `artifactBaseUrl` / `artifactToken` / `linkTtlMinutes` | 空 / 空 / 10 | 产物下载服务地址、签名密钥、链接有效期（分钟）。有效期内重复索要返回同一链接，失效后可再生成；产物到期前一天主动私聊提醒 |
-| `taskConcurrency` / `taskTimeoutSec` | `3` / `900` | 任务并发上限与超时 |
-| `contextMessageCount` | `15` | 触发时携带的最近上下文条数 |
-| `replyDelayMinMs` / `replyDelayMaxMs` | `1200` / `3000` | 每条消息发送后的随机等待区间（模拟真人打字），0=关闭 |
-| `groupContextBatchMaxImages` | `16` | 单个批量窗口最多附带多少张图片/表情原图 |
-| `maxLinesPerReply` | `4` | 兜底回复最大分句数，超出自动合并 |
-| `panelEnabled` | `true` | 是否启用控制面板 |
-| `panelHost` / `panelPort` | `127.0.0.1` / `5101` | 控制面板监听地址与端口（默认只允许本机访问） |
-| `panelToken` | 空 | 面板访问 Token；非空时 API 需要 `Authorization: Bearer <token>` 或 URL `?token=` |
-| `dreamMemoryEnabled` | `true` | 启用梦境记忆（每晚整理 MEMORY.md 并压缩会话） |
-| `dreamMemoryWindowStartHour` / `dreamMemoryWindowStartMinute` | `2` / `0` | 梦境记忆窗口开始（服务器本地时区） |
-| `dreamMemoryWindowEndHour` / `dreamMemoryWindowEndMinute` | `5` / `0` | 窗口结束；到点还没满足条件也强制整理（错过 3 小时内补跑） |
-| `dreamMemoryIdleMinutes` | `30` | 群内至少多少分钟无新消息才允许开始整理 |
-| `dreamMaxTranscriptChars` | `120000` | 单次喂给梦境会话的群聊记录字符上限（超出截断保留最近部分） |
-| `dreamMemoryMaxChars` | `8000` | 要求梦境产出的 MEMORY.md 建议字数上限（超过 2 倍视为无效输出） |
-
-> `proactive*`、`pokeFollowUpSec`、`botReplyWindowSec`、`contextReplyCooldownSec` 等旧版主动参与参数仍保留在 config.json 兼容旧部署，但已从控制面板移除；仅在 `groupContextBatchEnabled=false` 时生效，高级用户可手工编辑。
-
-## 群命令
-
-- `/reset`：清空当前对话的记忆（删除并重建 opencode session）；旧 session 存了弃用模型时也可用它恢复
-- `/abort`：打断正在生成的回复
-
-## 梦境记忆（MEMORY.md）
-
-长期记忆不靠无限增长的上下文，而是外置到每个工作区的 `MEMORY.md`：通过 workspace `opencode.json` 的 `instructions` 注入系统提示，结构是人可读的 Markdown（群聊概况 / 长期事实 / 群成员 / 话题与偏好 / 未完成的事 / 更新时间）。
-
-每天在 02:00–05:00（本地时区）窗口内自动执行：先按每个群随机挑选开始时间，只有群内 30 分钟无新消息才整理；到 05:00 还没满足就强制整理。整理期间群消息只入库不投喂，等主 session 压缩完成后统一补投喂：
-
-1. `fork` 原会话（继承对话上下文，不影响原会话）
-2. 把最近 24 小时的群聊记录喂给 fork 出的「梦境会话」，要求它读取旧 MEMORY.md、写出完整的 `MEMORY.new.md`
-3. 校验产物（Markdown、有标题、大小合理）→ 备份旧记忆为 `MEMORY.md.bak` → **原子替换** MEMORY.md
-4. 删除临时梦境会话
-5. `compact` 原 session：OpenCode 生成摘要接管旧上下文，同时**重新读取 instructions**，让新记忆在原会话生效
-
-要点：
-
-- **instructions 是 session 级快照**：直接改 MEMORY.md 对已存在的 session 不生效；新 session 或 compact 后才会读到新内容——所以第 5 步的 compact 是让新记忆进入原会话的关键。
-- 整理失败不会破坏旧记忆（不动 MEMORY.md、不 compact），错误会记录在 `dream.json` 与面板的「梦境记忆」卡片里。
-- 需要服务进程在运行；进程在整理窗口内重启也会在 3 小时内补跑。面板会话详情可手动「立即整理」。
-- 记忆文件在工作区目录 `workspaces/<scope>/MEMORY.md`，可手工编辑。
-
-## 控制面板
-
-内置一个 WebUI 控制面板（默认 <http://127.0.0.1:5101/>，绑定回环），用来：
-
-- **改配置**：表单方式编辑全部 config 字段（含分组说明），写回 config.json；能热更新的字段立即生效，标「需重启」的字段（opencode 地址/密码、MCP 端口、面板端口等）需重启进程。也可以直接编辑 JSON。
-- **看会话**：列出所有群/私聊会话及其 Session、忙碌状态、今日消息数、最后一条消息、待回应条数。
-- **打开某个群/私聊的 Session**：查看 OpenCode 侧对话（含思考过程、工具调用折叠）与 QQ 消息库记录、工作区 AGENTS.md/opencode.json/MEMORY.md、屏蔽名单、该会话的任务，以及「梦境记忆」卡片（上次整理结果 + 立即整理按钮）。
-- **操作 Session**：清空记忆（`/reset`）、打断生成（`/abort`）、以机器人身份发一条 QQ 消息、或把一段文字作为 prompt 直接发给 Agent（回复仍会正常发到 QQ）。
-
-**远程访问**（服务器上部署时）：
-
-```powershell
-ssh -N -L 5101:127.0.0.1:5101 <用户>@<服务器IP>   # 然后本机打开 http://127.0.0.1:5101/
+# Linux / macOS Shell 示例：请换成自己的强密码
+export OPENCODE_PASSWORD="CHANGE_ME_STRONG_PASSWORD"
+opencode serve --hostname 127.0.0.1 --port 4096
 ```
 
-**安全**：面板默认只绑 `127.0.0.1`；只要不是本机直连（SSH 隧道/反代），务必设置 `panelToken`，否则任何能连到该端口的人都能读取密钥、改配置。面板 API 与 MCP 一样无状态、只支持同源访问，不做 CORS。
+Windows PowerShell 可将环境变量设置为 `$env:OPENCODE_PASSWORD = 'CHANGE_ME_STRONG_PASSWORD'`，然后运行同一条 `opencode serve` 命令。
+
+> **重要：** 必须让 DeepSleep 配置里的 `opencodePassword` 与 `OPENCODE_PASSWORD` 一致。OpenCode 的模型可用性、授权和费用由所选 Provider 决定，默认模型 ID 也可能随服务变化。
+
+### 3. 生成并修改配置
+
+在**另一个终端**启动一次服务以生成默认配置，随后停止进程（此时网关或 OpenCode 未就绪可能显示连接错误，属正常现象）：
+
+```bash
+node dist-service/index.mjs
+```
+
+编辑项目目录下自动生成的 `data/config.json`，至少确认以下字段：
+
+```json
+{
+  "botName": "DeepSleep",
+  "botNameEn": "",
+  "ownerQqs": "",
+  "onebotUrl": "ws://127.0.0.1:3001",
+  "onebotToken": "YOUR_ONEBOT_TOKEN",
+  "opencodeUrl": "http://127.0.0.1:4096",
+  "opencodePassword": "CHANGE_ME_STRONG_PASSWORD",
+  "mcpToken": "YOUR_MCP_TOKEN",
+  "panelToken": "YOUR_PANEL_TOKEN"
+}
+```
+
+上面是**配置片段**，不要直接拿它覆盖自动生成的整个文件；其余字段由默认配置提供。`ownerQqs` 填机器人主人的 QQ 号（可用逗号分隔），用于限制 `/reset`、`/abort` 等管理操作；群主/群管理员与机器人主人是不同身份。
+
+MCP 服务使用 `mcpToken` 鉴权；框架会为 Agent 工作区生成对应连接配置。**不要把密码、QQ 号或 Token 提交到 Git。**
+
+### 4. 连接 QQ 并运行
+
+先按你的网关文档启动 QQ 接入服务，确保 OneBot WebSocket 地址和鉴权配置与 `data/config.json` 一致，然后重新启动：
+
+```bash
+node dist-service/index.mjs
+```
+
+默认控制面板位于 **http://127.0.0.1:5101/**（仅监听本机）。配置好机器人 QQ 账号、连接与模型后，就可以在群里 @ 它进行测试。
+
+**Windows Server 常驻部署、网关配置、SSH 隧道、Docker 执行层以及故障排查**，请直接阅读 [完整部署手册](docs/DEPLOY.md)。
+
+## 常用配置
+
+| 字段 | 用途 | 默认值 |
+| :-- | :-- | :-- |
+| `botName` / `botNameEn` | 机器人的主要名称 / 可选英文或次名称，均独立于框架名 | `DeepSleep` / 空 |
+| `ownerQqs` | 机器人主人 QQ 列表，控制管理命令权限 | 空 |
+| `hostModel` | 主 Agent 默认模型 | `opencode/deepseek-v4.1-flash-free` |
+| `visionModel` | 主模型不支持图片时使用的识图子代理模型 | `opencode/mimo-v2.6-flash-free` |
+| `groupContextBatchEnabled` | 是否启用群聊批量上下文模式 | `true` |
+| `groupContextBatchIntervalSec` | 每个群的最大批量窗口时间 | `600` |
+| `groupContextBatchIdleFlushSec` | 群聊冷场后提前投喂的等待时间 | `60` |
+| `dreamMemoryEnabled` | 是否启用梦境记忆 | `true` |
+| `dreamMemoryIdleMinutes` | 梦境整理前的默认群聊空闲时间 | `30` |
+| `panelHost` / `panelPort` | WebUI 监听地址及端口 | `127.0.0.1` / `5101` |
+| `ttsEnabled` | 是否启用可选 TTS 语音功能 | `false` |
+
+更完整的配置说明、远程执行、下载链接与存储配额见 [部署文档](docs/DEPLOY.md)。模型可通过面板管理；不同 Provider 的可用性、上下文长度和费用可能不同。
+
+## Web 控制面板
+
+不想每次都改 JSON？DeepSleep 内置一个与服务同进程的本地 WebUI，可查看和管理：
+
+- 配置与模型、群聊/私聊 Session 及运行状态；
+- OpenCode 对话、QQ 消息记录、工作区文件、长期记忆与梦境状态；
+- 收藏表情包的同步、分类、标签与启用情况；
+- 会话重置、中断、人工发送消息、手动投喂与梦境整理。
+
+远程访问推荐使用 **SSH 端口转发**，不要直接把面板或 MCP 端口暴露到公网。启用反向代理等远程访问方式时，务必配置 `panelToken` 与适当的访问控制。
+
+## 开发与项目结构
+
+```bash
+npm ci
+npm run typecheck
+npm run build
+```
+
+公开仓库提供构建所需的项目源码；维护者的内部冒烟测试与验收报告不随公开版本分发。提交改动前至少通过类型检查和构建；涉及 Session、MCP、消息路由等功能的修改，建议额外搭建测试环境进行验证。AI Agent 或开发者接手项目时，可以先阅读 [AGENTS.md](AGENTS.md) 的架构说明与修改约束。
+
+| 路径 | 职责 |
+| :-- | :-- |
+| `src/app.ts` / `src/main.ts` | 服务组装与独立运行入口 |
+| `src/sessions.ts` / `src/opencode.ts` | Session、Prompt、OpenCode 接入与事件处理 |
+| `src/agentsmd.ts` | 机器人身份、人格和工具提示词生成 |
+| `src/mcp.ts` | MCP 工具与权限边界 |
+| `src/dream.ts` / `src/msgdb.ts` | 梦境记忆与聊天记录存储 |
+| `src/panel.ts` / `src/panel.html` | Web 控制面板 |
+| `src/executor.ts` / `src/tasks.ts` | Docker 任务执行与状态管理 |
+| `docs/DEPLOY.md` | Windows Server 部署、远程执行层和运维说明 |
 
 ## 参与贡献
 
-欢迎 issue / PR。提交前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)；安全问题请按 [SECURITY.md](SECURITY.md) 私下报告，不要公开开 issue。
+欢迎提交 Issue、Bug 报告和 Pull Request！建议先看 [CONTRIBUTING.md](CONTRIBUTING.md) 了解开发环境、构建要求与提交规范；安全问题请通过 [SECURITY.md](SECURITY.md) 提供的私密渠道报告。
 
-## 致谢与声明
+**项目曾用名：** `napcat-plugin-qqbot`。当前为独立服务架构，旧的 NapCat 进程内插件形态已停止维护。
 
-- 项目基于 [OpenCode](https://opencode.ai/) 与 [OneBot v11](https://github.com/botuniverse/onebot-11) 生态。
-- QQ 网关 [SnowLuma](https://github.com/NapNeko/SnowLuma) 是独立项目，本仓库不打包它；其源码可见但非 OSI 开源，商用/分发修改版请遵守其许可。
-- 本项目为个人/社区项目，与腾讯、QQ、OpenCode、SnowLuma 官方无隶属关系。
+## 安全与使用说明
+
+- **非腾讯官方项目。** DeepSleep 与腾讯、QQ、OpenCode、SnowLuma 及模型提供商均无官方隶属关系。请遵守所在平台的规则以及适用法律；使用非官方网关可能有账号或兼容性风险。
+- **不内置 QQ 协议实现。** OneBot 网关需自行选择、安装和维护，第三方网关的授权条款独立适用；本仓库不打包 SnowLuma。
+- **数据由部署者管理。** 会话、聊天日志、工作区和 `MEMORY.md` 会保存在本地或自选服务器；请妥善保护账号凭据、群成员隐私、下载链接与备份文件，并建立合适的清理策略。
+- **先隔离，再给权限。** Docker 沙箱、MCP、OpenCode 工具执行和面板都可能操作文件或访问外部服务。建议最小权限运行，不要把 Docker API、面板或未加密的鉴权 Token 暴露到公网。
+- **功能不等于无限制承诺。** 主动聊天、图片理解和工具执行的效果取决于网关、模型、服务商及部署配置。
 
 ## 许可证
 
-本项目使用 [Apache License 2.0](LICENSE)，Copyright 2026 123321-QSTUDIO。附 [NOTICE](NOTICE)，分发时请保留许可证与 NOTICE。
+DeepSleep 使用 **[Apache License 2.0](LICENSE)** 开源，Copyright © 2026 123321-QSTUDIO。
 
-## 注意
+分发时请保留适用的版权和许可证声明，并遵守仓库中的 [NOTICE](NOTICE) 文件。
 
-- 服务与 QQ 网关分离部署（OneBot WS 连接）：业务进程崩溃不影响 QQ，网关重启后服务会自动重连。
-- 消息库存于服务数据目录 `messages/<group|private>-<id>/msg_<YYYY-MM-DD>.db`，只增不删，注意定期清理。
+---
+
+<div align="center">
+
+**DeepSleep — 不止于问答的群聊 Agent。**
+
+*Talk naturally. Remember what matters. Get things done.*
+
+</div>
