@@ -20,5 +20,7 @@
     "@types/ws": "^8.18.1",
     "esbuild": "^0.25.0",
     "typescript": "^5.3.0"
-  }
+  },
+  "license": "MIT",
+  "author": "123321-QSTUDIO"
 }

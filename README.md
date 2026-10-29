@@ -1,5 +1,7 @@
 # DeepSleep
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 **一个会聊天、会接梗、还能帮你干活的 AI 群友。**
 
 **基于 OpenCode 的开源智能群聊 Agent** —— 主动参与群聊 · 持久会话 · MCP 工具 · Docker 沙箱
@@ -199,6 +201,20 @@ ssh -N -L 5101:127.0.0.1:5101 <用户>@<服务器IP>   # 然后本机打开 http
 ```
 
 **安全**：面板默认只绑 `127.0.0.1`；只要不是本机直连（SSH 隧道/反代），务必设置 `panelToken`，否则任何能连到该端口的人都能读取密钥、改配置。面板 API 与 MCP 一样无状态、只支持同源访问，不做 CORS。
+
+## 参与贡献
+
+欢迎 issue / PR。提交前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)；安全问题请按 [SECURITY.md](SECURITY.md) 私下报告，不要公开开 issue。
+
+## 致谢与声明
+
+- 项目基于 [OpenCode](https://opencode.ai/) 与 [OneBot v11](https://github.com/botuniverse/onebot-11) 生态。
+- QQ 网关 [SnowLuma](https://github.com/NapNeko/SnowLuma) 是独立项目，本仓库不打包它；其源码可见但非 OSI 开源，商用/分发修改版请遵守其许可。
+- 本项目为个人/社区项目，与腾讯、QQ、OpenCode、SnowLuma 官方无隶属关系。
+
+## 许可证
+
+本项目使用 [MIT License](LICENSE)，Copyright (c) 2026 123321-QSTUDIO。
 
 ## 注意
 

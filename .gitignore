@@ -2,6 +2,8 @@ node_modules/
 test-data*/
 *.log
 test-vision-ws/
+test-uri/
+TEST_REPORT.md
 
 dist-service/
 test-svc-data/
