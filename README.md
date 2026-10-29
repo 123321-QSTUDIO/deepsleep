@@ -8,11 +8,11 @@
 
 主动参与群聊、持续记忆、调用工具完成任务。让 AI 不只是被动回复消息，而是能够长期融入群聊的 Agent。
 
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-3776AB?style=flat-square)](LICENSE)
-![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
-![Node.js](https://img.shields.io/badge/Node.js-22%20recommended-43853D?style=flat-square&logo=node.js&logoColor=white)
-![OneBot v11](https://img.shields.io/badge/OneBot-v11-5B6ABF?style=flat-square)
-![OpenCode](https://img.shields.io/badge/Powered%20by-OpenCode-333333?style=flat-square)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-22%20recommended-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![OneBot v11](https://img.shields.io/badge/OneBot-v11-5865F2)](https://github.com/botuniverse/onebot-11)
+[![Powered by OpenCode](https://img.shields.io/badge/Powered%20by-OpenCode-222222)](https://github.com/anomalyco/opencode)
 
 [核心能力](#核心能力) · [工作原理](#工作原理) · [梦境记忆](#梦境记忆) · [快速开始](#快速开始) · [部署文档](docs/DEPLOY.md) · [参与贡献](CONTRIBUTING.md)
 
