@@ -10,7 +10,7 @@ import { DreamMemory } from './dream'
 import { StickerStore } from './stickers'
 import panelHtml from './panel.html'
 
-const PANEL_VERSION = '0.1.0'
+const PANEL_VERSION = '0.1.1'
 const BODY_LIMIT = 1024 * 1024
 const MAX_TEXT = 5000
 
