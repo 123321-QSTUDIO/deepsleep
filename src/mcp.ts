@@ -143,7 +143,7 @@ export class QqMcpServer {
 
   private buildServer(scope: string, taskMode: boolean): McpServer {
     const { sessions, tasks, enqueueTask } = this.deps
-    const mcp = new McpServer({ name: 'qqbot', version: '0.1.2' })
+    const mcp = new McpServer({ name: 'qqbot', version: '0.1.3' })
 
     mcp.registerTool(
       'send_message',

@@ -169,7 +169,6 @@ cd deepsleep
 npm ci
 npm run typecheck
 npm run build
-node smoke.mjs     # 期望输出 SMOKE TEST 1 PASS
 ```
 
 【验证】`ls dist-service` 有 `index.mjs`、`app.mjs`、`sql-wasm.wasm`。
@@ -418,7 +417,7 @@ sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
 - [ ] 日志有 `[qqbot] 初始化完成`
 - [ ] `docker images | Select-String qqbot-opencode-task` 有镜像
 
-全部打勾后进入 `docs/TEST_PLAN.md`。
+全部打勾后即可开始实际群聊验证。
 
 ## 常见问题
 

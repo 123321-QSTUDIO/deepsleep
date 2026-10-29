@@ -5,6 +5,13 @@ test-vision-ws/
 test-uri/
 TEST_REPORT.md
 
+# 本地开发/验收文件（不进入公开仓库）
+smoke*.mjs
+AGENTS.local.md
+script/
+docs/TEST_PLAN.md
+docs/TEST_REPORT.template.md
+
 dist-service/
 test-svc-data/
 

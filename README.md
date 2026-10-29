@@ -53,7 +53,7 @@ Docker opencode（下层）：一次性容器跑重活；结果 → 私聊全文
 
 ```
 src/
-├── app.ts        服务组装层（配置/消息库/Session/MCP/面板/梦境 + 生命周期，测试也复用）
+├── app.ts        服务组装层（配置/消息库/Session/MCP/面板/梦境 + 生命周期）
 ├── main.ts       独立服务入口（OneBot WS 连接网关 + 进程生命周期）
 ├── onebot.ts     OneBot v11 WebSocket 客户端（自动重连、action/echo 往返）
 ├── config.ts     配置（config.json 首次运行自动生成，已知旧模型 ID 自动迁移）
@@ -69,7 +69,6 @@ src/
 ├── dream.ts      梦境记忆：每晚 fork 会话用当天群聊更新 MEMORY.md，再 compact 原 session
 ├── panel.ts      控制面板 HTTP 服务（配置读写/校验、会话快照、Session 操作 API）
 └── panel.html    控制面板前端（单文件，构建时内联进 dist）
-smoke*.mjs        冒烟测试（消息库 / V2 session / MCP 十九工具（含收藏表情） / 图片与视觉 / watchdog / 服务模式 / 控制面板）
 ```
 
 > 任务沙箱镜像、HK 部署脚本、产物下载服务在独立的执行层仓库
@@ -81,38 +80,9 @@ smoke*.mjs        冒烟测试（消息库 / V2 session / MCP 十九工具（含
 npm install
 npm run typecheck
 npm run build        # 产出 dist-service/（独立服务）
-node smoke.mjs           # 冒烟：消息库
-node smoke2.mjs          # 冒烟：V2 session 创建（需本地 OpenCode 2.1.4 serve）
-node smoke3.mjs          # 冒烟：MCP 十九工具（含收藏表情包）
-node smoke4.mjs          # 冒烟：离线图片下载/prompt
-node smoke5.mjs <图片路径>  # 冒烟：视觉；也可设 QQBOT_TEST_IMAGE
-node smoke6.mjs          # 冒烟：watchdog 兜底（需本地 opencode serve）
-node smoke9.mjs          # 冒烟：离线 V2 生命周期
-node smoke10.mjs         # 冒烟：配置模型 ID 自动迁移（离线）
-node smoke11.mjs         # 冒烟：控制面板（mock opencode，离线）
-node smoke12.mjs         # 冒烟：梦境记忆 fork/替换/compact + 定时调度（mock opencode，离线）
-node smoke13.mjs         # 冒烟：收藏表情同步/打标/MCP 可见性（mock opencode，离线）
-node smoke14.mjs         # 冒烟：模型目录/免费标记/一键切换所有 Session（mock opencode，离线）
-node smoke15.mjs         # 冒烟：重复发送/重复入站消息防重（mock opencode，离线）
-node smoke16.mjs         # 冒烟：戳一戳 / TTS 发语音 / 语音 ASR（mock opencode + mock TTS，离线）
-node smoke17.mjs         # 冒烟：主动参与判官 / SILENT / 启发式兜底 / 节流（mock opencode + mock judge，离线）
-node smoke18.mjs         # 冒烟：定时提醒持久化 / 到点投递 / 列表取消（mock opencode，离线）
-node smoke19.mjs         # 冒烟：回复单条长度/单轮条数限制（mock opencode，离线）
-node smoke20.mjs         # 冒烟：OpenCode 权限请求自动批准（mock opencode，离线）
-node smoke21.mjs         # 冒烟：被戳后/机器人发言后的语境自动回复（mock opencode，离线）
-node smoke22.mjs         # 冒烟：模型主动等待消息（mock opencode，离线）
-node smoke23.mjs         # 冒烟：内置小黄脸(CQ) / 收藏表情(MCP) 提示词与发送（mock opencode，离线）
-node smoke24.mjs         # 冒烟：表情原图视觉链路 / get_sticker_image（mock opencode，离线）
-node smoke25.mjs         # 冒烟：多模态主模型 Prompt.files 图片附件（mock opencode，离线）
-node smoke27.mjs         # 冒烟：群聊上下文批量投喂 / 立即@ / 去重（mock opencode，离线）
-node smoke28.mjs         # 冒烟：批量窗口计时器 / 冷场提前投喂 / 8 分钟 cutoff（mock opencode，离线）
-node smoke29.mjs         # 冒烟：prompt 发送失败时回滚待回应清单（mock opencode，离线）
-node smoke30.mjs         # 冒烟：即时 prompt 只带新增消息（旧积压不重复投喂，mock opencode，离线）
-node smoke31.mjs         # 冒烟：批量图片作为 Prompt.files 附件并在请求后清理（mock opencode，离线）
-node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 ```
 
-## 部署与测试
+## 部署
 
 **详细步骤见 [`docs/DEPLOY.md`](docs/DEPLOY.md)（Windows Server 版，Agent 可直接照做）。**
 
@@ -125,9 +95,6 @@ node smoke-service.mjs   # 冒烟：独立服务模式（假 OneBot WS）
 4. **任务沙箱镜像**：在远程执行层仓库 [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner) 构建（HK 主机跑其 `script/setup-hk.sh` 一键完成），镜像必须升级到 OpenCode 2.1.4。
 5. **模型**：默认 host/vision 分别走 OpenCode Zen 免费模型 `opencode/deepseek-v4.1-flash-free`、`opencode/mimo-v2.6-flash-free`（免登录）；配置加载会迁移已知旧模型 ID。换付费模型才需要 `opencode auth login` 或配置 `dockerEnv`。
 6. 群里 @机器人 即可。
-
-**测试**：验收用例见 [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md)；测完按
-[`docs/TEST_REPORT.template.md`](docs/TEST_REPORT.template.md) 填写为根目录 `TEST_REPORT.md` 并 push。历史报告不代表当前结果。
 
 ## 配置（config.json）
 
