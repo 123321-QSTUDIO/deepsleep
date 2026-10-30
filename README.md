@@ -82,7 +82,7 @@ DeepSleep 将消息接入、Agent 推理和工具执行分离：
 - **OneBot 网关**负责与 QQ 收发消息；DeepSleep 本身不实现 QQ 协议，也不捆绑网关。
 - **DeepSleep 服务**负责上下文组织、Session 管理、消息持久化、权限、工具和调度。
 - **OpenCode Agent**负责推理和选择行动。模型通过明确的 MCP 工具发消息；**没有调用发送工具就不会由系统擅自代发回复**。
-- **任务沙箱**负责跑命令、读写文件等重活，与普通群聊的主 Agent 隔离。完整执行层见 [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner)。
+- **任务沙箱**负责跑命令、读写文件等重活，与普通群聊的主 Agent 隔离。完整执行层见 [deepsleep-runner](https://github.com/123321-QSTUDIO/deepsleep-runner)。
 
 ### 群聊上下文与自主回应
 

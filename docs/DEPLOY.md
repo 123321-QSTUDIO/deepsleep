@@ -45,10 +45,10 @@ wsl --install -d Ubuntu-22.04   # 需重启
 > 境外直连外网更快更稳；回本机的只有 MCP 轻量调用（走隧道）和最终文本结果，延迟无感。
 > 注意远程主机回程 SSH 隧道要稳（选到本机线路好的机房），隧道断了只是容器查不了聊天记录，不影响主链路。
 
-远程 Linux 主机上（HK 侧组件已拆到独立仓库 [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner)，按其 README 执行）：
+远程 Linux 主机上（HK 侧组件已拆到独立仓库 [deepsleep-runner](https://github.com/123321-QSTUDIO/deepsleep-runner)，按其 README 执行）：
 ```bash
 # 一键脚本（含 clone、build、HK->Windows 隧道 systemd 服务）：
-curl -fsSL https://raw.githubusercontent.com/123321-QSTUDIO/qqbot-hk-runner/master/script/setup-hk.sh | sudo bash -s <Windows服务器IP> <Windows_SSH用户名> <MCP_TOKEN>
+curl -fsSL https://raw.githubusercontent.com/123321-QSTUDIO/deepsleep-runner/master/script/setup-hk.sh | sudo bash -s <Windows服务器IP> <Windows_SSH用户名> <MCP_TOKEN>
 ```
 
 **C-1. 本机 → 远程 docker 的连接（不要用裸 TCP 2375 出公网！）**
@@ -322,7 +322,7 @@ QQBOT_DATA=/opt/deepsleep/data node scripts/compact-all.mjs
 - `replyDelayMinMs` / `replyDelayMaxMs` 默认 `1200` / `3000` 毫秒（发送间隔，模拟真人打字），`maxLinesPerReply` 默认 `4`
 - `panelEnabled` / `panelHost` / `panelPort` / `panelToken`：控制面板（见 8.1 节）。默认开启、只绑 `127.0.0.1:5101`；**远程访问必须设 `panelToken`**
 - `dreamMemoryEnabled` / `dreamMemoryWindowStartHour` / `dreamMemoryWindowStartMinute` / `dreamMemoryWindowEndHour` / `dreamMemoryWindowEndMinute` / `dreamMemoryIdleMinutes`：梦境记忆（见 8.2 节）。默认窗口 02:00–05:00（服务器本地时区），窗口内按群随机挑时间，群内 30 分钟无新消息才整理；到 05:00 强制整理。`dreamMaxTranscriptChars` 限单次喂入的聊天记录字符数，`dreamMemoryMaxChars` 限 MEMORY.md 目标字数
-- `dockerEnv`：**用免费模型时留空 `{}` 即可**；要给容器换付费模型时才填 key（如 `ANTHROPIC_API_KEY`），同时调整 qqbot-hk-runner 的模型配置并重新 build 镜像
+- `dockerEnv`：**用免费模型时留空 `{}` 即可**；要给容器换付费模型时才填 key（如 `ANTHROPIC_API_KEY`），同时调整 deepsleep-runner 的模型配置并重新 build 镜像
 - 方式 B（WSL2 docker）时 `mcpUrlForDocker` 改为 `http://<Windows主机IP>:5100/mcp`；方式 C 改为 `http://<本机IP>:5100/mcp`
 - 改完重启机器人服务生效
 
@@ -373,9 +373,9 @@ QQBOT_DATA=/opt/deepsleep/data node scripts/compact-all.mjs
 
 ## 9. 构建任务沙箱镜像
 
-镜像构建文件（Dockerfile + 容器内 opencode.json）在远程执行层仓库 [qqbot-hk-runner](https://github.com/123321-QSTUDIO/qqbot-hk-runner) 的 `docker/` 目录。**远程 qqbot-hk-runner 镜像必须升级到 OpenCode 2.1.4，旧镜像不可继续用于新任务协议。**
+镜像构建文件（Dockerfile + 容器内 opencode.json）在远程执行层仓库 [deepsleep-runner](https://github.com/123321-QSTUDIO/deepsleep-runner) 的 `docker/` 目录。**远程 deepsleep-runner 镜像必须升级到 OpenCode 2.1.4，旧镜像不可继续用于新任务协议。**
 
-- 方式 A/B（本机 docker）：clone qqbot-hk-runner 后 `docker build -t qqbot-opencode-task:latest docker/`
+- 方式 A/B（本机 docker）：clone deepsleep-runner 后 `docker build -t qqbot-opencode-task:latest docker/`
 - 方式 C（远程主机）：HK 主机跑 `setup-hk.sh` 时构建镜像；升级后必须重新构建并确认版本，不能沿用旧镜像
 - 任务统一使用 `opencode run --standalone --format json --model ...`，远程续跑保留 `--continue`；执行器读取 NDJSON 最后一条 assistant 文本
 
@@ -395,7 +395,7 @@ docker run --rm `
 给 HK 主机绑一个域名后，群友可以找机器人要任务产物（workspace 打包 tar.gz）的**临时下载链接**。
 
 ```bash
-# HK 主机上（qqbot-hk-runner 仓库目录里）：
+# HK 主机上（deepsleep-runner 仓库目录里）：
 sudo bash script/setup-artifacts.sh <域名> <ARTIFACT_TOKEN>
 # 脚本会做：装 node+caddy → artifact-server 常驻(127.0.0.1:8080) → Caddy 反代
 ```
