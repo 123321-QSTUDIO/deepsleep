@@ -53,6 +53,13 @@ node dist-service/index.mjs
 7. `AGENTS.md` 工作区文件由 `ensureWorkspaceFiles` 内容变化时重写；`opencode.json.instructions`（MEMORY.md）是 session 级快照，改 MEMORY.md 需要新 session 或 compact 后才生效。
 8. 任何配置/人格/模型改动都要考虑旧配置兼容；`adminQqs` 已迁移为 `ownerQqs`，不要重新引入旧叫法。
 
+## 私聊会话
+
+- scope 为 `private-<QQ>`，每个 QQ 一个独立 workspace / session。
+- 私聊消息不走群聊批量窗口，到达即组装 prompt；上下文条数用 `contextMessageCount`，标题为 `[最近私聊内容]`。
+- 私聊人格由 `buildPrivateAgentsMd` 单独追加：每条都要回、不要 `[SILENT]`、不套用群聊 @/批量规则，并强调任务详情只对任务属主可见。
+- 私聊同样受 `ownerQqs` 管理命令权限、pending 清单、图片附件和串行发送队列约束。
+
 ## 安全与开源边界
 
 - 永不提交：`config.json`、`.env`、密钥/token、真实 QQ 号/群号、服务器地址、聊天记录、日志

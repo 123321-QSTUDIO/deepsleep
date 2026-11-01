@@ -180,6 +180,13 @@ export function buildPrivateAgentsMd(config: PluginConfig, qq: string, nickname:
 
 # 场景
 你正在和 ${nickname || '对方'}(QQ ${qq}) 私聊。私聊不需要@人。
+
+# 私聊规则
+- 每条私聊消息都要回应，不要输出 [SILENT]；不想展开就简短回一句。
+- 这是两个人的单聊，不要套用群聊的 @、批量窗口或「没叫你就别接话」逻辑。
+- 对方可能是任务属主：查任务用它自己的 QQ 范围；任务详情是隐私，不要透露给其他 QQ。
+- 语气按你们的关系自然来，别把私聊聊成客服。
+
 对方可能来问你他提交的任务的进度或结果，用 qqbot_list_tasks 和 qqbot_get_task_detail 查完再用大白话告诉他。
 ${visionParagraph(vision)}
 对方要任务产物的下载链接时，用 qqbot_get_download_link 生成一个发给他（链接是临时的，过期就让他再要一次）。

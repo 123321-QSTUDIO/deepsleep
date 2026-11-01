@@ -983,7 +983,8 @@ export class SessionController {
     this.pruneStalePending(scope)
     const pending = this.pendingRequests.get(scope) ?? []
 
-    const contextLimit = this.config.groupContextBatchEnabled
+    const isGroupEvent = event.message_type === 'group'
+    const contextLimit = isGroupEvent && this.config.groupContextBatchEnabled
       ? Math.max(1, Math.min(300, Number(this.config.groupContextBatchMaxMessages) || 80))
       : this.config.contextMessageCount
     const since = this.contextSince.get(scope) ?? 0
@@ -1039,7 +1040,7 @@ export class SessionController {
     const p2 = (n: number) => String(n).padStart(2, '0')
     const week = '日一二三四五六'[d.getDay()]
     parts.push(`[当前时间] ${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())} 星期${week}（以此为准，下面消息前面的方括号是它们的发送时间）`)
-    if (context.length > 0) parts.push('[最近群聊内容]\n' + context.map((c) => c.line).join('\n'))
+    if (context.length > 0) parts.push((isGroupEvent ? '[最近群聊内容]' : '[最近私聊内容]') + '\n' + context.map((c) => c.line).join('\n'))
     // 只在带上下文含义时补一行说明，不塞回复规则；回不回由 AGENTS.md 的回复义务决定
     if (mode === 'poke') parts.unshift('[系统] 刚刚 ' + contextNote + ' 戳了你一下')
     else if (mode === 'context') parts.unshift('[系统] ' + contextNote)
